@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "create_checkout_response",
+  "type": "object",
+  "properties": {
+    "url": { "type": "string", "format": "uri" },
+    "id": { "type": "string" }
+  },
+  "required": ["url", "id"],
+  "additionalProperties": false
+}

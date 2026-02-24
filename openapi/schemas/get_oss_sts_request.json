@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "get_oss_sts_request",
+  "type": "object",
+  "properties": {
+    "bucket": { "type": "string", "default": "temp" },
+    "prefix": { "type": "string" },
+    "key": { "type": "string" },
+    "expiresIn": { "type": "integer", "minimum": 60, "maximum": 3600, "default": 900 }
+  },
+  "required": ["prefix"],
+  "additionalProperties": false
+}

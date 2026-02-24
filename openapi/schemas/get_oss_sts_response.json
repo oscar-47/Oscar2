@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "get_oss_sts_response",
+  "type": "object",
+  "properties": {
+    "provider": { "type": "string", "enum": ["supabase_compat", "qiniu"] },
+    "uploadMethod": { "type": "string", "enum": ["PUT", "POST"] },
+    "bucket": { "type": "string" },
+    "endpoint": { "type": "string" },
+    "pathPrefix": { "type": "string" },
+    "objectKey": { "type": "string" },
+    "region": { "type": "string" },
+    "expire": { "type": "integer" },
+    "accessKeyId": { "type": "string" },
+    "policy": { "type": "string" },
+    "signature": { "type": "string" },
+    "securityToken": { "type": "string" },
+    "uploadUrl": { "type": "string" },
+    "formFields": { "type": "object" }
+  },
+  "required": ["provider", "uploadMethod", "bucket", "endpoint", "pathPrefix", "objectKey", "expire", "accessKeyId", "policy", "signature", "securityToken", "uploadUrl", "formFields"],
+  "additionalProperties": false
+}

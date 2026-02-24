@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "analyze_product_v2_request",
+  "type": "object",
+  "properties": {
+    "productImage": { "type": "string" },
+    "productImages": { "type": "array", "items": { "type": "string" } },
+    "requirements": { "type": "string", "default": "" },
+    "imageCount": { "type": "integer", "minimum": 1, "default": 1 },
+    "targetLanguage": { "type": "string", "default": "en" },
+    "outputLanguage": {
+      "type": "string",
+      "enum": ["none", "en", "zh", "ja", "ko", "es", "fr", "de", "pt", "ar", "ru"],
+      "default": "en"
+    },
+    "uiLanguage": { "type": "string", "default": "en" },
+    "clothingMode": { "type": "string" },
+    "whiteBackground": { "type": "boolean" },
+    "promptConfigKey": { "type": "string" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "client_job_id": { "type": "string" },
+    "metadata": { "type": "object" }
+  },
+  "required": ["productImage"],
+  "additionalProperties": true
+}

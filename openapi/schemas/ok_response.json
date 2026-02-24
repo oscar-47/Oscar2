@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ok_response",
+  "type": "object",
+  "properties": {
+    "ok": { "type": "boolean" }
+  },
+  "required": ["ok"],
+  "additionalProperties": false
+}

@@ -1,0 +1,238 @@
+{
+  "nav": {
+    "studioGenesis": "Studio Genesis",
+    "aestheticMirror": "Aesthetic Mirror",
+    "clothingStudio": "Clothing Studio",
+    "refinementStudio": "Refinement Studio",
+    "pricing": "Pricing",
+    "history": "History",
+    "profile": "Profile",
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "signOut": "Sign Out"
+  },
+  "credits": {
+    "label": "Credits",
+    "total": "{count} credits",
+    "insufficient": "Insufficient credits",
+    "buyMore": "Buy more"
+  },
+  "auth": {
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "email": "Email",
+    "password": "Password",
+    "otpCode": "Verification Code",
+    "sendOtp": "Send Code",
+    "verifyOtp": "Verify",
+    "signingIn": "Signing in...",
+    "signingUp": "Creating account...",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "checkEmail": "Check your email for the verification code",
+    "otpPlaceholder": "Enter code from email",
+    "welcome": "Welcome back",
+    "createAccount": "Create your account"
+  },
+  "landing": {
+    "hero": {
+      "title": "Professional AI E-Commerce Product Images",
+      "subtitle": "Generate stunning product visuals in seconds. Studio Genesis, Aesthetic Mirror, Clothing Studio, and Image Retouching — all in one platform.",
+      "cta": "Start for Free",
+      "ctaSecondary": "View Pricing"
+    },
+    "features": {
+      "title": "Four Powerful AI Suites",
+      "studioGenesis": {
+        "name": "Studio Genesis",
+        "description": "Transform plain product photos into professional e-commerce visuals with AI-generated scenes."
+      },
+      "aestheticMirror": {
+        "name": "Aesthetic Mirror",
+        "description": "Clone any visual style and apply it to your products for consistent brand identity."
+      },
+      "clothingStudio": {
+        "name": "Clothing Studio",
+        "description": "Generate standard shots, 3D mannequin, and macro detail variants for fashion products."
+      },
+      "refinementStudio": {
+        "name": "Refinement Studio",
+        "description": "Retouch and refine product images with AI-powered white background and enhancement."
+      }
+    }
+  },
+  "studio": {
+    "genesis": {
+      "title": "Studio Genesis",
+      "description": "One Shot, A Complete Visual Ecosystem. Architect your entire product gallery in seconds.",
+      "designBrief": "Design Brief",
+      "designBriefPlaceholder": "Describe your product's USP and desired aesthetic",
+      "outputLanguage": "Output Language",
+      "outputLanguageNone": "None Text(Visual Only)",
+      "analyze": "Analyze & Blueprint",
+      "emptyState": "Upload your product photo and fill the brief. Click 'Analyze & Blueprint' to start.",
+      "planPreview": "Design Blueprint",
+      "planPreviewDesc": "Review the proposed scene logic and asset distribution.",
+      "designSpecs": "Design Specifications",
+      "designSpecsDesc": "Universal visual standards for all images",
+      "imagePlan": "Image Plan",
+      "imagePlanCount": "{count} images total, click to edit title or description",
+      "turboBoost": "Turbo Boost Mode",
+      "turboBoostDesc": "Faster and more stable",
+      "confirmGenerate": "Confirm & Generate {count} Assets — Consume {cost} credits",
+      "backToEdit": "Back to Previous Step",
+      "newGeneration": "New Generation",
+      "creditCost": "Cost: {cost} credits",
+      "allImagesFailed": "All images failed to generate. Please check your settings and try again.",
+      "partialFailed": "{count} image(s) failed to generate",
+      "retryFailed": "Retry Failed Images",
+      "resolution1K": "1K Standard",
+      "resolution2K": "2K HD (Pro)",
+      "resolution4K": "4K UHD (Pro)",
+      "analyzingStep1": "Analyzing design characteristics...",
+      "analyzingStep2": "Simulating physical lighting...",
+      "analyzingStep3": "Rendering high-fidelity pixels...",
+      "analyzingStep4": "Optimizing textures and details...",
+      "steps": {
+        "upload": "Uploading images",
+        "analyze": "Analyzing product",
+        "prompts": "Engineering prompts",
+        "generate": "Generating images",
+        "done": "Complete"
+      }
+    },
+    "aestheticMirrorSteps": {
+      "upload": "Uploading images",
+      "generate": "Replicating style",
+      "done": "Complete"
+    },
+    "clothingStudioSteps": {
+      "upload": "Uploading image",
+      "analyze": "Analyzing clothing",
+      "prompts": "Generating prompts",
+      "generate": "Generating 3 variants",
+      "done": "Complete"
+    },
+    "refinementStudioSteps": {
+      "upload": "Uploading image",
+      "analyze": "Analyzing for refinement",
+      "generate": "Refining image",
+      "done": "Complete"
+    },
+    "aestheticMirror": {
+      "title": "Aesthetic Mirror",
+      "description": "Upload a reference image and your product to clone the visual style.",
+      "uploadReference": "Upload Reference Image",
+      "uploadProduct": "Upload Product Image",
+      "generate": "Replicate Style",
+      "generating": "Replicating style...",
+      "creditCost": "Cost: {cost} credits"
+    },
+    "clothingStudio": {
+      "title": "Clothing Studio",
+      "description": "Generate three professional clothing variants from a single product image.",
+      "uploadProduct": "Upload Clothing Image",
+      "generate": "Generate Variants",
+      "generating": "Generating 3 variants...",
+      "variant1": "Standard Shot",
+      "variant2": "3D Mannequin",
+      "variant3": "Macro Detail",
+      "threeDEnabled": "3D Mannequin",
+      "creditCost": "Cost: {cost} credits"
+    },
+    "refinementStudio": {
+      "title": "Refinement Studio",
+      "description": "Retouch and enhance product images with professional AI refinement.",
+      "uploadProduct": "Upload Product Image",
+      "whiteBackground": "White Background",
+      "generate": "Refine Image",
+      "generating": "Refining...",
+      "creditCost": "Cost: {cost} credits"
+    },
+    "common": {
+      "results": "Results",
+      "download": "Download",
+      "tryAgain": "Try Again",
+      "error": "Generation failed. Please try again.",
+      "processing": "Processing...",
+      "success": "Complete",
+      "productImage": "Product Image",
+      "referenceImage": "Reference Image",
+      "uploadLabel": "Drop image here or click to upload",
+      "uploadSublabel": "JPG, PNG, WEBP · max 10 MB",
+      "requirements": "Requirements (optional)",
+      "requirementsPlaceholder": "Describe the scene, style, or background you want…",
+      "model": "Model",
+      "imageSize": "Resolution",
+      "aspectRatio": "Aspect Ratio",
+      "imageCount": "Image Count",
+      "stop": "Stop",
+      "generate": "Generate",
+      "buyCredits": "Buy Credits",
+      "insufficientCredits": "Insufficient credits"
+    }
+  },
+  "pricing": {
+    "title": "Empower Your E-commerce Visuals",
+    "subtitle": "Flexible credit system. Simple, predictable, and scales with your business.",
+    "totalCredits": "Total Credits",
+    "subscriptionPlans": "Subscription Plans",
+    "buyCredits": "Buy Credits",
+    "mostPopular": "MOST POPULAR",
+    "choosePlan": "Choose Plan",
+    "firstSubBonus": "+{bonus} credits (First Sub)",
+    "perMonth": "/mo",
+    "modelImages": "~{count} model images",
+    "proModelImages": "~{count} Pro model images",
+    "neverExpires": "Never expires, use anytime",
+    "oneTimePurchase": "One-time purchase, lifetime valid",
+    "plans": {
+      "starter": "Starter",
+      "professional": "Professional",
+      "enterprise": "Enterprise"
+    },
+    "included": {
+      "title": "Included in Every Plan",
+      "aiVisualStrategy": "AI Visual Strategy",
+      "aiVisualStrategyDesc": "Smart USP extraction for high-converting detail assets.",
+      "globalMarketplace": "Global Marketplace Ready",
+      "globalMarketplaceDesc": "Tailored for Amazon, Shopify, and TikTok Shop."
+    },
+    "success": "Payment successful! Credits added to your account.",
+    "canceled": "Payment canceled.",
+    "successOnetime": "Purchase successful! Credits added to your account."
+  },
+  "history": {
+    "title": "Generation History",
+    "empty": "No generations yet. Start with Studio Genesis!",
+    "status": {
+      "processing": "Processing",
+      "success": "Complete",
+      "failed": "Failed"
+    },
+    "type": {
+      "ANALYSIS": "Analysis",
+      "IMAGE_GEN": "Image Generation",
+      "STYLE_REPLICATE": "Style Replication"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "email": "Email",
+    "credits": "Credits",
+    "subscriptionCredits": "Subscription Credits",
+    "purchasedCredits": "Purchased Credits",
+    "plan": "Current Plan",
+    "noPlan": "No active plan",
+    "renewsOn": "Renews on {date}"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "back": "Back",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close"
+  }
+}

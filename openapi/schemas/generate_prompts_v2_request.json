@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "generate_prompts_v2_request",
+  "type": "object",
+  "properties": {
+    "analysisJson": { "type": ["object", "string"] },
+    "design_specs": { "type": ["object", "string"] },
+    "imageCount": { "type": "integer", "minimum": 1, "maximum": 15, "default": 1 },
+    "targetLanguage": { "type": "string", "default": "en" },
+    "outputLanguage": {
+      "type": "string",
+      "enum": ["none", "en", "zh", "ja", "ko", "es", "fr", "de", "pt", "ar", "ru"],
+      "default": "en"
+    },
+    "stream": { "type": "boolean", "default": true },
+    "clothingMode": { "type": "string" },
+    "uiLanguage": { "type": "string", "default": "en" }
+  },
+  "required": ["analysisJson"],
+  "additionalProperties": true
+}

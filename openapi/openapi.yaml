@@ -1,0 +1,200 @@
+openapi: 3.1.0
+info:
+  title: PicSet AI API Contract (Backend-First)
+  version: 0.1.0
+  description: |
+    Contract-first API for PicSet AI compatible workflows.
+    Last updated: 2026-02-24.
+servers:
+  - url: https://{host}
+    variables:
+      host:
+        default: picsetai.com
+security:
+  - bearerAuth: []
+paths:
+  /supabase/functions/v1/get-oss-sts:
+    post:
+      summary: Get upload credentials (compat layer)
+      operationId: getOssSts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./schemas/get_oss_sts_request.json
+      responses:
+        '200':
+          description: Upload credentials
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/get_oss_sts_response.json
+  /supabase/functions/v1/get-public-config:
+    post:
+      summary: Get public runtime config
+      operationId: getPublicConfig
+      responses:
+        '200':
+          description: Public config map
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/public_config_response.json
+    get:
+      summary: Get public runtime config
+      operationId: getPublicConfigGet
+      responses:
+        '200':
+          description: Public config map
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/public_config_response.json
+  /supabase/functions/v1/analyze-product-v2:
+    post:
+      summary: Analyze product and create ANALYSIS job
+      operationId: analyzeProductV2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./schemas/analyze_product_v2_request.json
+      responses:
+        '200':
+          description: Analysis queued
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/job_ack_response.json
+  /supabase/functions/v1/generate-prompts-v2:
+    post:
+      summary: Generate prompts via SSE
+      operationId: generatePromptsV2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./schemas/generate_prompts_v2_request.json
+      responses:
+        '200':
+          description: |
+            text/event-stream response.
+            Each event payload uses:
+            data: {"fullText":"...accumulated text..."}
+            End marker:
+            data: [DONE]
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /supabase/functions/v1/generate-image:
+    post:
+      summary: Create IMAGE_GEN job
+      operationId: generateImage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./schemas/generate_image_request.json
+      responses:
+        '200':
+          description: Image generation queued
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/job_ack_response.json
+  /supabase/functions/v1/process-generation-job:
+    post:
+      summary: Worker task consumer endpoint for queued generation jobs
+      operationId: processGenerationJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./schemas/process_generation_job_request.json
+      responses:
+        '200':
+          description: Task processed or requeued
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/process_generation_job_response.json
+  /supabase/functions/v1/analyze-single:
+    post:
+      summary: Aesthetic Mirror single endpoint
+      operationId: analyzeSingle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./schemas/analyze_single_request.json
+      responses:
+        '200':
+          description: STYLE_REPLICATE job queued
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/job_ack_response.json
+  /supabase/functions/v1/create-credit-checkout:
+    post:
+      summary: Create Stripe subscription checkout session
+      operationId: createCreditCheckout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./schemas/create_checkout_request.json
+      responses:
+        '200':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/create_checkout_response.json
+  /supabase/functions/v1/create-onetime-checkout:
+    post:
+      summary: Create Stripe one-time checkout session
+      operationId: createOnetimeCheckout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./schemas/create_checkout_request.json
+      responses:
+        '200':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/create_checkout_response.json
+  /supabase/functions/v1/stripe-webhook:
+    post:
+      summary: Stripe webhook endpoint
+      operationId: stripeWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./schemas/stripe_event.json
+      responses:
+        '200':
+          description: Event accepted
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/ok_response.json
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

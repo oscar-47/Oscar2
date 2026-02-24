@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "analyze_single_request",
+  "type": "object",
+  "properties": {
+    "referenceImage": { "type": "string" },
+    "productImages": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "userPrompt": { "type": "string", "default": "" },
+    "model": { "type": "string", "enum": ["nano-banana", "nano-banana-pro"], "default": "nano-banana-pro" },
+    "aspectRatio": { "type": "string", "default": "1:1" },
+    "imageSize": { "type": "string", "enum": ["1K", "2K", "4K"], "default": "2K" },
+    "turboEnabled": { "type": "boolean", "default": false },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "client_job_id": { "type": "string" },
+    "fe_attempt": { "type": "integer", "default": 1 },
+    "metadata": { "type": "object" }
+  },
+  "required": ["referenceImage", "productImages"],
+  "additionalProperties": true
+}

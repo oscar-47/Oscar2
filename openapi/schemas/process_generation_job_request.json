@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "process_generation_job_request",
+  "type": "object",
+  "properties": {
+    "job_id": { "type": "string", "format": "uuid" }
+  },
+  "required": ["job_id"],
+  "additionalProperties": false
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "job_ack_response",
+  "type": "object",
+  "properties": {
+    "job_id": { "type": "string", "format": "uuid" },
+    "status": { "type": "string", "enum": ["processing"] }
+  },
+  "required": ["job_id", "status"],
+  "additionalProperties": false
+}

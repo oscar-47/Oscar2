@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "process_generation_job_response",
+  "type": "object",
+  "properties": {
+    "ok": { "type": "boolean" },
+    "status": {
+      "type": "string",
+      "enum": [
+        "processed",
+        "already_terminal",
+        "no_available_task",
+        "requeued",
+        "failed"
+      ]
+    },
+    "job_id": { "type": "string", "format": "uuid" },
+    "task_type": { "type": "string", "enum": ["ANALYSIS", "IMAGE_GEN"] },
+    "error": { "type": "string" }
+  },
+  "required": ["status", "job_id"],
+  "additionalProperties": true
+}

@@ -1,0 +1,31 @@
+project_id = "picset-ai"
+
+[functions.get-oss-sts]
+verify_jwt = false
+
+[functions.get-public-config]
+verify_jwt = false
+
+[functions.analyze-product-v2]
+verify_jwt = false
+
+[functions.generate-prompts-v2]
+verify_jwt = false
+
+[functions.generate-image]
+verify_jwt = false
+
+[functions.analyze-single]
+verify_jwt = false
+
+[functions.create-credit-checkout]
+verify_jwt = false
+
+[functions.create-onetime-checkout]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.process-generation-job]
+verify_jwt = false

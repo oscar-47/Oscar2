@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "create_checkout_request",
+  "type": "object",
+  "properties": {
+    "packageId": { "type": "string", "format": "uuid" },
+    "returnTo": { "type": "string", "default": "/pricing" }
+  },
+  "required": ["packageId"],
+  "additionalProperties": false
+}

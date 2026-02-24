@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "generate_image_request",
+  "type": "object",
+  "properties": {
+    "model": { "type": "string", "enum": ["nano-banana", "nano-banana-pro"], "default": "nano-banana-pro" },
+    "prompt": { "type": "string" },
+    "productImage": { "type": "string" },
+    "productImages": { "type": "array", "items": { "type": "string" } },
+    "imageCount": { "type": "integer", "minimum": 1, "default": 1 },
+    "aspectRatio": { "type": "string", "default": "1:1" },
+    "imageSize": { "type": "string", "enum": ["1K", "2K", "4K"], "default": "2K" },
+    "turboEnabled": { "type": "boolean", "default": false },
+    "workflowMode": { "type": "string", "default": "product" },
+    "trace_id": { "type": "string", "format": "uuid" },
+    "client_job_id": { "type": "string" },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "is_batch": { "type": "boolean" },
+        "batch_index": { "type": "integer", "minimum": 0 },
+        "image_size": { "type": "string" },
+        "product_images": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["model", "prompt"],
+  "additionalProperties": true
+}

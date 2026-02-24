@@ -1,0 +1,238 @@
+{
+  "nav": {
+    "studioGenesis": "商品图生成",
+    "aestheticMirror": "风格克隆",
+    "clothingStudio": "服装工作室",
+    "refinementStudio": "图片精修",
+    "pricing": "定价",
+    "history": "历史记录",
+    "profile": "个人中心",
+    "signIn": "登录",
+    "signUp": "注册",
+    "signOut": "退出登录"
+  },
+  "credits": {
+    "label": "积分",
+    "total": "{count} 积分",
+    "insufficient": "积分不足",
+    "buyMore": "购买积分"
+  },
+  "auth": {
+    "signIn": "登录",
+    "signUp": "注册",
+    "email": "邮箱",
+    "password": "密码",
+    "otpCode": "验证码",
+    "sendOtp": "发送验证码",
+    "verifyOtp": "验证",
+    "signingIn": "登录中...",
+    "signingUp": "创建账户中...",
+    "noAccount": "还没有账户？",
+    "hasAccount": "已有账户？",
+    "checkEmail": "请查收邮件中的验证码",
+    "otpPlaceholder": "输入邮件里的验证码",
+    "welcome": "欢迎回来",
+    "createAccount": "创建你的账户"
+  },
+  "landing": {
+    "hero": {
+      "title": "专业AI电商商品图片生成",
+      "subtitle": "秒级生成专业电商商品图。商品图生成、风格克隆、服装工作室、图片精修——一站搞定。",
+      "cta": "免费开始",
+      "ctaSecondary": "查看定价"
+    },
+    "features": {
+      "title": "四大AI功能套件",
+      "studioGenesis": {
+        "name": "商品图生成",
+        "description": "将普通产品图转化为专业电商视觉效果，AI生成场景背景。"
+      },
+      "aestheticMirror": {
+        "name": "风格克隆",
+        "description": "克隆任意视觉风格并应用到你的产品上，保持品牌一致性。"
+      },
+      "clothingStudio": {
+        "name": "服装工作室",
+        "description": "一键生成标准展示图、3D幽灵模特、微距细节三种变体。"
+      },
+      "refinementStudio": {
+        "name": "图片精修",
+        "description": "AI驱动的白底处理和图片精修，提升商品图专业度。"
+      }
+    }
+  },
+  "studio": {
+    "genesis": {
+      "title": "商品图生成",
+      "description": "一键生成完整商品视觉方案，秒级构建你的产品图库。",
+      "designBrief": "设计简报",
+      "designBriefPlaceholder": "描述你产品的核心卖点和期望的视觉风格",
+      "outputLanguage": "输出语言",
+      "outputLanguageNone": "无文字（纯视觉）",
+      "analyze": "分析 & 生成蓝图",
+      "emptyState": "上传产品图并填写简报，点击「分析 & 生成蓝图」开始。",
+      "planPreview": "设计蓝图",
+      "planPreviewDesc": "预览并编辑场景逻辑和素材分配方案。",
+      "designSpecs": "设计规范",
+      "designSpecsDesc": "所有图片的通用视觉标准",
+      "imagePlan": "图片方案",
+      "imagePlanCount": "共 {count} 张图片，点击可编辑标题或描述",
+      "turboBoost": "极速模式",
+      "turboBoostDesc": "更快更稳定",
+      "confirmGenerate": "确认生成 {count} 张素材 — 消耗 {cost} 积分",
+      "backToEdit": "返回上一步",
+      "newGeneration": "新建生成",
+      "creditCost": "消耗：{cost} 积分",
+      "allImagesFailed": "所有图片生成失败，请检查设置后重试。",
+      "partialFailed": "{count} 张图片生成失败",
+      "retryFailed": "重试失败项",
+      "resolution1K": "1K 标准",
+      "resolution2K": "2K 高清（Pro）",
+      "resolution4K": "4K 超清（Pro）",
+      "analyzingStep1": "分析设计特征中...",
+      "analyzingStep2": "模拟真实光照中...",
+      "analyzingStep3": "渲染高保真像素中...",
+      "analyzingStep4": "优化纹理与细节中...",
+      "steps": {
+        "upload": "上传图片中",
+        "analyze": "分析产品中",
+        "prompts": "生成提示词中",
+        "generate": "生成图片中",
+        "done": "完成"
+      }
+    },
+    "aestheticMirrorSteps": {
+      "upload": "上传图片中",
+      "generate": "克隆风格中",
+      "done": "完成"
+    },
+    "clothingStudioSteps": {
+      "upload": "上传图片中",
+      "analyze": "分析服装中",
+      "prompts": "生成提示词中",
+      "generate": "生成3种变体中",
+      "done": "完成"
+    },
+    "refinementStudioSteps": {
+      "upload": "上传图片中",
+      "analyze": "分析精修需求中",
+      "generate": "精修图片中",
+      "done": "完成"
+    },
+    "aestheticMirror": {
+      "title": "风格克隆",
+      "description": "上传参考图和产品图，克隆参考图的视觉风格。",
+      "uploadReference": "上传参考图",
+      "uploadProduct": "上传产品图",
+      "generate": "开始克隆风格",
+      "generating": "克隆风格中...",
+      "creditCost": "消耗：{cost} 积分"
+    },
+    "clothingStudio": {
+      "title": "服装工作室",
+      "description": "一张服装图生成三种专业变体。",
+      "uploadProduct": "上传服装图",
+      "generate": "生成三种变体",
+      "generating": "生成3种变体中...",
+      "variant1": "标准展示图",
+      "variant2": "3D幽灵模特",
+      "variant3": "微距细节图",
+      "threeDEnabled": "3D幽灵模特",
+      "creditCost": "消耗：{cost} 积分"
+    },
+    "refinementStudio": {
+      "title": "图片精修",
+      "description": "AI驱动的专业图片精修和白底处理。",
+      "uploadProduct": "上传产品图",
+      "whiteBackground": "白底处理",
+      "generate": "开始精修",
+      "generating": "精修中...",
+      "creditCost": "消耗：{cost} 积分"
+    },
+    "common": {
+      "results": "生成结果",
+      "download": "下载",
+      "tryAgain": "重试",
+      "error": "生成失败，请重试。",
+      "processing": "处理中...",
+      "success": "完成",
+      "productImage": "产品图",
+      "referenceImage": "参考图",
+      "uploadLabel": "拖拽图片到此或点击上传",
+      "uploadSublabel": "JPG、PNG、WEBP · 最大 10 MB",
+      "requirements": "需求描述（可选）",
+      "requirementsPlaceholder": "描述你想要的场景、风格或背景…",
+      "model": "模型",
+      "imageSize": "分辨率",
+      "aspectRatio": "宽高比",
+      "imageCount": "生成数量",
+      "stop": "停止",
+      "generate": "开始生成",
+      "buyCredits": "购买积分",
+      "insufficientCredits": "积分不足"
+    }
+  },
+  "pricing": {
+    "title": "赋能你的电商视觉",
+    "subtitle": "灵活的积分体系，简单可预测，随业务扩展。",
+    "totalCredits": "总积分",
+    "subscriptionPlans": "订阅套餐",
+    "buyCredits": "购买积分",
+    "mostPopular": "最受欢迎",
+    "choosePlan": "选择套餐",
+    "firstSubBonus": "+{bonus} 积分（首次订阅）",
+    "perMonth": "/月",
+    "modelImages": "约{count}张基础模型图",
+    "proModelImages": "约{count}张Pro模型图",
+    "neverExpires": "永不过期，随时使用",
+    "oneTimePurchase": "一次性购买，终身有效",
+    "plans": {
+      "starter": "入门版",
+      "professional": "专业版",
+      "enterprise": "企业版"
+    },
+    "included": {
+      "title": "每个套餐均包含",
+      "aiVisualStrategy": "AI视觉策略",
+      "aiVisualStrategyDesc": "智能USP提取，生成高转化率的细节素材。",
+      "globalMarketplace": "全球市场就绪",
+      "globalMarketplaceDesc": "专为亚马逊、Shopify和TikTok Shop优化。"
+    },
+    "success": "支付成功！积分已到账。",
+    "canceled": "支付已取消。",
+    "successOnetime": "购买成功！积分已到账。"
+  },
+  "history": {
+    "title": "生成历史",
+    "empty": "暂无生成记录，从商品图生成开始吧！",
+    "status": {
+      "processing": "处理中",
+      "success": "完成",
+      "failed": "失败"
+    },
+    "type": {
+      "ANALYSIS": "产品分析",
+      "IMAGE_GEN": "图片生成",
+      "STYLE_REPLICATE": "风格复刻"
+    }
+  },
+  "profile": {
+    "title": "个人中心",
+    "email": "邮箱",
+    "credits": "积分",
+    "subscriptionCredits": "订阅积分",
+    "purchasedCredits": "购买积分",
+    "plan": "当前套餐",
+    "noPlan": "暂无套餐",
+    "renewsOn": "续费日：{date}"
+  },
+  "common": {
+    "loading": "加载中...",
+    "error": "出错了",
+    "retry": "重试",
+    "back": "返回",
+    "cancel": "取消",
+    "save": "保存",
+    "close": "关闭"
+  }
+}
