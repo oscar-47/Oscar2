@@ -1,7 +1,7 @@
 {
   "nav": {
     "studioGenesis": "商品图生成",
-    "aestheticMirror": "风格克隆",
+    "aestheticMirror": "风格复刻",
     "clothingStudio": "服装工作室",
     "refinementStudio": "图片精修",
     "pricing": "定价",
@@ -48,8 +48,8 @@
         "description": "将普通产品图转化为专业电商视觉效果，AI生成场景背景。"
       },
       "aestheticMirror": {
-        "name": "风格克隆",
-        "description": "克隆任意视觉风格并应用到你的产品上，保持品牌一致性。"
+        "name": "风格复刻",
+        "description": "复刻任意视觉风格并应用到你的产品上，保持品牌一致性。"
       },
       "clothingStudio": {
         "name": "服装工作室",
@@ -120,12 +120,43 @@
       "done": "完成"
     },
     "aestheticMirror": {
-      "title": "风格克隆",
-      "description": "上传参考图和产品图，克隆参考图的视觉风格。",
-      "uploadReference": "上传参考图",
+      "title": "风格复刻",
+      "description": "上传参考图和产品素材图，一键复刻参考图的视觉风格。",
+      "singleMode": "单图复刻",
+      "batchMode": "批量复刻",
+      "batchComingSoon": "批量复刻即将支持",
+      "referenceCardTitle": "参考设计图",
+      "referenceCardDesc": "上传有明确风格的参考图",
+      "productCardTitle": "产品素材图",
+      "productCardDesc": "上传产品图片",
+      "firstImageHint": "当前仅使用第 1 张产品素材图参与生成",
+      "promptTitle": "补充提示词（可选）",
+      "promptDesc": "可选填写，不填也可直接生成",
+      "promptPlaceholder": "例如：添加「限时特惠」文案，使用低饱和柔光场景...",
+      "uploadReference": "拖拽图片到此或点击上传",
       "uploadProduct": "上传产品图",
-      "generate": "开始克隆风格",
-      "generating": "克隆风格中...",
+      "generate": "开始复刻风格",
+      "generateOne": "生成 1 张详情图",
+      "generateBatchCount": "生成 {count} 张详情图",
+      "generating": "生成中...",
+      "waiting": "等待生成",
+      "runningText1": "正在深度解析设计特征...",
+      "runningText2": "正在模拟光照和构图关系...",
+      "runningText3": "正在渲染高保真结果...",
+      "runningCardText": "AI 正在生成中...",
+      "regenerateAll": "重新生成全部",
+      "batchRegenerate": "批量重绘",
+      "batchResultTitle": "批量生成结果",
+      "groupCountLabel": "生成组数",
+      "groupUnit": "组",
+      "retryFailed": "重试失败项",
+      "downloadAllSuccess": "下载全部成功图",
+      "batchSingleProductHint": "批量复刻仅支持 1 张素材图",
+      "eta": "预计 {seconds} 秒",
+      "turboTitle": "Turbo 加速模式",
+      "turboDesc": "当前版本暂不支持",
+      "turboOff": "已关闭",
+      "noResultError": "未获取到生成结果，请重试。",
       "creditCost": "消耗：{cost} 积分"
     },
     "clothingStudio": {

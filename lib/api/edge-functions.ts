@@ -234,9 +234,14 @@ export async function processGenerationJob(jobId: string): Promise<void> {
 // ── Aesthetic Mirror (single endpoint) ───────────────────────────────────────
 
 export interface AnalyzeSingleParams {
-  referenceImage: string
-  productImages: string[]
+  mode?: 'single' | 'batch'
+  referenceImage?: string
+  productImages?: string[]
+  referenceImages?: string[]
+  productImage?: string
+  groupCount?: number
   userPrompt?: string
+  imageCount?: number
   model: GenerationModel
   aspectRatio: AspectRatio
   imageSize: ImageSize
@@ -250,7 +255,9 @@ export interface AnalyzeSingleParams {
 export async function analyzeSingle(
   params: AnalyzeSingleParams
 ): Promise<JobResponse> {
-  return invokeFunction<JobResponse>('analyze-single', params)
+  const res = await invokeFunction<JobResponse>('analyze-single', params)
+  void processGenerationJob(res.job_id)
+  return res
 }
 
 // ── Payment ───────────────────────────────────────────────────────────────────

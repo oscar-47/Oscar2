@@ -75,7 +75,7 @@ export interface Package {
 
 // --- AI generation models ---
 
-export type GenerationModel = 'nano-banana' | 'nano-banana-pro'
+export type GenerationModel = 'nano-banana' | 'nano-banana-pro' | 'doubao-seedream-5.0-lite' | 'doubao-seedream-4.5'
 export type AspectRatio =
   | '1:1' | '2:3' | '3:2' | '3:4' | '4:3'
   | '4:5' | '5:4' | '9:16' | '16:9' | '21:9'
@@ -85,6 +85,8 @@ export type ImageSize = '1K' | '2K' | '4K'
 export const DEFAULT_CREDIT_COSTS: Record<string, number> = {
   'nano-banana': 3,
   'nano-banana-pro': 5,
+  'doubao-seedream-5.0-lite': 5,
+  'doubao-seedream-4.5': 5,
   'turbo-1k': 8,
   'turbo-2k': 12,
   'turbo-4k': 17,

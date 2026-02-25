@@ -20,6 +20,7 @@ export function getQnImageConfig(): QnImageConfig {
 
   return {
     apiKey,
+    // Keep legacy/default QN behavior; doubao is injected per-request via override params.
     endpoint: Deno.env.get("QN_IMAGE_API_ENDPOINT") ?? "https://api.qnaigc.com/v1/images/edits",
     model: Deno.env.get("QN_IMAGE_MODEL") ?? "gemini-3.0-pro-image-preview",
     timeoutMs: Number(Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "30000"),
@@ -52,6 +53,21 @@ function isAzureOpenAI(url: string): boolean {
 /** Detect Azure AI Foundry endpoints (.services.ai.azure.com) */
 function isAzureAIFoundry(url: string): boolean {
   return url.includes(".services.ai.azure.com");
+}
+
+/** Detect Volcengine Ark image generation endpoint */
+function isVolcArk(url: string): boolean {
+  return url.includes("ark.cn-beijing.volces.com/api/v3/images/generations");
+}
+
+/** Detect OpenAI native images edits endpoint */
+function isOpenAINativeEdits(url: string): boolean {
+  return url.includes("api.openai.com/v1/images/edits");
+}
+
+function normalizeArkSize(size: string | undefined): "1K" | "2K" | "4K" {
+  if (size === "1K" || size === "2K" || size === "4K") return size;
+  return "2K";
 }
 
 /** Any Azure endpoint */
@@ -145,63 +161,141 @@ export function aspectRatioToSize(ratio: string): string {
 
 export async function callQnImageAPI(params: {
   imageDataUrl: string;
+  imageDataUrls?: string[];
   prompt: string;
   n?: number;
   model?: string;
   size?: string;
+  endpointOverride?: string;
+  apiKeyOverride?: string;
+  timeoutMsOverride?: number;
 }): Promise<Record<string, unknown>> {
-  const config = getQnImageConfig();
+  const envEndpoint = Deno.env.get("QN_IMAGE_API_ENDPOINT") ?? "https://api.qnaigc.com/v1/images/edits";
+  const envModel = Deno.env.get("QN_IMAGE_MODEL") ?? "gemini-3.0-pro-image-preview";
+  const envApiKey = Deno.env.get("QN_IMAGE_API_KEY") ?? "";
+  const envTimeoutMs = Number(Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "30000");
+
+  const endpoint = params.endpointOverride ?? envEndpoint;
+  const apiKey = params.apiKeyOverride ?? envApiKey;
+  const model = params.model ?? envModel;
+  if (!apiKey) {
+    throw new Error("Missing image API key");
+  }
+
+  const timeoutMs = Number.isFinite(params.timeoutMsOverride)
+    ? Number(params.timeoutMsOverride)
+    : envTimeoutMs;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
-  const azure = isAzureEndpoint(config.endpoint);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const azure = isAzureEndpoint(endpoint);
   const size = params.size ?? "1024x1024";
 
   try {
     let res: Response;
 
-    if (azure) {
+    if (azure || isOpenAINativeEdits(endpoint)) {
       // Azure (OpenAI or AI Foundry): multipart FormData for image edits
       const form = new FormData();
-      const blob = dataUrlToBlob(params.imageDataUrl);
-      form.append("image", blob, "image.png");
+      const images = params.imageDataUrls && params.imageDataUrls.length > 0
+        ? params.imageDataUrls
+        : [params.imageDataUrl];
+      if (images.length === 1) {
+        form.append("image", dataUrlToBlob(images[0]), "image-0.png");
+      } else {
+        // Multi-image edits: use array syntax expected by OpenAI-compatible endpoints.
+        for (let i = 0; i < images.length; i++) {
+          form.append("image[]", dataUrlToBlob(images[i]), `image-${i}.png`);
+        }
+      }
       form.append("prompt", params.prompt);
       form.append("n", String(params.n ?? 1));
       form.append("size", size);
-      // AI Foundry FLUX requires model in body
-      if (isAzureAIFoundry(config.endpoint)) {
-        form.append("model", config.model);
+      // AI Foundry and OpenAI native endpoints require model in body.
+      if (isAzureAIFoundry(endpoint) || isOpenAINativeEdits(endpoint)) {
+        form.append("model", model);
+      }
+      if (isAzureAIFoundry(endpoint)) {
         form.append("output_format", "png");
       }
 
       const headers: Record<string, string> = {};
-      if (isAzureAIFoundry(config.endpoint)) {
-        headers["Api-Key"] = config.apiKey;
+      if (isAzureAIFoundry(endpoint)) {
+        headers["Api-Key"] = apiKey;
       } else {
-        headers["Authorization"] = `Bearer ${config.apiKey}`;
+        headers["Authorization"] = `Bearer ${apiKey}`;
       }
 
-      res = await fetch(config.endpoint, {
+      res = await fetch(endpoint, {
         method: "POST",
         headers,
         body: form,
         signal: controller.signal,
       });
-    } else {
-      // qnaigc / OpenAI-compatible: JSON body, Bearer auth
-      res = await fetch(config.endpoint, {
+    } else if (isVolcArk(endpoint)) {
+      // Volcengine Ark image generation: JSON body with image array URLs/data URLs
+      const images = params.imageDataUrls && params.imageDataUrls.length > 0
+        ? params.imageDataUrls
+        : [params.imageDataUrl];
+      const arkBody: Record<string, unknown> = {
+        model,
+        prompt: params.prompt,
+        image: images,
+        sequential_image_generation: "disabled",
+        watermark: false,
+      };
+      if (params.size) {
+        arkBody.size = normalizeArkSize(params.size);
+      }
+      res = await fetch(endpoint, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${config.apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: params.model ?? config.model,
-          image: params.imageDataUrl,
-          prompt: params.prompt,
-          n: params.n ?? 1,
-        }),
+        body: JSON.stringify(arkBody),
         signal: controller.signal,
       });
+    } else {
+      const images = params.imageDataUrls && params.imageDataUrls.length > 0
+        ? params.imageDataUrls
+        : [params.imageDataUrl];
+
+      if (images.length > 1) {
+        // OpenAI-compatible multi-image edits: use multipart files instead of JSON string image.
+        const form = new FormData();
+        for (let i = 0; i < images.length; i++) {
+          form.append("image[]", dataUrlToBlob(images[i]), `image-${i}.png`);
+        }
+        form.append("model", model);
+        form.append("prompt", params.prompt);
+        form.append("n", String(params.n ?? 1));
+        form.append("size", size);
+
+        res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: form,
+          signal: controller.signal,
+        });
+      } else {
+        // qnaigc / OpenAI-compatible single-image path
+        res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            image: params.imageDataUrl,
+            prompt: params.prompt,
+            n: params.n ?? 1,
+          }),
+          signal: controller.signal,
+        });
+      }
     }
 
     const text = await res.text();
@@ -222,23 +316,37 @@ export async function callQnImageAPI(params: {
   }
 }
 
-export function extractGeneratedImageBase64(response: Record<string, unknown>): string {
+export function extractGeneratedImageResult(response: Record<string, unknown>): { url?: string; b64?: string } {
   const data = response.data;
   if (!Array.isArray(data)) {
     throw new Error("QN_IMAGE_INVALID_RESPONSE: data is not array");
   }
 
   for (const entry of data) {
-    if (entry && typeof entry === "object" && "b64_json" in entry) {
-      let base64Data = String((entry as Record<string, unknown>).b64_json ?? "");
+    if (!entry || typeof entry !== "object") continue;
+    const obj = entry as Record<string, unknown>;
+
+    const url = typeof obj.url === "string" ? obj.url : "";
+    if (url) return { url };
+
+    if ("b64_json" in obj) {
+      let base64Data = String(obj.b64_json ?? "");
       if (!base64Data) continue;
       const marker = "base64,";
       if (base64Data.includes(marker)) {
         base64Data = base64Data.split(marker)[1] ?? "";
       }
-      if (base64Data) return base64Data;
+      if (base64Data) return { b64: base64Data };
     }
   }
 
-  throw new Error("QN_IMAGE_INVALID_RESPONSE: b64_json missing");
+  throw new Error("QN_IMAGE_INVALID_RESPONSE: no image payload found");
+}
+
+export function extractGeneratedImageBase64(response: Record<string, unknown>): string {
+  const parsed = extractGeneratedImageResult(response);
+  if (!parsed.b64) {
+    throw new Error("QN_IMAGE_INVALID_RESPONSE: b64_json missing");
+  }
+  return parsed.b64;
 }
