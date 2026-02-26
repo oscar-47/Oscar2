@@ -126,6 +126,7 @@ export interface BlueprintImagePlan {
   title: string
   description: string
   design_content: string
+  type?: 'refined' | '3d' | 'mannequin' | 'detail' | 'selling_point'
 }
 
 export interface AnalysisAiMeta {
@@ -161,6 +162,10 @@ export interface GeneratedPrompt {
 // --- Studio Genesis phases ---
 
 export type GenesisPhase = 'input' | 'analyzing' | 'preview' | 'generating' | 'complete'
+
+// --- Clothing Studio phases ---
+
+export type ClothingPhase = 'input' | 'analyzing' | 'preview' | 'generating' | 'complete'
 
 // --- Public config ---
 

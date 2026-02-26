@@ -132,12 +132,21 @@ export interface AnalyzeProductParams {
   outputLanguage?: string
   trace_id: string
   // Clothing Studio / Refinement Studio specific
-  clothingMode?: 'product_analysis' | 'refinement_analysis'
+  clothingMode?: 'product_analysis' | 'refinement_analysis' | 'model_strategy'
+  modelImage?: string
   whiteBackground?: boolean
+  whiteBgRetouched?: { front: boolean; back: boolean }
   detailCount?: number
+  detailCloseup?: { count: number }
   sellingPointCount?: number
+  sellingPoint?: { count: number }
   refinedViews?: string[]
   threeDEnabled?: boolean
+  threeDEffect?: { enabled: boolean; whiteBackground: boolean }
+  threeDWhiteBackground?: boolean
+  mannequinEnabled?: boolean
+  mannequin?: { enabled: boolean; whiteBackground: boolean }
+  mannequinWhiteBackground?: boolean
 }
 
 export async function analyzeProductV2(
@@ -156,7 +165,7 @@ export interface GeneratePromptsParams {
   outputLanguage?: string
   stream?: boolean
   trace_id: string
-  clothingMode?: 'prompt_generation'
+  clothingMode?: 'prompt_generation' | 'model_prompt_generation'
 }
 
 /**
@@ -202,17 +211,40 @@ export interface GenerateImageParams {
   imageSize: ImageSize
   turboEnabled: boolean
   imageCount?: number
+  count?: number
   client_job_id: string
   fe_attempt: number
   metadata?: Record<string, unknown>
   trace_id: string
-  workflowMode?: 'product'
+  workflowMode?: 'product' | 'model'
+  modelImage?: string
 }
 
 export async function generateImage(
   params: GenerateImageParams
 ): Promise<JobResponse> {
   const res = await invokeFunction<JobResponse>('generate-image', params)
+  void processGenerationJob(res.job_id)
+  return res
+}
+
+export interface GenerateModelImageParams {
+  gender: string
+  ageRange: string
+  skinColor: string
+  otherRequirements?: string
+  productImages?: string[]
+  count: number
+  turboEnabled: boolean
+  trace_id: string
+  client_job_id: string
+  fe_attempt: number
+}
+
+export async function generateModelImage(
+  params: GenerateModelImageParams
+): Promise<JobResponse> {
+  const res = await invokeFunction<JobResponse>('generate-model-image', params)
   void processGenerationJob(res.job_id)
   return res
 }
