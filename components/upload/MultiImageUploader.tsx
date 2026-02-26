@@ -59,26 +59,28 @@ export function MultiImageUploader({
     <div className={className}>
       {/* Thumbnail grid */}
       {images.length > 0 && (
-        <div className="mb-3 grid grid-cols-4 gap-2">
-          {images.map((img, i) => (
-            <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border group">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={img.previewUrl}
-                alt={`Image ${i + 1}`}
-                className="w-full h-full object-cover"
-              />
-              {!disabled && (
-                <button
-                  type="button"
-                  onClick={() => onRemove(i)}
-                  className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <X className="w-5 h-5 text-white" />
-                </button>
-              )}
-            </div>
-          ))}
+        <div className="mb-3 max-h-64 overflow-y-auto pr-1">
+          <div className="grid grid-cols-4 gap-2">
+            {images.map((img, i) => (
+              <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img.previewUrl}
+                  alt={`Image ${i + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(i)}
+                    className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-5 h-5 text-white" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

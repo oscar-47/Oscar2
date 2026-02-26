@@ -234,12 +234,13 @@ export async function processGenerationJob(jobId: string): Promise<void> {
 // ── Aesthetic Mirror (single endpoint) ───────────────────────────────────────
 
 export interface AnalyzeSingleParams {
-  mode?: 'single' | 'batch'
+  mode?: 'single' | 'batch' | 'refinement'
   referenceImage?: string
   productImages?: string[]
   referenceImages?: string[]
   productImage?: string
   groupCount?: number
+  backgroundMode?: 'white' | 'original'
   userPrompt?: string
   imageCount?: number
   model: GenerationModel

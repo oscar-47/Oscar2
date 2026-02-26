@@ -9,6 +9,12 @@ function computeCost(model: string, turboEnabled: boolean, imageSize: string): n
   return 17;
 }
 
+function hasAllowedRefinementImageExtension(value: string): boolean {
+  const lower = value.trim().toLowerCase();
+  const normalized = lower.split("?")[0]?.split("#")[0] ?? lower;
+  return normalized.endsWith(".jpg") || normalized.endsWith(".png");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
   if (req.method !== "POST") return err("BAD_REQUEST", "Method not allowed", 405);
@@ -19,7 +25,12 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return err("BAD_REQUEST", "invalid request body");
 
-  const mode = body.mode === "batch" ? "batch" : "single";
+  const mode = body.mode === "batch"
+    ? "batch"
+    : body.mode === "refinement"
+    ? "refinement"
+    : "single";
+
   if (mode === "single") {
     if (typeof body.referenceImage !== "string" || !Array.isArray(body.productImages)) {
       return err("BAD_REQUEST", "referenceImage and productImages are required");
@@ -30,7 +41,7 @@ Deno.serve(async (req) => {
     if (body.productImages.some((x) => typeof x !== "string" || String(x).trim().length === 0)) {
       return err("BAD_REQUEST", "productImages must be non-empty strings");
     }
-  } else {
+  } else if (mode === "batch") {
     if (!Array.isArray(body.referenceImages) || body.referenceImages.length < 1 || body.referenceImages.length > 12) {
       return err("BATCH_REFERENCE_IMAGES_REQUIRED", "referenceImages length must be within [1, 12]");
     }
@@ -44,13 +55,32 @@ Deno.serve(async (req) => {
     if (!Number.isInteger(groupCount) || groupCount < 1 || groupCount > 9) {
       return err("BATCH_INPUT_INVALID", "groupCount must be in [1, 9]");
     }
+  } else {
+    if (!Array.isArray(body.productImages)) {
+      return err("REFINEMENT_PRODUCT_IMAGES_REQUIRED", "productImages are required in refinement mode");
+    }
+    if (body.productImages.length < 1 || body.productImages.length > 50) {
+      return err("REFINEMENT_PRODUCT_IMAGES_REQUIRED", "productImages length must be within [1, 50]");
+    }
+    if (body.productImages.some((x) => typeof x !== "string" || String(x).trim().length === 0)) {
+      return err("REFINEMENT_PRODUCT_IMAGES_REQUIRED", "productImages must be non-empty strings");
+    }
+    if (body.productImages.some((x) => typeof x === "string" && !hasAllowedRefinementImageExtension(x))) {
+      return err("REFINEMENT_IMAGE_FORMAT_UNSUPPORTED", "refinement mode only supports .jpg and .png image URLs");
+    }
+
+    const backgroundMode = String(body.backgroundMode ?? "white");
+    if (backgroundMode !== "white" && backgroundMode !== "original") {
+      return err("REFINEMENT_BACKGROUND_MODE_INVALID", "backgroundMode must be white or original");
+    }
+    body.backgroundMode = backgroundMode;
   }
 
   const modelName = String(body.model ?? "doubao-seedream-4.5");
   const imageSize = String(body.imageSize ?? "2K");
   const imageCount = Math.max(1, Math.min(9, Number(body.imageCount ?? 1)));
   const groupCount = Math.max(1, Math.min(9, Number(body.groupCount ?? 1)));
-  const productCount = mode === "single"
+  const productCount = mode === "single" || mode === "refinement"
     ? (Array.isArray(body.productImages) ? body.productImages.length : 0)
     : 1;
   const referenceCount = mode === "batch"
@@ -58,6 +88,8 @@ Deno.serve(async (req) => {
     : 1;
   const requestedCount = mode === "batch"
     ? referenceCount * groupCount
+    : mode === "refinement"
+    ? productCount
     : productCount * imageCount;
   const turboEnabled = Boolean(body.turboEnabled ?? false);
   const unitCost = computeCost(modelName, turboEnabled, imageSize);

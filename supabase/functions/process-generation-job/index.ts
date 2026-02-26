@@ -289,15 +289,18 @@ type StyleOutputItem = {
   reference_index: number;
   group_index: number;
   product_index?: number;
-  unit_status: "success" | "failed";
+  unit_status: "pending" | "success" | "failed";
   error_message?: string;
 };
 
+type StyleReplicateMode = "single" | "batch" | "refinement";
+
 type StyleReplicateUnit = {
+  mode: StyleReplicateMode;
   reference_index: number;
   group_index: number;
   product_index: number;
-  reference_image: string;
+  reference_image?: string;
   product_image: string;
 };
 
@@ -311,6 +314,12 @@ function styleReplicateErrorMessage(cause: unknown): string {
   }
   if (text.includes("BATCH_REFERENCE_IMAGES_REQUIRED")) {
     return "Batch replicate requires at least one reference image.";
+  }
+  if (text.includes("REFINEMENT_PRODUCT_IMAGES_REQUIRED")) {
+    return "Refinement mode requires productImages with at least one image.";
+  }
+  if (text.includes("REFINEMENT_BACKGROUND_MODE_INVALID")) {
+    return "Background mode must be white or original.";
   }
   if (text.includes("MODEL_RATIO_UNSUPPORTED")) {
     return "Selected ratio is not supported by current model output. Please try another ratio.";
@@ -347,6 +356,8 @@ function styleReplicateErrorCode(error: unknown): string {
   if (message.includes("BATCH_INPUT_INVALID")) return "BATCH_INPUT_INVALID";
   if (message.includes("BATCH_PRODUCT_IMAGE_REQUIRED")) return "BATCH_PRODUCT_IMAGE_REQUIRED";
   if (message.includes("BATCH_REFERENCE_IMAGES_REQUIRED")) return "BATCH_REFERENCE_IMAGES_REQUIRED";
+  if (message.includes("REFINEMENT_PRODUCT_IMAGES_REQUIRED")) return "REFINEMENT_PRODUCT_IMAGES_REQUIRED";
+  if (message.includes("REFINEMENT_BACKGROUND_MODE_INVALID")) return "REFINEMENT_BACKGROUND_MODE_INVALID";
   if (message.includes("MODEL_RATIO_UNSUPPORTED")) return "MODEL_RATIO_UNSUPPORTED";
   if (message.includes("AbortError")) return "UPSTREAM_TIMEOUT";
   if (message.includes("InvalidEndpointOrModel.NotFound")) return "MODEL_UNAVAILABLE";
@@ -363,6 +374,8 @@ function isFatalStyleReplicateError(error: unknown): boolean {
   return code === "MISSING_DOUBAO_IMAGE_API_KEY" ||
     code === "MODEL_UNAVAILABLE" ||
     code === "STYLE_PRODUCT_IMAGE_MISSING" ||
+    code === "REFINEMENT_PRODUCT_IMAGES_REQUIRED" ||
+    code === "REFINEMENT_BACKGROUND_MODE_INVALID" ||
     code === "INSUFFICIENT_CREDITS";
 }
 
@@ -620,11 +633,16 @@ async function processStyleReplicateJob(
   const modelName = String(payload.model ?? "doubao-seedream-4.5");
   const imageSize = String(payload.imageSize ?? "2K");
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
-  const mode = payload.mode === "batch" ? "batch" : "single";
+  const mode: StyleReplicateMode = payload.mode === "batch"
+    ? "batch"
+    : payload.mode === "refinement"
+    ? "refinement"
+    : "single";
   const imageCount = clampInt(payload.imageCount ?? 1, 1, 9, 1);
   const groupCount = clampInt(payload.groupCount ?? 1, 1, 9, 1);
   const turboEnabled = Boolean(payload.turboEnabled ?? false);
   const unitCost = computeCost(modelName, turboEnabled, imageSize);
+  const backgroundMode = payload.backgroundMode === "original" ? "original" : "white";
 
   const productImages = Array.isArray(payload.productImages)
     ? payload.productImages.filter((x): x is string => typeof x === "string" && x.trim().length > 0)
@@ -648,6 +666,7 @@ async function processStyleReplicateJob(
     for (let g = 0; g < groupCount; g++) {
       for (let r = 0; r < batchReferences.length; r++) {
         units.push({
+          mode: "batch",
           reference_index: r,
           group_index: g,
           product_index: 0,
@@ -656,12 +675,13 @@ async function processStyleReplicateJob(
         });
       }
     }
-  } else {
+  } else if (mode === "single") {
     if (singleProductImages.length < 1) throw new Error("STYLE_PRODUCT_IMAGE_MISSING");
     if (!singleReference) throw new Error("STYLE_REFERENCE_IMAGE_MISSING");
     for (let p = 0; p < singleProductImages.length; p++) {
       for (let i = 0; i < imageCount; i++) {
         units.push({
+          mode: "single",
           reference_index: 0,
           group_index: i,
           product_index: p,
@@ -670,17 +690,36 @@ async function processStyleReplicateJob(
         });
       }
     }
+  } else {
+    if (productImages.length < 1 || productImages.length > 50) {
+      throw new Error("REFINEMENT_PRODUCT_IMAGES_REQUIRED");
+    }
+    if (backgroundMode !== "white" && backgroundMode !== "original") {
+      throw new Error("REFINEMENT_BACKGROUND_MODE_INVALID");
+    }
+    for (let p = 0; p < productImages.length; p++) {
+      units.push({
+        mode: "refinement",
+        reference_index: 0,
+        group_index: 0,
+        product_index: p,
+        product_image: productImages[p],
+      });
+    }
   }
 
   const userPrompt = typeof payload.userPrompt === "string" ? payload.userPrompt.trim() : "";
   const referenceStyleSummary = "从参考图中提取风格元素：场景环境、构图逻辑、镜头视角、光线方向与质感、色彩与氛围。";
-  const systemPrompt =
+  const styleSystemPrompt =
     "你是专业电商视觉复刻模型。任务：在不改变产品本体的前提下，将参考图的视觉风格迁移到素材产品图。\n"
     + "硬性约束（必须满足）：\n"
     + "1) 产品本体保持不变：不得改变产品形状、结构、材质、纹理、logo/文字、颜色、比例与关键细节。\n"
     + "2) 仅迁移风格：可以迁移背景环境、构图方式、光线方向与强度、景深、色彩分级、氛围。\n"
     + "3) 不添加无关主体，不遮挡产品，不裁切导致产品缺失。\n"
     + "4) 输出应是可用于电商详情页的高真实感商业图片。";
+  const refinementBasePrompt =
+    "作为专业电商图片精修模型,在不改变产品本体的前提下，对单张产品图进行商业级精修。仅做精修优化,允许进行瑕疵清理、边缘优化、光影校正、色彩与清晰度增强。";
+  const refinementWhiteBackgroundPrompt = "除产品主体外的背景与非主体元素统一为纯白背景干净无杂物。";
   const doubaoEndpoint = Deno.env.get("DOUBAO_IMAGE_API_ENDPOINT")
     ?? "https://ark.cn-beijing.volces.com/api/v3/images/generations";
   const doubaoApiKey = Deno.env.get("DOUBAO_IMAGE_API_KEY") ?? "";
@@ -699,11 +738,16 @@ async function processStyleReplicateJob(
   const outputBucket = Deno.env.get("GENERATIONS_BUCKET") ?? "generations";
   const maxRatioRetries = 3;
   const batchConcurrency = clampInt(
-    Deno.env.get("STYLE_REPLICATE_BATCH_CONCURRENCY") ?? 2,
+    mode === "refinement"
+      ? Deno.env.get("REFINEMENT_BATCH_CONCURRENCY") ?? 8
+      : Deno.env.get("STYLE_REPLICATE_BATCH_CONCURRENCY") ?? 2,
     1,
-    4,
-    2,
+    mode === "refinement" ? 8 : 4,
+    mode === "refinement" ? 8 : 2,
   );
+  const progressBatchSize = mode === "refinement"
+    ? clampInt(Deno.env.get("REFINEMENT_PROGRESS_BATCH_SIZE") ?? 8, 1, 8, 8)
+    : units.length;
 
   const dataUrlCache = new Map<string, Promise<string>>();
   const getCachedDataUrl = (path: string): Promise<string> => {
@@ -717,10 +761,106 @@ async function processStyleReplicateJob(
 
   const outputs: StyleOutputItem[] = new Array(units.length);
   let fatalError: unknown = null;
+  let completedCount = 0;
+  let progressWriteChain = Promise.resolve();
+
+  const pendingOutput = (unit: StyleReplicateUnit): StyleOutputItem => ({
+    url: null,
+    b64_json: null,
+    object_path: null,
+    mime_type: null,
+    provider_size: null,
+    reference_index: unit.reference_index,
+    group_index: unit.group_index,
+    product_index: unit.product_index,
+    unit_status: "pending",
+  });
+
+  const buildResultSnapshot = (completed: number) => {
+    const mergedOutputs = units.map((unit, idx) => outputs[idx] ?? pendingOutput(unit));
+    const successOutputs = mergedOutputs.filter((x) => x.unit_status === "success" && x.url);
+    const successCount = mergedOutputs.filter((x) => x.unit_status === "success").length;
+    const failedCount = mergedOutputs.filter((x) => x.unit_status === "failed").length;
+    const firstOutput = successOutputs[0] ?? null;
+    return {
+      firstOutput,
+      successCount,
+      failedCount,
+      resultData: {
+        provider: "qnaigc",
+        model: modelName,
+        image_size: imageSize,
+        mime_type: firstOutput?.mime_type ?? null,
+        object_path: firstOutput?.object_path ?? null,
+        b64_json: firstOutput?.b64_json ?? null,
+        outputs: mergedOutputs,
+        summary: {
+          requested_count: units.length,
+          completed_count: Math.max(0, Math.min(completed, units.length)),
+          success_count: successCount,
+          failed_count: failedCount,
+          mode,
+        },
+        metadata: {
+          requested_aspect_ratio: aspectRatio,
+          reference_style_summary: mode === "refinement" ? null : referenceStyleSummary,
+          background_mode: mode === "refinement" ? backgroundMode : null,
+          group_count: mode === "batch" ? groupCount : 1,
+          single_product_count: mode === "single"
+            ? singleProductImages.length
+            : mode === "refinement"
+            ? productImages.length
+            : 1,
+          single_repeat_count: mode === "single" ? imageCount : 1,
+          unit_cost: unitCost,
+          total_requested_cost: unitCost * units.length,
+          batch_size: progressBatchSize,
+        },
+      },
+    };
+  };
+
+  const enqueueProgressWrite = (completed: number) => {
+    if (mode !== "refinement") return;
+    const snapshotCompleted = completed;
+    progressWriteChain = progressWriteChain
+      .then(async () => {
+        const snapshot = buildResultSnapshot(snapshotCompleted);
+        await supabase
+          .from("generation_jobs")
+          .update({
+            result_url: snapshot.firstOutput?.url ?? null,
+            result_data: snapshot.resultData,
+            error_code: null,
+            error_message: null,
+          })
+          .eq("id", job.id)
+          .eq("status", "processing");
+      })
+      .catch(() => {
+        // Ignore transient progress write errors; final write remains authoritative.
+      });
+  };
 
   const buildPrompt = (unit: StyleReplicateUnit): string => {
+    if (unit.mode === "refinement") {
+      const promptParts = [refinementBasePrompt];
+      if (backgroundMode === "white") {
+        promptParts.push(refinementWhiteBackgroundPrompt);
+      }
+      if (isDoubaoModel(modelName)) {
+        const normalizedRes = doubaoTargetSize(imageSize);
+        const pixelHint = doubaoAspectPixels(aspectRatio);
+        promptParts.push(`输出比例为 ${aspectRatio}，分辨率档位为 ${normalizedRes}，参考像素尺寸为 ${pixelHint}。`);
+      }
+      if (userPrompt) {
+        promptParts.push(userPrompt);
+      }
+      return promptParts.join("\n");
+    }
+
     const promptParts = [
-      `[系统提示词]\n${systemPrompt}`,
+      `[系统提示词]\n${styleSystemPrompt}`,
       "[输入角色定义]\n你将收到两张输入图：第1张是参考风格图（只用于提取风格）；第2张是产品素材图（必须保持产品本体不变）。",
       `[参考图部分]\n${referenceStyleSummary}`,
       "[素材产品图部分]\n产品素材图是唯一产品真值来源。禁止根据参考图替换产品形态或品牌细节；只能迁移场景与拍摄风格。",
@@ -740,24 +880,25 @@ async function processStyleReplicateJob(
   };
 
   await runWithConcurrency(units, batchConcurrency, async (unit, index) => {
-    if (fatalError) {
-      outputs[index] = {
-        url: null,
-        b64_json: null,
-        object_path: null,
-        mime_type: null,
-        provider_size: null,
-        reference_index: unit.reference_index,
-        group_index: unit.group_index,
-        unit_status: "failed",
-        error_message: "Skipped due to fatal failure in this batch.",
-      };
-      return;
-    }
-
     try {
-      const referenceDataUrl = await getCachedDataUrl(unit.reference_image);
+      if (fatalError) {
+        outputs[index] = {
+          url: null,
+          b64_json: null,
+          object_path: null,
+          mime_type: null,
+          provider_size: null,
+          reference_index: unit.reference_index,
+          group_index: unit.group_index,
+          product_index: unit.product_index,
+          unit_status: "failed",
+          error_message: "Skipped due to fatal failure in this batch.",
+        };
+        return;
+      }
+
       const productDataUrl = await getCachedDataUrl(unit.product_image);
+      const referenceDataUrl = unit.reference_image ? await getCachedDataUrl(unit.reference_image) : null;
       const prompt = buildPrompt(unit);
       let chosen: Omit<StyleOutputItem, "reference_index" | "group_index" | "unit_status" | "error_message"> | null = null;
       let lastProviderSize: string | null = null;
@@ -765,7 +906,7 @@ async function processStyleReplicateJob(
       for (let attempt = 0; attempt < maxRatioRetries; attempt++) {
         const apiResponse = await callQnImageAPI({
           imageDataUrl: productDataUrl,
-          imageDataUrls: [referenceDataUrl, productDataUrl],
+          ...(referenceDataUrl ? { imageDataUrls: [referenceDataUrl, productDataUrl] } : {}),
           prompt,
           n: 1,
           model: resolveStyleReplicateModel(modelName),
@@ -847,8 +988,15 @@ async function processStyleReplicateJob(
       if (isFatalStyleReplicateError(cause)) {
         fatalError = cause;
       }
+    } finally {
+      completedCount += 1;
+      if (completedCount % progressBatchSize === 0 || completedCount === units.length) {
+        enqueueProgressWrite(completedCount);
+      }
     }
   });
+
+  await progressWriteChain;
 
   for (let i = 0; i < outputs.length; i++) {
     if (!outputs[i]) {
@@ -868,10 +1016,10 @@ async function processStyleReplicateJob(
     }
   }
 
-  const successOutputs = outputs.filter((x) => x.unit_status === "success" && x.url);
-  const firstOutput = successOutputs[0] ?? null;
-  const successCount = outputs.filter((x) => x.unit_status === "success").length;
-  const failedCount = outputs.length - successCount;
+  const finalSnapshot = buildResultSnapshot(units.length);
+  const firstOutput = finalSnapshot.firstOutput;
+  const successCount = finalSnapshot.successCount;
+  const failedCount = finalSnapshot.failedCount;
   const status: "success" | "failed" = successCount > 0 ? "success" : "failed";
 
   await supabase
@@ -879,30 +1027,7 @@ async function processStyleReplicateJob(
     .update({
       status,
       result_url: firstOutput?.url ?? null,
-      result_data: {
-        provider: "qnaigc",
-        model: modelName,
-        image_size: imageSize,
-        mime_type: firstOutput?.mime_type ?? null,
-        object_path: firstOutput?.object_path ?? null,
-        b64_json: firstOutput?.b64_json ?? null,
-        outputs,
-        summary: {
-          requested_count: units.length,
-          success_count: successCount,
-          failed_count: failedCount,
-          mode,
-        },
-        metadata: {
-          requested_aspect_ratio: aspectRatio,
-          reference_style_summary: referenceStyleSummary,
-          group_count: mode === "batch" ? groupCount : 1,
-          single_product_count: mode === "single" ? singleProductImages.length : 1,
-          single_repeat_count: mode === "single" ? imageCount : 1,
-          unit_cost: unitCost,
-          total_requested_cost: unitCost * units.length,
-        },
-      },
+      result_data: finalSnapshot.resultData,
       error_code: status === "failed"
         ? styleReplicateErrorCode(fatalError ?? "UPSTREAM_ERROR")
         : (failedCount > 0 ? "BATCH_PARTIAL_FAILED" : null),
