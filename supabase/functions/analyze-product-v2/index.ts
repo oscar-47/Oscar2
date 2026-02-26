@@ -14,11 +14,24 @@ Deno.serve(async (req) => {
     return err("BAD_REQUEST", "productImage is required");
   }
 
+  const clothingMode = typeof body.clothingMode === "string"
+    ? body.clothingMode
+    : "";
+  const promptConfigKey = typeof body.promptConfigKey === "string" && body.promptConfigKey.trim().length > 0
+    ? body.promptConfigKey
+    : clothingMode === "model_strategy"
+    ? "clothing_model_tryon_strategy_prompt_zh"
+    : "batch_analysis_prompt_en";
+
   const supabase = createServiceClient();
   const payload = {
     ...body,
+    modelImage: typeof body.modelImage === "string" ? body.modelImage : null,
+    mannequinEnabled: Boolean(body.mannequinEnabled ?? false),
+    mannequinWhiteBackground: Boolean(body.mannequinWhiteBackground ?? false),
+    threeDWhiteBackground: Boolean(body.threeDWhiteBackground ?? false),
     outputLanguage: String(body.outputLanguage ?? body.targetLanguage ?? body.uiLanguage ?? "en"),
-    promptConfigKey: String(body.promptConfigKey ?? "batch_analysis_prompt_en"),
+    promptConfigKey,
   };
 
   const { data, error } = await supabase
