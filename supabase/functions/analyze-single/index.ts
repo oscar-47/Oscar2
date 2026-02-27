@@ -1,48 +1,6 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
-import { callQnImageAPI, extractGeneratedImageBase64 } from "../_shared/qn-image.ts";
 import { requireUser } from "../_shared/auth.ts";
-
-// ── image helpers (same as generate-image) ───────────────────────────────────
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
-}
-
-function guessMime(url: string): string {
-  const lower = url.toLowerCase();
-  if (lower.includes(".png")) return "image/png";
-  if (lower.includes(".webp")) return "image/webp";
-  if (lower.includes(".jpg") || lower.includes(".jpeg")) return "image/jpeg";
-  return "image/png";
-}
-
-function toPublicUrl(pathOrUrl: string): string {
-  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
-  const base = Deno.env.get("SOURCE_IMAGE_BASE_URL")
-    ?? Deno.env.get("UPLOAD_PUBLIC_HOST")
-    ?? "";
-  return `${base.replace(/\/+$/, "")}/${pathOrUrl.replace(/^\/+/, "")}`;
-}
-
-async function toDataUrl(pathOrUrl: string): Promise<string> {
-  if (pathOrUrl.startsWith("data:image/")) return pathOrUrl;
-  const url = toPublicUrl(pathOrUrl);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`SOURCE_IMAGE_FETCH_FAILED ${res.status}: ${url}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  const mime = res.headers.get("content-type") || guessMime(url);
-  return `data:${mime};base64,${bytesToBase64(bytes)}`;
-}
 
 function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
   if (!turboEnabled) return model === "nano-banana" ? 3 : 5;
@@ -51,37 +9,126 @@ function computeCost(model: string, turboEnabled: boolean, imageSize: string): n
   return 17;
 }
 
-// ── main handler ─────────────────────────────────────────────────────────────
+function hasAllowedRefinementImageExtension(value: string): boolean {
+  const lower = value.trim().toLowerCase();
+  const normalized = lower.split("?")[0]?.split("#")[0] ?? lower;
+  return normalized.endsWith(".jpg") || normalized.endsWith(".png");
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
   if (req.method !== "POST") return err("BAD_REQUEST", "Method not allowed", 405);
 
-  const body = await req.json().catch(() => null) as Record<string, unknown> | null;
-  if (!body || typeof body.referenceImage !== "string" || !Array.isArray(body.productImages)) {
-    return err("BAD_REQUEST", "referenceImage and productImages are required");
-  }
-
   const authResult = await requireUser(req);
   if (!authResult.ok) return authResult.response;
 
-  const supabase = createServiceClient();
-  const user = authResult.user;
+  const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) return err("BAD_REQUEST", "invalid request body");
 
-  const modelName = String(body.model ?? "nano-banana-pro");
+  const mode = body.mode === "batch"
+    ? "batch"
+    : body.mode === "refinement"
+    ? "refinement"
+    : "single";
+
+  if (mode === "single") {
+    if (typeof body.referenceImage !== "string" || !Array.isArray(body.productImages)) {
+      return err("BAD_REQUEST", "referenceImage and productImages are required");
+    }
+    if (body.productImages.length < 1) {
+      return err("BAD_REQUEST", "at least one product image is required");
+    }
+    if (body.productImages.some((x) => typeof x !== "string" || String(x).trim().length === 0)) {
+      return err("BAD_REQUEST", "productImages must be non-empty strings");
+    }
+  } else if (mode === "batch") {
+    if (!Array.isArray(body.referenceImages) || body.referenceImages.length < 1 || body.referenceImages.length > 12) {
+      return err("BATCH_REFERENCE_IMAGES_REQUIRED", "referenceImages length must be within [1, 12]");
+    }
+    if (body.referenceImages.some((x) => typeof x !== "string" || String(x).trim().length === 0)) {
+      return err("BATCH_INPUT_INVALID", "referenceImages must be non-empty strings");
+    }
+    if (typeof body.productImage !== "string" || body.productImage.trim().length === 0) {
+      return err("BATCH_PRODUCT_IMAGE_REQUIRED", "productImage is required in batch mode");
+    }
+    const groupCount = Number(body.groupCount ?? 1);
+    if (!Number.isInteger(groupCount) || groupCount < 1 || groupCount > 9) {
+      return err("BATCH_INPUT_INVALID", "groupCount must be in [1, 9]");
+    }
+  } else {
+    if (!Array.isArray(body.productImages)) {
+      return err("REFINEMENT_PRODUCT_IMAGES_REQUIRED", "productImages are required in refinement mode");
+    }
+    if (body.productImages.length < 1 || body.productImages.length > 50) {
+      return err("REFINEMENT_PRODUCT_IMAGES_REQUIRED", "productImages length must be within [1, 50]");
+    }
+    if (body.productImages.some((x) => typeof x !== "string" || String(x).trim().length === 0)) {
+      return err("REFINEMENT_PRODUCT_IMAGES_REQUIRED", "productImages must be non-empty strings");
+    }
+    if (body.productImages.some((x) => typeof x === "string" && !hasAllowedRefinementImageExtension(x))) {
+      return err("REFINEMENT_IMAGE_FORMAT_UNSUPPORTED", "refinement mode only supports .jpg and .png image URLs");
+    }
+
+    const backgroundMode = String(body.backgroundMode ?? "white");
+    if (backgroundMode !== "white" && backgroundMode !== "original") {
+      return err("REFINEMENT_BACKGROUND_MODE_INVALID", "backgroundMode must be white or original");
+    }
+    body.backgroundMode = backgroundMode;
+  }
+
+  const modelName = String(body.model ?? "doubao-seedream-4.5");
   const imageSize = String(body.imageSize ?? "2K");
+  const imageCount = Math.max(1, Math.min(9, Number(body.imageCount ?? 1)));
+  const groupCount = Math.max(1, Math.min(9, Number(body.groupCount ?? 1)));
+  const productCount = mode === "single" || mode === "refinement"
+    ? (Array.isArray(body.productImages) ? body.productImages.length : 0)
+    : 1;
+  const referenceCount = mode === "batch"
+    ? (Array.isArray(body.referenceImages) ? body.referenceImages.length : 0)
+    : 1;
+  const requestedCount = mode === "batch"
+    ? referenceCount * groupCount
+    : mode === "refinement"
+    ? productCount
+    : productCount * imageCount;
   const turboEnabled = Boolean(body.turboEnabled ?? false);
-  const cost = computeCost(modelName, turboEnabled, imageSize);
-  const startedAt = Date.now();
+  const unitCost = computeCost(modelName, turboEnabled, imageSize);
+  const cost = unitCost * requestedCount;
 
-  // 1. Create job record
+  const payload = {
+    ...body,
+    mode,
+    groupCount,
+    metadata: {
+      ...(typeof body.metadata === "object" && body.metadata ? body.metadata as Record<string, unknown> : {}),
+    },
+  };
+
+  const supabase = createServiceClient();
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("subscription_credits,purchased_credits")
+    .eq("id", authResult.user.id)
+    .single();
+
+  if (profileError || !profile) {
+    return err("PROFILE_NOT_FOUND", "failed to load profile for credit precheck", 500, profileError);
+  }
+  const totalCredits = Number(profile.subscription_credits ?? 0) + Number(profile.purchased_credits ?? 0);
+  if (totalCredits < cost) {
+    return err("INSUFFICIENT_CREDITS", "Not enough credits", 402, {
+      required: cost,
+      available: totalCredits,
+    });
+  }
+
   const { data, error } = await supabase
     .from("generation_jobs")
     .insert({
-      user_id: user.id,
+      user_id: authResult.user.id,
       type: "STYLE_REPLICATE",
       status: "processing",
-      payload: body,
+      payload,
       cost_amount: cost,
       trace_id: body.trace_id ?? null,
       client_job_id: body.client_job_id ?? null,
@@ -90,101 +137,27 @@ Deno.serve(async (req) => {
     .select("id")
     .single();
 
-  if (error || !data) return err("ANALYSIS_CREATE_FAILED", "failed to create style replicate job", 500, error);
-
-  const jobId = data.id;
-  let creditDeducted = false;
-
-  try {
-    // 2. Deduct credits
-    const { error: deductError } = await supabase.rpc("deduct_credits", { p_user_id: user.id, p_amount: cost });
-    if (deductError) {
-      await supabase
-        .from("generation_jobs")
-        .update({
-          status: "failed",
-          error_code: "INSUFFICIENT_CREDITS",
-          error_message: "Not enough credits",
-          duration_ms: Date.now() - startedAt,
-        })
-        .eq("id", jobId);
-      return err("INSUFFICIENT_CREDITS", "Not enough credits", 402);
-    }
-    creditDeducted = true;
-
-    // 3. Fetch both images
-    const referenceDataUrl = await toDataUrl(String(body.referenceImage));
-    const productImageUrl = body.productImages[0];
-    if (!productImageUrl || typeof productImageUrl !== "string") {
-      throw new Error("productImages[0] is required");
-    }
-    const productDataUrl = await toDataUrl(productImageUrl);
-
-    // 4. Build the style replication prompt
-    const userPrompt = typeof body.userPrompt === "string" && body.userPrompt
-      ? body.userPrompt
-      : "";
-    const prompt = `Replicate the exact visual style, lighting, color grading, background, and composition from the reference image. Apply this style to the product shown in the second image. Maintain the product's identity and details while matching the reference aesthetic perfectly. ${userPrompt}`.trim();
-
-    // 5. Call QN Image API with the product image + style prompt
-    // The reference image style description is embedded in the prompt
-    const apiResponse = await callQnImageAPI({
-      imageDataUrl: productDataUrl,
-      prompt,
-      n: 1,
-    });
-
-    const generatedBase64 = extractGeneratedImageBase64(apiResponse);
-    const imageBytes = base64ToBytes(generatedBase64);
-
-    // 6. Upload result to storage
-    const outputBucket = Deno.env.get("GENERATIONS_BUCKET") ?? "generations";
-    const objectPath = `${user.id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
-
-    let resultUrl: string | null = null;
-    const { error: uploadError } = await supabase.storage
-      .from(outputBucket)
-      .upload(objectPath, imageBytes, { contentType: "image/png", upsert: false });
-
-    if (!uploadError) {
-      const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
-      resultUrl = publicData.publicUrl;
-    }
-
-    // 7. Update job as success
-    await supabase
-      .from("generation_jobs")
-      .update({
-        status: "success",
-        result_url: resultUrl,
-        result_data: {
-          provider: "qnaigc",
-          model: modelName,
-          image_size: imageSize,
-          mime_type: "image/png",
-          object_path: resultUrl ? `${outputBucket}/${objectPath}` : null,
-          b64_json: generatedBase64,
-        },
-        duration_ms: Date.now() - startedAt,
-      })
-      .eq("id", jobId);
-
-  } catch (e) {
-    // Refund credits on failure
-    if (creditDeducted) {
-      await supabase.rpc("add_credits", { p_user_id: user.id, p_amount: cost, p_type: "purchased" });
-    }
-    console.error("[analyze-single] failed:", String(e));
-    await supabase
-      .from("generation_jobs")
-      .update({
-        status: "failed",
-        error_code: "UPSTREAM_ERROR",
-        error_message: String(e),
-        duration_ms: Date.now() - startedAt,
-      })
-      .eq("id", jobId);
+  if (error || !data) {
+    return err("STYLE_REPLICATE_JOB_CREATE_FAILED", "failed to create style replicate job", 500, error);
   }
 
-  return ok({ job_id: jobId, status: "processing" });
+  const { error: taskError } = await supabase
+    .from("generation_job_tasks")
+    .insert({
+      job_id: data.id,
+      task_type: "STYLE_REPLICATE",
+      status: "queued",
+      payload,
+    });
+
+  if (taskError) {
+    await supabase.from("generation_jobs").update({
+      status: "failed",
+      error_code: "STYLE_REPLICATE_JOB_CREATE_FAILED",
+      error_message: `Failed to enqueue style replicate task: ${taskError.message}`,
+    }).eq("id", data.id);
+    return err("STYLE_REPLICATE_JOB_CREATE_FAILED", "failed to enqueue style replicate task", 500, taskError);
+  }
+
+  return ok({ job_id: data.id, status: "processing" });
 });

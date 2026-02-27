@@ -57,45 +57,56 @@ export function useCredits(userId?: string): UseCreditsResult {
     let channel: ReturnType<typeof supabase.channel> | null = null
 
     async function init() {
-      let uid = resolvedId
-      if (!uid) {
-        const { data: { user } } = await supabase.auth.getUser()
-        uid = user?.id ?? null
+      try {
+        let uid = resolvedId
+        if (!uid) {
+          const { data: sessionData } = await supabase.auth.getSession()
+          uid = sessionData.session?.user?.id ?? null
+        }
+        if (!uid) {
+          // Fallback only when session cache is empty.
+          const { data: { user } } = await supabase.auth.getUser()
+          uid = user?.id ?? null
+        }
         if (uid && !cancelled) setResolvedId(uid)
-      }
-      if (!uid) {
-        if (!cancelled) setIsLoading(false)
-        return
-      }
+        if (!uid) {
+          if (!cancelled) setIsLoading(false)
+          return
+        }
 
-      const { data } = await supabase
-        .from('profiles')
-        .select('subscription_credits, purchased_credits')
-        .eq('id', uid)
-        .single()
+        const { data } = await supabase
+          .from('profiles')
+          .select('subscription_credits, purchased_credits')
+          .eq('id', uid)
+          .single()
 
-      if (!cancelled) {
-        if (data) setProfile(data as Profile)
-        setIsLoading(false)
+        if (!cancelled) {
+          if (data) setProfile(data as Profile)
+          setIsLoading(false)
+        }
+
+        // Subscribe to real-time credit updates
+        channel = supabase
+          .channel(`profile:${uid}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'profiles',
+              filter: `id=eq.${uid}`,
+            },
+            (payload) => {
+              if (!cancelled)
+                setProfile((prev) => ({ ...prev, ...payload.new } as Profile))
+            }
+          )
+          .subscribe()
+      } catch {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
       }
-
-      // Subscribe to real-time credit updates
-      channel = supabase
-        .channel(`profile:${uid}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'profiles',
-            filter: `id=eq.${uid}`,
-          },
-          (payload) => {
-            if (!cancelled)
-              setProfile((prev) => ({ ...prev, ...payload.new } as Profile))
-          }
-        )
-        .subscribe()
     }
 
     init()

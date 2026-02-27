@@ -42,8 +42,11 @@
 
 ## Refinement Studio
 
-1. Create `ANALYSIS` job with `clothingMode=refinement_analysis`
-2. Create one `IMAGE_GEN` job with `whiteBackground=true`
+1. Create one `STYLE_REPLICATE` job with `mode=refinement` and `productImages[]`.
+2. Worker processes each product image as one refinement unit (`1 input -> 1 output`).
+3. Worker writes batched progress snapshots to `generation_jobs.result_data` while status remains `processing`.
+4. Worker finalizes the same job to `success` (at least one unit success) or `failed` (all units failed).
+5. Credits are deducted per successful unit only; failed units are not deducted.
 
 ## Realtime
 
@@ -51,6 +54,6 @@ Frontend subscribes to `generation_jobs` update events filtered by `id=eq.<job_i
 
 ## Nudge + Poll Strategy
 
-1. Frontend nudges worker once after `analyze-product-v2` / `generate-image` ack.
+1. Frontend nudges worker once after `analyze-product-v2` / `generate-image` / `analyze-single` ack.
 2. `waitForJob` uses Realtime subscription + periodic polling.
 3. If polling shows `processing` for consecutive checks, frontend sends another nudge.
