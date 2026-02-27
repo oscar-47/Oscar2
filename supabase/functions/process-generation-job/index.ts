@@ -212,10 +212,15 @@ function resolveQnModel(modelFromRequest: string): string | undefined {
 }
 
 function getSourceImageFromPayload(payload: Record<string, unknown>): string | null {
+  const workflowMode = typeof payload.workflowMode === "string" ? payload.workflowMode : "product";
+  if (workflowMode === "model" && typeof payload.modelImage === "string" && payload.modelImage) {
+    return payload.modelImage;
+  }
   if (typeof payload.productImage === "string" && payload.productImage) return payload.productImage;
   if (Array.isArray(payload.productImages) && payload.productImages.length > 0 && typeof payload.productImages[0] === "string") {
     return payload.productImages[0];
   }
+  if (typeof payload.modelImage === "string" && payload.modelImage) return payload.modelImage;
   return null;
 }
 
@@ -229,24 +234,50 @@ async function processAnalysisJob(
   const outputLanguage = String(payload.outputLanguage ?? payload.targetLanguage ?? uiLanguage ?? "en");
   const imageCount = Math.max(1, Math.min(15, Number(payload.imageCount ?? 1)));
   const requirements = sanitizeString(payload.requirements, "");
+  const clothingMode = sanitizeString(payload.clothingMode, "");
+  const promptConfigKey = sanitizeString(payload.promptConfigKey, "batch_analysis_prompt_en");
+  const mannequinEnabled = Boolean(payload.mannequinEnabled ?? false);
+  const mannequinWhiteBackground = Boolean(payload.mannequinWhiteBackground ?? false);
+  const threeDWhiteBackground = Boolean(payload.threeDWhiteBackground ?? false);
+  const whiteBackground = Boolean(payload.whiteBackground ?? false);
+  const threeDEnabled = Boolean(payload.threeDEnabled ?? false);
+  const modelImage = typeof payload.modelImage === "string" && payload.modelImage.trim().length > 0
+    ? payload.modelImage
+    : null;
 
   const productImages = Array.isArray(payload.productImages)
     ? payload.productImages.filter((x): x is string => typeof x === "string")
     : [];
   if (productImages.length === 0 && typeof payload.productImage === "string") productImages.push(payload.productImage);
   if (productImages.length === 0) throw new Error("ANALYSIS_INPUT_IMAGE_MISSING");
+  if (clothingMode === "model_strategy" && !modelImage) throw new Error("ANALYSIS_MODEL_IMAGE_MISSING");
 
   const imageDataUrls = await Promise.all(productImages.map((path) => toDataUrl(path)));
+  const modelImageDataUrl = modelImage ? await toDataUrl(modelImage) : null;
 
   const textContentRule = outputLanguage === "none"
     ? "For Text Content fields, always output Main Title/SubTitle/Description as 'None'."
     : `For Text Content fields, write copy in ${outputLanguageLabel(outputLanguage)}.`;
 
-  const systemPrompt = uiLanguage === "zh"
+  const clothingRules: string[] = [];
+  if (clothingMode) clothingRules.push(`Clothing mode: ${clothingMode}.`);
+  if (clothingMode === "model_strategy") {
+    clothingRules.push("Build try-on strategy for a specific model while preserving product realism.");
+  }
+  if (mannequinEnabled) clothingRules.push("Include mannequin-centric layouts in at least one blueprint.");
+  if (mannequinWhiteBackground) clothingRules.push("Use pure white mannequin background where mannequin appears.");
+  if (threeDEnabled) clothingRules.push("Allow 3D-styled commercial composition as a valid direction.");
+  if (threeDWhiteBackground) clothingRules.push("When creating 3D-style visuals, keep a pure white background.");
+  if (whiteBackground) clothingRules.push("Prefer pure white seamless background across blueprints.");
+  const clothingRuleBlock = clothingRules.length > 0
+    ? clothingRules.map((line) => `- ${line}`).join("\n")
+    : "- No extra clothing constraints.";
+
+  const defaultSystemPrompt = uiLanguage === "zh"
     ? "你是顶级电商视觉总监。你的任务是根据产品图与需求输出可执行的商业图片蓝图。只输出 JSON，不要 markdown 代码块。"
     : "You are a world-class e-commerce visual director. Produce executable commercial image blueprints from product photos and brief. Return JSON only, no markdown fences.";
 
-  const userPrompt = `
+  const defaultUserPrompt = `
 Create blueprint JSON with this exact shape:
 {
   "images": [
@@ -264,18 +295,79 @@ Constraints:
 - ${textContentRule}
 - If output language is visual-only, keep typography as None and emphasize pure visual composition.
 - Keep high-conversion e-commerce style, realistic material/lighting details.
+- Clothing-specific constraints:
+${clothingRuleBlock}
 User brief:
 ${requirements || "(no extra brief provided)"}
 `;
+
+  const { data: promptConfigRow } = await supabase
+    .from("system_config")
+    .select("config_value")
+    .eq("config_key", promptConfigKey)
+    .maybeSingle();
+
+  const promptConfigValue = promptConfigRow?.config_value;
+  const promptTemplate = typeof promptConfigValue === "object" && promptConfigValue
+    ? promptConfigValue as Record<string, unknown>
+    : null;
+
+  const interpolate = (template: string): string => {
+    const replacements: Record<string, string> = {
+      IMAGE_COUNT: String(imageCount),
+      OUTPUT_LANGUAGE: outputLanguage,
+      OUTPUT_LANGUAGE_LABEL: outputLanguageLabel(outputLanguage),
+      TEXT_CONTENT_RULE: textContentRule,
+      USER_BRIEF: requirements || "(no extra brief provided)",
+      CLOTHING_MODE: clothingMode || "none",
+      CLOTHING_FLAGS: clothingRuleBlock,
+    };
+
+    let result = template;
+    for (const [key, value] of Object.entries(replacements)) {
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      result = result
+        .replace(new RegExp(`{{\\s*${escapedKey}\\s*}}`, "g"), value)
+        .replace(new RegExp(`\\$\\{${escapedKey}\\}`, "g"), value);
+    }
+    return result;
+  };
+
+  const systemPrompt = interpolate(
+    sanitizeString(
+      promptTemplate?.system_prompt
+        ?? promptTemplate?.systemPrompt
+        ?? promptTemplate?.system
+        ?? (typeof promptConfigValue === "string" ? "" : ""),
+      defaultSystemPrompt,
+    ),
+  );
+
+  const userPrompt = interpolate(
+    sanitizeString(
+      promptTemplate?.user_prompt
+        ?? promptTemplate?.userPrompt
+        ?? promptTemplate?.prompt
+        ?? (typeof promptConfigValue === "string" ? promptConfigValue : ""),
+      defaultUserPrompt,
+    ),
+  );
+
+  const contentParts: Array<Record<string, unknown>> = [{ type: "text", text: userPrompt }];
+  if (clothingMode === "model_strategy" && modelImageDataUrl) {
+    contentParts.push({ type: "text", text: "Reference model image (identity/body/pose guidance):" });
+    contentParts.push({ type: "image_url", image_url: { url: modelImageDataUrl } });
+  }
+  if (imageDataUrls.length > 0) {
+    contentParts.push({ type: "text", text: "Product reference images:" });
+    contentParts.push(...imageDataUrls.map((url) => ({ type: "image_url", image_url: { url } })));
+  }
 
   const messages: Array<Record<string, unknown>> = [
     { role: "system", content: systemPrompt },
     {
       role: "user",
-      content: [
-        { type: "text", text: userPrompt },
-        ...imageDataUrls.map((url) => ({ type: "image_url", image_url: { url } })),
-      ],
+      content: contentParts,
     },
   ];
 
@@ -307,6 +399,11 @@ ${requirements || "(no extra brief provided)"}
     provider: "qnaigc",
     image_count: imageCount,
     target_language: outputLanguage,
+    prompt_config_key: promptConfigKey,
+    clothing_mode: clothingMode || null,
+    mannequin_enabled: mannequinEnabled,
+    mannequin_white_background: mannequinWhiteBackground,
+    three_d_white_background: threeDWhiteBackground,
   };
 
   const aiRequest = {

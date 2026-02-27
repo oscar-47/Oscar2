@@ -24,8 +24,18 @@ Deno.serve(async (req) => {
   const imageSize = String(body.imageSize ?? "2K");
   const turboEnabled = Boolean(body.turboEnabled ?? false);
   const cost = computeCost(String(body.model), turboEnabled, imageSize);
+  const workflowMode = String(body.workflowMode ?? "product");
+
+  if (workflowMode === "model" && typeof body.modelImage !== "string") {
+    return err("BAD_REQUEST", "modelImage is required when workflowMode is model");
+  }
+
   const payload = {
     ...body,
+    workflowMode,
+    modelImage: workflowMode === "model" && typeof body.modelImage === "string"
+      ? body.modelImage
+      : body.modelImage ?? null,
     metadata: {
       ...(typeof body.metadata === "object" && body.metadata ? body.metadata as Record<string, unknown> : {}),
     },
