@@ -415,6 +415,31 @@ function getSourceImageFromPayload(payload: Record<string, unknown>): string | n
   return null;
 }
 
+async function syncModelHistoryStatus(
+  supabase: ReturnType<typeof createServiceClient>,
+  jobId: string,
+  userId: string,
+  patch: {
+    status: "processing" | "success" | "failed";
+    result_url?: string | null;
+    error_message?: string | null;
+  },
+): Promise<void> {
+  const updates: Record<string, unknown> = {
+    status: patch.status,
+    updated_at: new Date().toISOString(),
+  };
+  if ("result_url" in patch) updates.result_url = patch.result_url ?? null;
+  if ("error_message" in patch) updates.error_message = patch.error_message ?? null;
+
+  // Best-effort sync for AI model generation history.
+  await supabase
+    .from("model_generation_history")
+    .update(updates)
+    .eq("job_id", jobId)
+    .eq("user_id", userId);
+}
+
 async function processAnalysisJob(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
@@ -651,6 +676,11 @@ async function processImageGenJob(
           duration_ms: Date.now() - startedAt,
         })
         .eq("id", job.id);
+      await syncModelHistoryStatus(supabase, job.id, job.user_id, {
+        status: "failed",
+        result_url: null,
+        error_message: "Not enough credits",
+      });
       return;
     }
     creditDeducted = true;
@@ -709,6 +739,11 @@ async function processImageGenJob(
         duration_ms: Date.now() - startedAt,
       })
       .eq("id", job.id);
+    await syncModelHistoryStatus(supabase, job.id, job.user_id, {
+      status: "success",
+      result_url: resultUrl,
+      error_message: null,
+    });
   } catch (e) {
     if (creditDeducted) {
       await supabase.rpc("add_credits", {
@@ -1219,6 +1254,13 @@ Deno.serve(async (req) => {
         })
         .eq("id", job.id)
         .eq("status", "processing");
+      if (task.task_type === "IMAGE_GEN") {
+        await syncModelHistoryStatus(supabase, job.id, job.user_id, {
+          status: "failed",
+          result_url: null,
+          error_message: errorMessage,
+        });
+      }
     }
 
     return ok({

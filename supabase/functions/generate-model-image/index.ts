@@ -6,20 +6,34 @@ function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function firstString(values: unknown): string {
+  if (!Array.isArray(values)) return "";
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return "";
+}
+
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
 function buildModelPortraitPrompt(params: {
   gender: string;
-  age: string;
-  skin: string;
+  ageRange: string;
+  ethnicity: string;
   extraPrompt: string;
   uiLanguage: string;
 }): string {
-  const { gender, age, skin, extraPrompt, uiLanguage } = params;
+  const { gender, ageRange, ethnicity, extraPrompt, uiLanguage } = params;
   if (uiLanguage === "zh") {
     const segments = [
       "专业棚拍人像，时尚电商模特参考图。",
       gender ? `性别特征：${gender}。` : "",
-      age ? `年龄段：${age}。` : "",
-      skin ? `肤色：${skin}。` : "",
+      ageRange ? `年龄段：${ageRange}。` : "",
+      ethnicity ? `人群特征：${ethnicity}。` : "",
       "自然站姿，镜头正面或微侧，五官清晰，皮肤质感真实。",
       "纯净白色背景，柔和影棚光，高清细节，无水印无文字。",
       extraPrompt ? `补充要求：${extraPrompt}` : "",
@@ -30,8 +44,8 @@ function buildModelPortraitPrompt(params: {
   const segments = [
     "Professional studio portrait for a fashion e-commerce model reference.",
     gender ? `Gender presentation: ${gender}.` : "",
-    age ? `Age range: ${age}.` : "",
-    skin ? `Skin tone: ${skin}.` : "",
+    ageRange ? `Age range: ${ageRange}.` : "",
+    ethnicity ? `Ethnicity: ${ethnicity}.` : "",
     "Natural standing pose, frontal or slight angle, clear facial features, realistic skin texture.",
     "Pure white background, soft studio lighting, high-detail quality, no watermark, no text.",
     extraPrompt ? `Additional requirements: ${extraPrompt}` : "",
@@ -50,21 +64,30 @@ Deno.serve(async (req) => {
   if (!body) return err("BAD_REQUEST", "request body is required");
 
   const gender = normalizeText(body.gender);
-  const age = normalizeText(body.age);
-  const skin = normalizeText(body.skin);
-  const extraPrompt = normalizeText(body.prompt);
+  const ageRange = normalizeText(body.ageRange || body.age);
+  const ethnicity = normalizeText(body.ethnicity || body.skinColor || body.skin);
+  const extraPrompt = normalizeText(body.otherRequirements || body.prompt);
+  const sourceImage = normalizeText(body.productImage)
+    || firstString(body.productImages)
+    || normalizeText(body.modelImage);
   const uiLanguage = normalizeText(body.uiLanguage || body.targetLanguage || "en").toLowerCase() === "zh"
     ? "zh"
     : "en";
+  const requestedCount = clampInt(body.imageCount ?? body.count ?? 1, 1, 4, 1);
+  const imageCount = 1;
 
-  if (!gender && !age && !skin && !extraPrompt) {
-    return err("BAD_REQUEST", "at least one of gender/age/skin/prompt is required");
+  if (!sourceImage) {
+    return err("BAD_REQUEST", "productImage is required");
+  }
+
+  if (!gender && !ageRange && !ethnicity && !extraPrompt) {
+    return err("BAD_REQUEST", "at least one of gender/ageRange/ethnicity/otherRequirements is required");
   }
 
   const portraitPrompt = buildModelPortraitPrompt({
     gender,
-    age,
-    skin,
+    ageRange,
+    ethnicity,
     extraPrompt,
     uiLanguage,
   });
@@ -74,23 +97,28 @@ Deno.serve(async (req) => {
   const generateImagePayload = {
     model: typeof body.model === "string" ? body.model : "nano-banana-pro",
     prompt: portraitPrompt,
-    modelImage: typeof body.modelImage === "string" ? body.modelImage : null,
-    workflowMode: "model",
+    productImage: sourceImage,
+    workflowMode: "product",
     aspectRatio: typeof body.aspectRatio === "string" ? body.aspectRatio : "3:4",
     imageSize: typeof body.imageSize === "string" ? body.imageSize : "1K",
     turboEnabled: Boolean(body.turboEnabled ?? false),
-    imageCount: Number(body.imageCount ?? 1),
+    imageCount,
     trace_id: body.trace_id ?? null,
     client_job_id: body.client_job_id ?? null,
     fe_attempt: Number(body.fe_attempt ?? 1),
     metadata: {
       ...(typeof body.metadata === "object" && body.metadata ? body.metadata as Record<string, unknown> : {}),
       workflow_mode: "model",
-      model_profile: { gender, age, skin },
+      model_profile: { gender, age_range: ageRange, ethnicity },
+      requested_count: requestedCount,
     },
   };
 
-  const functionBaseUrl = `${Deno.env.get("SUPABASE_URL")?.replace(/\/+$/, "")}/functions/v1`;
+  const supabaseUrl = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/+$/, "");
+  if (!supabaseUrl) {
+    return err("INTERNAL_ERROR", "SUPABASE_URL is required", 500);
+  }
+  const functionBaseUrl = `${supabaseUrl}/functions/v1`;
   const invokeResponse = await fetch(`${functionBaseUrl}/generate-image`, {
     method: "POST",
     headers: {
@@ -114,16 +142,16 @@ Deno.serve(async (req) => {
   const { error: historyError } = await supabase
     .from("model_generation_history")
     .insert({
+      job_id: invokeJson.job_id,
       user_id: authResult.user.id,
-      generation_job_id: invokeJson.job_id,
-      gender: gender || null,
-      age: age || null,
-      skin: skin || null,
-      prompt: portraitPrompt,
-      metadata: {
-        trace_id: body.trace_id ?? null,
-        client_job_id: body.client_job_id ?? null,
-      },
+      gender: gender || "unspecified",
+      age_range: ageRange || "unspecified",
+      skin_color: ethnicity || "unspecified",
+      other_requirements: extraPrompt || null,
+      status: "processing",
+      result_url: null,
+      error_message: null,
+      updated_at: new Date().toISOString(),
     });
 
   if (historyError) {
@@ -134,5 +162,7 @@ Deno.serve(async (req) => {
     job_id: invokeJson.job_id,
     status: invokeJson.status ?? "processing",
     prompt: portraitPrompt,
+    requested_count: requestedCount,
+    image_count: imageCount,
   });
 });

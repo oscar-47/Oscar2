@@ -11,10 +11,22 @@ export interface BasicPhotoTypeState {
 }
 
 export interface AIModelParams {
-  gender: string
-  ageRange: string
-  skinColor: string
-  otherRequirements: string
-  count: number
+  gender: 'female' | 'male'
+  ageRange: '18-25' | '26-35' | '36-45' | '46-60' | '60+'
+  ethnicity: 'asian' | 'white' | 'black' | 'latino'
+  otherRequirements?: string
+  count: 1 | 2 | 3 | 4
   turboEnabled: boolean
+}
+
+export interface AIModelHistoryItem {
+  id: string
+  jobId: string
+  gender: 'female' | 'male'
+  ageRange: '18-25' | '26-35' | '36-45' | '46-60' | '60+'
+  ethnicity: 'asian' | 'white' | 'black' | 'latino'
+  resultUrl: string | null
+  status: 'processing' | 'success' | 'failed'
+  errorMessage: string | null
+  createdAt: string
 }

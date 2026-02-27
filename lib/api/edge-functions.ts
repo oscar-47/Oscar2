@@ -229,13 +229,21 @@ export async function generateImage(
 }
 
 export interface GenerateModelImageParams {
-  gender: string
-  ageRange: string
-  skinColor: string
+  gender: 'female' | 'male'
+  ageRange?: string
+  ethnicity?: 'asian' | 'white' | 'black' | 'latino'
   otherRequirements?: string
+  productImage?: string
   productImages?: string[]
-  count: number
+  count?: number
   turboEnabled: boolean
+  // Compatibility fields
+  age?: string
+  skin?: string
+  prompt?: string
+  imageCount?: number
+  uiLanguage?: string
+  targetLanguage?: string
   trace_id: string
   client_job_id: string
   fe_attempt: number
@@ -244,7 +252,14 @@ export interface GenerateModelImageParams {
 export async function generateModelImage(
   params: GenerateModelImageParams
 ): Promise<JobResponse> {
-  const res = await invokeFunction<JobResponse>('generate-model-image', params)
+  const payload = {
+    ...params,
+    ageRange: params.ageRange ?? params.age,
+    ethnicity: params.ethnicity ?? (params.skin as GenerateModelImageParams['ethnicity'] | undefined),
+    otherRequirements: params.otherRequirements ?? params.prompt,
+    imageCount: params.imageCount ?? params.count ?? 1,
+  }
+  const res = await invokeFunction<JobResponse>('generate-model-image', payload)
   void processGenerationJob(res.job_id)
   return res
 }
