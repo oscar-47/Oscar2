@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'PicSet AI — Professional E-Commerce Product Images',
+  title: 'Shopix AI — Professional E-Commerce Product Images',
   description:
     'Generate professional e-commerce product images with AI. Studio Genesis, Aesthetic Mirror, Clothing Studio, and Refinement Studio.',
 }

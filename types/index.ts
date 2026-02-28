@@ -120,7 +120,7 @@ export interface CheckoutResponse {
   url: string
 }
 
-// --- Studio Genesis: Analysis Blueprint (picset-compatible) ---
+// --- Studio Genesis: Analysis Blueprint ---
 
 export interface BlueprintImagePlan {
   title: string

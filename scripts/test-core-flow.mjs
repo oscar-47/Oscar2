@@ -469,7 +469,7 @@ const MOCK_PROMPT = "Subject: A premium product photographed in a professional s
 
 async function main() {
   console.log('=' .repeat(60))
-  console.log('  PicSet2 核心流程本地测试')
+  console.log('  Shopix AI 核心流程本地测试')
   console.log('=' .repeat(60))
   console.log(`\n  Chat 模型: ${CHAT_MODEL}`)
   console.log(`  Image 模型: ${IMAGE_MODEL}`)

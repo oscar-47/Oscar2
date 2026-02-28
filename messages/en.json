@@ -36,7 +36,7 @@
   },
   "landing": {
     "hero": {
-      "title": "PicSet AI: Your Visual Ops Partner for E-Commerce",
+      "title": "Shopix AI: Your Visual Ops Partner for E-Commerce",
       "subtitle": "From raw uploads to launch-ready detail pages, automate the full creative pipeline with structure, consistency, and speed.",
       "cta": "Start Free",
       "ctaSecondary": "Watch Demo"
@@ -135,7 +135,7 @@
       }
     },
     "reasons": {
-      "title": "Why Teams Choose PicSet AI",
+      "title": "Why Teams Choose Shopix AI",
       "subtitle": "Turn expensive and slow creative workflows into a repeatable production system",
       "card1": {
         "title": "Creative Cost Too High?",
@@ -158,7 +158,7 @@
       "title": "Frequently Asked Questions",
       "subtitle": "Quick answers on ownership, quality control, and day-to-day usage",
       "q1": {
-        "q": "Who owns images generated with PicSet AI?",
+        "q": "Who owns images generated with Shopix AI?",
         "a": "Under our terms and your lawful source assets, you retain usage rights for generated outputs. Ensure brand asset authorization where required."
       },
       "q2": {
@@ -174,11 +174,11 @@
         "a": "You can export by resolution and ratio. We still recommend final checks against each platform's latest listing policy."
       },
       "q5": {
-        "q": "Why use PicSet AI instead of outsourcing?",
+        "q": "Why use Shopix AI instead of outsourcing?",
         "a": "Speed, batch throughput, and style consistency are the main advantages for teams iterating frequently."
       },
       "q6": {
-        "q": "What type of teams is PicSet AI best for?",
+        "q": "What type of teams is Shopix AI best for?",
         "a": "Cross-border sellers, e-commerce brands, content operations teams, and SMBs needing stable creative output."
       }
     },

@@ -65,7 +65,7 @@ function toPublicUrl(pathOrUrl: string): string {
   const base = Deno.env.get("SOURCE_IMAGE_BASE_URL")
     ?? Deno.env.get("QINIU_CDN_HOST")
     ?? Deno.env.get("UPLOAD_PUBLIC_HOST")
-    ?? "https://cdn.picsetai.com";
+    ?? "https://cdn.shopix.ai";
   return `${base.replace(/\/+$/, "")}/${pathOrUrl.replace(/^\/+/, "")}`;
 }
 

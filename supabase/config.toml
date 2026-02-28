@@ -1,4 +1,4 @@
-project_id = "picset-ai"
+project_id = "shopix-ai"
 
 [functions.get-oss-sts]
 verify_jwt = false

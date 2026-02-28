@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
   if (!pkg.stripe_price_id) return err("STRIPE_PACKAGE_MISSING_PRICE", "Package missing stripe price id", 400);
 
   const stripe = new Stripe(stripeKey, { apiVersion: "2024-06-20" });
-  const appUrl = Deno.env.get("APP_URL") ?? "https://picsetai.com";
+  const appUrl = Deno.env.get("APP_URL") ?? "https://shopix.ai";
   const returnTo = body.returnTo ?? "/pricing";
 
   try {

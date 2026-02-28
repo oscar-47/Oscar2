@@ -30,7 +30,7 @@ export function Navbar() {
               <path d="M8 0L9.8 5.2L15.6 5.2L10.9 8.8L12.7 14L8 10.4L3.3 14L5.1 8.8L0.4 5.2L6.2 5.2L8 0Z" fill="currentColor"/>
             </svg>
           </span>
-          <span className="hidden text-lg tracking-tight text-[#151920] sm:inline">Picset AI</span>
+          <span className="hidden text-lg tracking-tight text-[#151920] sm:inline">Shopix AI</span>
         </Link>
 
         {/* Feature nav - same active state style as dashboard */}

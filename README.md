@@ -1,1 +1,1 @@
-# picset2
+# Shopix AI

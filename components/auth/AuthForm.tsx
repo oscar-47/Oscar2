@@ -69,23 +69,12 @@ export function AuthForm() {
     setLoading(true)
     setError(null)
 
-    const emailRedirectTo =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}/${locale}/auth?returnTo=${encodeURIComponent(returnTo)}`
-        : undefined
-
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo,
-      },
-    })
+    const { data, error } = await supabase.auth.signUp({ email, password })
 
     if (error) {
       setError(error.message)
     } else if (data.session) {
-      // If confirm email is disabled, Supabase may return session immediately.
+      // Email confirmation disabled — user is logged in immediately.
       router.push(returnTo)
       router.refresh()
     } else {
@@ -102,25 +91,14 @@ export function AuthForm() {
 
     const normalizedOtp = otp.trim().replace(/\s+/g, '')
 
-    // Supabase projects can issue either `email` or `signup` email OTP depending
-    // on provider/template settings. Try both for maximum compatibility.
-    let verifyError: string | null = null
-    const attempts: Array<'email' | 'signup'> = ['email', 'signup']
-    for (const type of attempts) {
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token: normalizedOtp,
-        type,
-      })
-      if (!error) {
-        verifyError = null
-        break
-      }
-      verifyError = error.message
-    }
+    const { error: verifyErr } = await supabase.auth.verifyOtp({
+      email,
+      token: normalizedOtp,
+      type: 'signup',
+    })
 
-    if (verifyError) {
-      setError(verifyError)
+    if (verifyErr) {
+      setError(verifyErr.message)
     } else {
       router.push(returnTo)
       router.refresh()

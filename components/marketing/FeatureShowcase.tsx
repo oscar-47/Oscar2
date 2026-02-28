@@ -41,21 +41,21 @@ const HIGHLIGHTS = [
 ] as const
 
 const SHOWCASE_IMAGES = [
-  'https://picsum.photos/seed/picset-watch/720/720',
-  'https://picsum.photos/seed/picset-headphones/720/720',
-  'https://picsum.photos/seed/picset-abstract/720/720',
-  'https://picsum.photos/seed/picset-glasses/720/720',
-  'https://picsum.photos/seed/picset-shoe1/720/720',
-  'https://picsum.photos/seed/picset-perfume/720/720',
-  'https://picsum.photos/seed/picset-shoe2/720/720',
-  'https://picsum.photos/seed/picset-lipstick/720/720',
-  'https://picsum.photos/seed/picset-shoe3/720/720',
-  'https://picsum.photos/seed/picset-bag1/720/720',
-  'https://picsum.photos/seed/picset-shoe4/720/720',
-  'https://picsum.photos/seed/picset-headphones2/720/720',
-  'https://picsum.photos/seed/picset-headphones3/720/720',
-  'https://picsum.photos/seed/picset-watch2/720/720',
-  'https://picsum.photos/seed/picset-green/720/720',
+  'https://picsum.photos/seed/shopix-watch/720/720',
+  'https://picsum.photos/seed/shopix-headphones/720/720',
+  'https://picsum.photos/seed/shopix-abstract/720/720',
+  'https://picsum.photos/seed/shopix-glasses/720/720',
+  'https://picsum.photos/seed/shopix-shoe1/720/720',
+  'https://picsum.photos/seed/shopix-perfume/720/720',
+  'https://picsum.photos/seed/shopix-shoe2/720/720',
+  'https://picsum.photos/seed/shopix-lipstick/720/720',
+  'https://picsum.photos/seed/shopix-shoe3/720/720',
+  'https://picsum.photos/seed/shopix-bag1/720/720',
+  'https://picsum.photos/seed/shopix-shoe4/720/720',
+  'https://picsum.photos/seed/shopix-headphones2/720/720',
+  'https://picsum.photos/seed/shopix-headphones3/720/720',
+  'https://picsum.photos/seed/shopix-watch2/720/720',
+  'https://picsum.photos/seed/shopix-green/720/720',
 ] as const
 
 const FAQ_KEYS = ['q1', 'q2', 'q3', 'q4', 'q5', 'q6'] as const

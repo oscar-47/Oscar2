@@ -1,15 +1,15 @@
 openapi: 3.1.0
 info:
-  title: PicSet AI API Contract (Backend-First)
+  title: Shopix AI API Contract (Backend-First)
   version: 0.1.0
   description: |
-    Contract-first API for PicSet AI compatible workflows.
+    Contract-first API for Shopix AI compatible workflows.
     Last updated: 2026-02-24.
 servers:
   - url: https://{host}
     variables:
       host:
-        default: picsetai.com
+        default: shopix.ai
 security:
   - bearerAuth: []
 paths:
