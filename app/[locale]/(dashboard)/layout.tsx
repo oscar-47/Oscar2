@@ -11,16 +11,17 @@ export default async function DashboardLayout({
 }) {
   const { locale } = await params
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
 
   if (!user) {
     redirect(`/${locale}/auth`)
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <DashboardNavbar userId={user.id} />
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-7xl">
+    <div className="flex min-h-screen flex-col bg-[#f4f5f7]">
+      <DashboardNavbar userId={user.id} email={user.email ?? ''} />
+      <main className="flex-1">
         {children}
       </main>
     </div>

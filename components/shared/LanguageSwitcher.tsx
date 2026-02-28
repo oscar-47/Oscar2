@@ -3,6 +3,13 @@
 import { useLocale } from 'next-intl'
 import { useRouter, usePathname } from 'next/navigation'
 import { useTransition } from 'react'
+import { Globe } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 
 export function LanguageSwitcher() {
   const locale = useLocale()
@@ -12,7 +19,6 @@ export function LanguageSwitcher() {
 
   function switchLocale(newLocale: 'en' | 'zh') {
     if (newLocale === locale) return
-    // Replace /en/ or /zh/ prefix with new locale
     const newPath = pathname.replace(/^\/(en|zh)/, `/${newLocale}`)
     startTransition(() => {
       router.push(newPath)
@@ -20,25 +26,30 @@ export function LanguageSwitcher() {
   }
 
   return (
-    <div className="flex items-center gap-1 rounded-md border p-0.5 text-sm">
-      <button
-        onClick={() => switchLocale('en')}
-        disabled={isPending}
-        className={`px-2 py-0.5 rounded text-xs transition-colors ${
-          locale === 'en' ? 'bg-foreground text-background font-medium' : 'text-muted-foreground hover:text-foreground'
-        }`}
-      >
-        EN
-      </button>
-      <button
-        onClick={() => switchLocale('zh')}
-        disabled={isPending}
-        className={`px-2 py-0.5 rounded text-xs transition-colors ${
-          locale === 'zh' ? 'bg-foreground text-background font-medium' : 'text-muted-foreground hover:text-foreground'
-        }`}
-      >
-        中
-      </button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          disabled={isPending}
+          className="flex h-9 items-center gap-1.5 rounded-full px-3 text-sm text-[#666b78] hover:bg-[#eceef2] hover:text-[#222731] transition-colors outline-none"
+        >
+          <Globe className="h-4 w-4" />
+          <span className="text-xs font-medium uppercase">{locale === 'zh' ? 'ZH' : 'EN'}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-36 rounded-2xl border-[#d6d9e0] bg-[#f7f7f8]">
+        <DropdownMenuItem
+          onClick={() => switchLocale('en')}
+          className={locale === 'en' ? 'font-medium bg-[#eceef2]' : ''}
+        >
+          English
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => switchLocale('zh')}
+          className={locale === 'zh' ? 'font-medium bg-[#eceef2]' : ''}
+        >
+          中文
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

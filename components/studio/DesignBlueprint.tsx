@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { ChevronDown, ChevronUp, Pencil, Palette, ImageIcon, Zap } from 'lucide-react'
+import { ChevronDown, ChevronUp, Pencil, Palette, ImageIcon } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ImagePlanCard } from './ImagePlanCard'
+import { SectionIcon } from '@/components/shared/SectionIcon'
 import type { BlueprintImagePlan } from '@/types'
 
 interface DesignBlueprintProps {
@@ -24,36 +25,27 @@ export function DesignBlueprint({
   disabled,
 }: DesignBlueprintProps) {
   const t = useTranslations('studio.genesis')
-  const [specsExpanded, setSpecsExpanded] = useState(false)
+  const [specsExpanded, setSpecsExpanded] = useState(true)
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Zap className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">{t('planPreview')}</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">{t('planPreviewDesc')}</p>
-      </div>
-
       {/* Design Specifications — collapsible */}
-      <div className="rounded-xl border bg-card">
+      <div className="rounded-[28px] border border-[#d0d4dc] bg-white">
         <button
           type="button"
           onClick={() => setSpecsExpanded(!specsExpanded)}
-          className="flex items-center gap-3 w-full p-4 text-left hover:bg-muted/50 transition-colors rounded-xl"
+          className="flex w-full items-center gap-3 rounded-[28px] p-5 text-left transition-colors hover:bg-[#f0f1f4]"
         >
-          <Palette className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          <SectionIcon icon={Palette} />
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm">{t('designSpecs')}</p>
-            <p className="text-xs text-muted-foreground">{t('designSpecsDesc')}</p>
+            <p className="text-[15px] font-semibold text-[#1a1d24]">{t('designSpecs')}</p>
+            <p className="text-[13px] text-[#7d818d]">{t('designSpecsDesc')}</p>
           </div>
-          <Pencil className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <Pencil className="h-4 w-4 shrink-0 text-[#7a7f8b]" />
           {specsExpanded ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            <ChevronUp className="h-4 w-4 text-[#7a7f8b]" />
           ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            <ChevronDown className="h-4 w-4 text-[#7a7f8b]" />
           )}
         </button>
 
@@ -65,13 +57,13 @@ export function DesignBlueprint({
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="px-4 pb-4">
+              <div className="px-5 pb-5">
                 <Textarea
                   value={designSpecs}
                   onChange={(e) => onDesignSpecsChange(e.target.value)}
                   disabled={disabled}
-                  rows={14}
-                  className="text-xs leading-relaxed font-mono"
+                  rows={18}
+                  className="min-h-[520px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f5f6f8] px-5 py-4 text-[14px] leading-8 text-[#262a32]"
                 />
               </div>
             </motion.div>
@@ -80,12 +72,12 @@ export function DesignBlueprint({
       </div>
 
       {/* Image Plan */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <ImageIcon className="h-5 w-5 text-muted-foreground" />
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <SectionIcon icon={ImageIcon} />
           <div>
-            <p className="font-semibold text-sm">{t('imagePlan')}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[15px] font-semibold text-[#1a1d24]">{t('imagePlan')}</p>
+            <p className="text-[13px] text-[#7d818d]">
               {t('imagePlanCount', { count: imagePlans.length })}
             </p>
           </div>

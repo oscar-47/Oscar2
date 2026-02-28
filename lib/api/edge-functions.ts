@@ -135,8 +135,11 @@ export interface AnalyzeProductParams {
   clothingMode?: 'product_analysis' | 'refinement_analysis' | 'model_strategy'
   modelImage?: string
   whiteBackground?: boolean
+  whiteBgFront?: boolean
+  whiteBgBack?: boolean
   whiteBgRetouched?: { front: boolean; back: boolean }
   detailCount?: number
+  detailCloseupCount?: number
   detailCloseup?: { count: number }
   sellingPointCount?: number
   sellingPoint?: { count: number }

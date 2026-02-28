@@ -55,7 +55,7 @@ export function ImageUploader({
 
   if (previewUrl) {
     return (
-      <div className={cn('relative rounded-xl overflow-hidden border border-border', className)}>
+      <div className={cn('group relative overflow-hidden rounded-xl border border-[#d0d4dc] bg-white', className)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={previewUrl}
@@ -66,9 +66,9 @@ export function ImageUploader({
           <button
             type="button"
             onClick={onClear}
-            className="absolute top-2 right-2 p-1.5 rounded-full bg-background/80 backdrop-blur-sm border border-border hover:bg-destructive hover:text-destructive-foreground transition-colors"
+            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity hover:bg-black/70 group-hover:opacity-100 group-focus-within:opacity-100"
           >
-            <X className="w-4 h-4" />
+            <X className="h-3 w-3" />
           </button>
         )}
       </div>
@@ -80,26 +80,26 @@ export function ImageUploader({
       <div
         {...getRootProps()}
         className={cn(
-          'flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-colors',
+          'flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 transition-colors',
           isDragActive
-            ? 'border-primary bg-primary/5'
-            : 'border-border bg-muted/30 hover:border-primary/50 hover:bg-muted/50',
+            ? 'border-[#8d94a2] bg-[#e9edf2]'
+            : 'border-[#d0d4dc] bg-[#f1f3f6] hover:border-[#8e96a4] hover:bg-[#eceff4]',
           disabled && 'opacity-50 cursor-not-allowed pointer-events-none'
         )}
       >
         <input {...getInputProps()} />
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e8ebf0]">
           {isDragActive ? (
-            <ImageIcon className="h-6 w-6 text-primary" />
+            <ImageIcon className="h-6 w-6 text-[#5e6674]" />
           ) : (
-            <Upload className="h-6 w-6 text-muted-foreground" />
+            <Upload className="h-6 w-6 text-[#707884]" />
           )}
         </div>
         <div className="text-center">
-          <p className="text-sm font-medium">
+          <p className="text-sm font-medium text-[#2f333b]">
             {isDragActive ? 'Drop to upload' : label}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">{sublabel}</p>
+          <p className="mt-1 text-xs text-[#7e8592]">{sublabel}</p>
         </div>
       </div>
       {error && <p className="mt-2 text-xs text-destructive">{error}</p>}

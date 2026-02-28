@@ -20,7 +20,7 @@ export function getQnImageConfig(): QnImageConfig {
 
   return {
     apiKey,
-    // Keep legacy/default QN behavior; doubao is injected per-request via override params.
+    // Default endpoint — overridden by env vars for Azure FLUX or other providers.
     endpoint: Deno.env.get("QN_IMAGE_API_ENDPOINT") ?? "https://api.qnaigc.com/v1/images/edits",
     model: Deno.env.get("QN_IMAGE_MODEL") ?? "gemini-3.0-pro-image-preview",
     timeoutMs: Number(Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "30000"),
@@ -45,9 +45,9 @@ export function getQnChatConfig(): QnChatConfig {
   };
 }
 
-/** Detect Azure OpenAI endpoints (.openai.azure.com) */
+/** Detect Azure OpenAI endpoints (.openai.azure.com or .cognitiveservices.azure.com) */
 function isAzureOpenAI(url: string): boolean {
-  return url.includes(".openai.azure.com");
+  return url.includes(".openai.azure.com") || url.includes(".cognitiveservices.azure.com");
 }
 
 /** Detect Azure AI Foundry endpoints (.services.ai.azure.com) */
@@ -65,9 +65,14 @@ function isOpenAINativeEdits(url: string): boolean {
   return url.includes("api.openai.com/v1/images/edits");
 }
 
-function normalizeArkSize(size: string | undefined): "1K" | "2K" | "4K" {
-  if (size === "1K" || size === "2K" || size === "4K") return size;
-  return "2K";
+function normalizeArkSize(size: string | undefined): string {
+  if (!size) return "2048x2048";
+  // Pass through pixel dimensions (e.g. "2048x3072")
+  if (/^\d+x\d+$/i.test(size)) return size;
+  // Named sizes
+  if (size === "2K") return "2048x2048";
+  if (size === "4K") return "4096x4096";
+  return "2048x2048";
 }
 
 /** Any Azure endpoint */
@@ -139,23 +144,38 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
-/** Map aspect ratio string to pixel size for gpt-image-1.5 (only 3 sizes supported) */
+/** Detect Azure AI Foundry /images/generations (e.g. FLUX Kontext Pro) — uses JSON body */
+function isAzureAIFoundryGenerations(url: string): boolean {
+  return isAzureAIFoundry(url) && url.includes("/images/generations");
+}
+
+/** Map aspect ratio string to pixel dimensions supported by Doubao Seedream */
 export function aspectRatioToSize(ratio: string): string {
   switch (ratio) {
     case "2:3":
-    case "3:4":
-    case "9:16":
-    case "4:5":
-    case "1:2":
-      return "1024x1536"; // portrait
+      return "2048x3072";
     case "3:2":
+      return "3072x2048";
+    case "3:4":
+      return "1920x2560";
     case "4:3":
+      return "2560x1920";
+    case "9:16":
+      return "1440x2560";
     case "16:9":
+      return "2560x1440";
+    case "4:5":
+      return "2048x2560";
     case "5:4":
+      return "2560x2048";
+    case "1:2":
+      return "1440x2880";
     case "2:1":
-      return "1536x1024"; // landscape
+      return "2880x1440";
+    case "21:9":
+      return "3360x1440";
     default:
-      return "1024x1024"; // square (1:1 or unknown)
+      return "2048x2048"; // square (1:1 or unknown)
   }
 }
 
@@ -193,8 +213,29 @@ export async function callQnImageAPI(params: {
   try {
     let res: Response;
 
-    if (azure || isOpenAINativeEdits(endpoint)) {
-      // Azure (OpenAI or AI Foundry): multipart FormData for image edits
+    if (isAzureAIFoundryGenerations(endpoint)) {
+      // Azure AI Foundry /images/generations (e.g. FLUX Kontext Pro): JSON body
+      const images = params.imageDataUrls && params.imageDataUrls.length > 0
+        ? params.imageDataUrls
+        : [params.imageDataUrl];
+      const jsonBody: Record<string, unknown> = {
+        model,
+        prompt: params.prompt,
+        n: params.n ?? 1,
+        size: size,
+        image: images.length === 1 ? images[0] : images,
+      };
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Api-Key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(jsonBody),
+        signal: controller.signal,
+      });
+    } else if (azure || isOpenAINativeEdits(endpoint)) {
+      // Azure OpenAI or AI Foundry /images/edits: multipart FormData
       const form = new FormData();
       const images = params.imageDataUrls && params.imageDataUrls.length > 0
         ? params.imageDataUrls
@@ -202,7 +243,6 @@ export async function callQnImageAPI(params: {
       if (images.length === 1) {
         form.append("image", dataUrlToBlob(images[0]), "image-0.png");
       } else {
-        // Multi-image edits: use array syntax expected by OpenAI-compatible endpoints.
         for (let i = 0; i < images.length; i++) {
           form.append("image[]", dataUrlToBlob(images[i]), `image-${i}.png`);
         }
@@ -210,7 +250,6 @@ export async function callQnImageAPI(params: {
       form.append("prompt", params.prompt);
       form.append("n", String(params.n ?? 1));
       form.append("size", size);
-      // AI Foundry and OpenAI native endpoints require model in body.
       if (isAzureAIFoundry(endpoint) || isOpenAINativeEdits(endpoint)) {
         form.append("model", model);
       }
@@ -232,20 +271,22 @@ export async function callQnImageAPI(params: {
         signal: controller.signal,
       });
     } else if (isVolcArk(endpoint)) {
-      // Volcengine Ark image generation: JSON body with image array URLs/data URLs
-      const images = params.imageDataUrls && params.imageDataUrls.length > 0
+      // Volcengine Ark (Doubao Seedream): JSON body with image array (data URLs)
+      const images = (params.imageDataUrls && params.imageDataUrls.length > 0
         ? params.imageDataUrls
-        : [params.imageDataUrl];
+        : params.imageDataUrl ? [params.imageDataUrl] : []
+      ).filter(Boolean);
       const arkBody: Record<string, unknown> = {
         model,
         prompt: params.prompt,
-        image: images,
         sequential_image_generation: "disabled",
+        response_format: "url",
         watermark: false,
       };
-      if (params.size) {
-        arkBody.size = normalizeArkSize(params.size);
+      if (images.length > 0) {
+        arkBody.image = images;
       }
+      arkBody.size = normalizeArkSize(params.size);
       res = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -260,42 +301,29 @@ export async function callQnImageAPI(params: {
         ? params.imageDataUrls
         : [params.imageDataUrl];
 
-      if (images.length > 1) {
-        // OpenAI-compatible multi-image edits: use multipart files instead of JSON string image.
-        const form = new FormData();
+      // OpenAI-compatible edits: always use multipart FormData so the proxy
+      // receives proper binary image data (JSON string was silently ignored).
+      const form = new FormData();
+      if (images.length === 1) {
+        form.append("image", dataUrlToBlob(images[0]), "image-0.png");
+      } else {
         for (let i = 0; i < images.length; i++) {
           form.append("image[]", dataUrlToBlob(images[i]), `image-${i}.png`);
         }
-        form.append("model", model);
-        form.append("prompt", params.prompt);
-        form.append("n", String(params.n ?? 1));
-        form.append("size", size);
-
-        res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: form,
-          signal: controller.signal,
-        });
-      } else {
-        // qnaigc / OpenAI-compatible single-image path
-        res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            image: params.imageDataUrl,
-            prompt: params.prompt,
-            n: params.n ?? 1,
-          }),
-          signal: controller.signal,
-        });
       }
+      form.append("model", model);
+      form.append("prompt", params.prompt);
+      form.append("n", String(params.n ?? 1));
+      form.append("size", size);
+
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: form,
+        signal: controller.signal,
+      });
     }
 
     const text = await res.text();
@@ -315,6 +343,149 @@ export async function callQnImageAPI(params: {
     clearTimeout(timer);
   }
 }
+
+// ── Gemini native image generation ──────────────────────────────────
+
+export type GeminiImageConfig = {
+  apiKey: string;
+  model: string;
+  timeoutMs: number;
+};
+
+export function getGeminiImageConfig(): GeminiImageConfig {
+  const apiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
+  if (!apiKey) {
+    throw new Error("Missing GEMINI_API_KEY");
+  }
+  return {
+    apiKey,
+    model: Deno.env.get("GEMINI_IMAGE_MODEL") ?? "gemini-2.0-flash-preview-image-generation",
+    timeoutMs: Number(Deno.env.get("GEMINI_IMAGE_TIMEOUT_MS") ?? "60000"),
+  };
+}
+
+/** Strip data:image/...;base64, prefix and return raw base64 + mimeType */
+function parseDataUrl(dataUrl: string): { base64: string; mimeType: string } {
+  if (dataUrl.startsWith("data:")) {
+    const [header, b64] = dataUrl.split(",", 2);
+    const mimeType = header?.match(/data:(.*?);/)?.[1] ?? "image/png";
+    return { base64: b64 ?? "", mimeType };
+  }
+  // Already raw base64
+  return { base64: dataUrl, mimeType: "image/png" };
+}
+
+/**
+ * Call Google Gemini generateContent endpoint for image generation / editing.
+ *
+ * - Text-to-image: pass only prompt (no images)
+ * - Image editing: pass prompt + one or more imageDataUrls
+ *
+ * Returns the raw Gemini API response.
+ */
+export async function callGeminiImageAPI(params: {
+  prompt: string;
+  imageDataUrls?: string[];
+  aspectRatio?: string;
+  model?: string;
+  timeoutMsOverride?: number;
+}): Promise<Record<string, unknown>> {
+  const config = getGeminiImageConfig();
+  const model = params.model ?? config.model;
+  const timeoutMs = Number.isFinite(params.timeoutMsOverride)
+    ? Number(params.timeoutMsOverride)
+    : config.timeoutMs;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    // Build content parts: text first, then images
+    const parts: Record<string, unknown>[] = [{ text: params.prompt }];
+
+    if (params.imageDataUrls && params.imageDataUrls.length > 0) {
+      for (const dataUrl of params.imageDataUrls) {
+        const { base64, mimeType } = parseDataUrl(dataUrl);
+        parts.push({
+          inline_data: {
+            mime_type: mimeType,
+            data: base64,
+          },
+        });
+      }
+    }
+
+    const body: Record<string, unknown> = {
+      contents: [{ parts }],
+      generationConfig: {
+        responseModalities: ["TEXT", "IMAGE"],
+        ...(params.aspectRatio
+          ? { imageConfig: { aspectRatio: params.aspectRatio } }
+          : {}),
+      },
+    };
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": config.apiKey,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    const text = await res.text();
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = text ? JSON.parse(text) : {};
+    } catch {
+      parsed = { raw: text };
+    }
+
+    if (!res.ok) {
+      throw new Error(`GEMINI_IMAGE_API_ERROR ${res.status}: ${JSON.stringify(parsed)}`);
+    }
+
+    return parsed;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Extract the generated image from a Gemini generateContent response.
+ * Returns { b64, mimeType } matching the shape expected by the worker.
+ */
+export function extractGeminiImageResult(
+  response: Record<string, unknown>,
+): { b64: string; mimeType: string } {
+  // deno-lint-ignore no-explicit-any
+  const candidates = (response as any)?.candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    throw new Error("GEMINI_IMAGE_INVALID_RESPONSE: no candidates");
+  }
+
+  const parts = candidates[0]?.content?.parts;
+  if (!Array.isArray(parts)) {
+    throw new Error("GEMINI_IMAGE_INVALID_RESPONSE: no parts in candidate");
+  }
+
+  for (const part of parts) {
+    if (part?.inlineData?.data || part?.inline_data?.data) {
+      const inlineData = part.inlineData ?? part.inline_data;
+      return {
+        b64: inlineData.data as string,
+        mimeType: (inlineData.mimeType ?? inlineData.mime_type ?? "image/png") as string,
+      };
+    }
+  }
+
+  throw new Error("GEMINI_IMAGE_INVALID_RESPONSE: no image payload found in parts");
+}
+
+// ── Legacy QN image result extractors ───────────────────────────────
 
 export function extractGeneratedImageResult(response: Record<string, unknown>): { url?: string; b64?: string } {
   const data = response.data;

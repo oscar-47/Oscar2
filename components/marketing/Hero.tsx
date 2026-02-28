@@ -2,41 +2,38 @@
 
 import Link from 'next/link'
 import { useTranslations, useLocale } from 'next-intl'
-import { motion } from 'framer-motion'
+import { ArrowRight } from 'lucide-react'
 
 export function Hero() {
   const t = useTranslations('landing.hero')
   const locale = useLocale()
 
   return (
-    <section className="relative overflow-hidden py-24 md:py-32">
-      <div className="container mx-auto max-w-5xl px-4 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
+    <section className="bg-[#f3f3f4] pb-20 pt-16 md:pb-24 md:pt-20">
+      <div className="mx-auto max-w-[1240px] px-4 text-center">
+        <div className="mx-auto max-w-[920px]">
+          <h1 className="text-[52px] font-semibold tracking-[-0.04em] text-[#17181d] md:text-[76px]">
             {t('title')}
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">
+          <p className="mx-auto mt-7 max-w-[760px] text-[29px] leading-[1.55] text-[#6f737f] md:text-[32px]">
             {t('subtitle')}
           </p>
-          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="mt-14 flex flex-wrap items-center justify-center gap-4">
             <Link
               href={`/${locale}/auth`}
-              className="rounded-lg bg-foreground px-8 py-3 text-base font-medium text-background hover:bg-foreground/90 transition-colors"
+              className="inline-flex h-[52px] items-center gap-2 rounded-2xl bg-[#101116] px-9 text-xl font-medium text-white transition-colors hover:bg-[#1a1c24]"
             >
               {t('cta')}
+              <ArrowRight className="h-5 w-5" />
             </Link>
             <Link
-              href={`/${locale}/pricing`}
-              className="rounded-lg border px-8 py-3 text-base font-medium hover:bg-secondary transition-colors"
+              href="#suite-cards"
+              className="inline-flex h-[52px] items-center rounded-2xl border border-[#e1e2e7] bg-white px-9 text-xl font-medium text-[#17181d] transition-colors hover:bg-[#f8f8fa]"
             >
               {t('ctaSecondary')}
             </Link>
           </div>
-        </motion.div>
+        </div>
       </div>
     </section>
   )

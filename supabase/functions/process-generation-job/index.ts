@@ -4,7 +4,6 @@ import { requireUser } from "../_shared/auth.ts";
 import {
   callQnChatAPI,
   callQnImageAPI,
-  extractGeneratedImageBase64,
   extractGeneratedImageResult,
   getQnChatConfig,
   aspectRatioToSize,
@@ -136,10 +135,23 @@ function normalizeBlueprint(
   parsed: Record<string, unknown>,
   imageCount: number,
   outputLanguage: string,
+  uiLanguage?: string,
 ): AnalysisBlueprint {
+  const isZh = (uiLanguage ?? "en").startsWith("zh");
+
   const fallbackTextBlock = outputLanguage === "none"
-    ? "- Main Title: None\n- Subtitle: None\n- Description Text: None"
-    : "- Main Title: [Fill based on product]\n- Subtitle: [Fill based on product]\n- Description Text: [Fill based on product]";
+    ? (isZh
+      ? "- 主标题：无\n- 副标题：无\n- 描述文案：无"
+      : "- Main Title: None\n- Subtitle: None\n- Description Text: None")
+    : (isZh
+      ? "- 主标题：[根据产品填写]\n- 副标题：[根据产品填写]\n- 描述文案：[根据产品填写]"
+      : "- Main Title: [Fill based on product]\n- Subtitle: [Fill based on product]\n- Description Text: [Fill based on product]");
+
+  const fallbackTitle = (i: number) => isZh ? `图片方案 ${i + 1}` : `Image Concept ${i + 1}`;
+  const fallbackDesc = isZh ? "专业电商视觉概念。" : "Professional e-commerce visual concept.";
+  const fallbackDesignContent = (i: number) => isZh
+    ? `## 图片 [${i + 1}]：产品展示\n\n**设计目标**：以高端商业品质呈现产品。\n\n**产品外观**：是\n\n**画面元素**：\n- 仅产品\n\n**构图方案**：\n- 产品占比：70%\n- 布局方式：居中构图\n- 文字区域：${outputLanguage === "none" ? "无文字区域" : "左上方区域"}\n\n**内容元素**：\n- 展示重点：产品细节与材质\n- 核心卖点：工艺与品质\n- 背景元素：简洁影棚背景\n- 装饰元素：柔和阴影\n\n**文案内容**（使用 ${outputLanguageLabel(outputLanguage)}）：\n${fallbackTextBlock}\n\n**氛围营造**：\n- 情绪关键词：高端、极简、干净\n- 光影效果：柔光箱漫射照明`
+    : `## Image [${i + 1}]: Product Presentation\n\n**Design Goal**: Present product with premium commercial quality.\n\n**Product Appearance**: Yes\n\n**In-Graphic Elements**:\n- Product only\n\n**Composition Plan**:\n- Product Proportion: 70%\n- Layout Method: Center composition\n- Text Area: ${outputLanguage === "none" ? "No-text area" : "Top-left area"}\n\n**Content Elements**:\n- Focus of Display: Product details and materials\n- Key Selling Points: Craftsmanship and quality\n- Background Elements: Clean studio background\n- Decorative Elements: Subtle shadows\n\n**Text Content** (Using ${outputLanguageLabel(outputLanguage)}):\n${fallbackTextBlock}\n\n**Atmosphere Creation**:\n- Mood Keywords: Premium, Minimal, Clean\n- Light and Shadow Effects: Soft-box diffused lighting`;
 
   let images = Array.isArray(parsed.images)
     ? parsed.images
@@ -147,32 +159,30 @@ function normalizeBlueprint(
       .map((x, i) => {
         const item = x as Record<string, unknown>;
         return {
-          title: sanitizeString(item.title, `Image Concept ${i + 1}`),
-          description: sanitizeString(item.description, "Professional e-commerce visual concept."),
-          design_content: sanitizeString(
-            item.design_content,
-            `## Image [${i + 1}]: Product Presentation\n\n**Design Goal**: Present product with premium commercial quality.\n\n**Product Appearance**: Yes\n\n**In-Graphic Elements**:\n- Product only\n\n**Composition Plan**:\n- Product Proportion: 70%\n- Layout Method: Center composition\n- Text Area: ${outputLanguage === "none" ? "No-text area" : "Top-left area"}\n\n**Content Elements**:\n- Focus of Display: Product details and materials\n- Key Selling Points: Craftsmanship and quality\n- Background Elements: Clean studio background\n- Decorative Elements: Subtle shadows\n\n**Text Content** (Using ${outputLanguageLabel(outputLanguage)}):\n${fallbackTextBlock}\n\n**Atmosphere Creation**:\n- Mood Keywords: Premium, Minimal, Clean\n- Light and Shadow Effects: Soft-box diffused lighting`,
-          ),
+          title: sanitizeString(item.title, fallbackTitle(i)),
+          description: sanitizeString(item.description, fallbackDesc),
+          design_content: sanitizeString(item.design_content, fallbackDesignContent(i)),
         };
       })
     : [];
 
   if (images.length === 0) {
     images = [{
-      title: "Hero Product Showcase",
-      description: "A clean, high-conversion product visual concept.",
-      design_content: `## Image [1]: Hero Product Showcase\n\n**Design Goal**: Build a premium hero product image.\n\n**Product Appearance**: Yes\n\n**In-Graphic Elements**:\n- Product only\n\n**Composition Plan**:\n- Product Proportion: 70%\n- Layout Method: Center alignment\n- Text Area: ${outputLanguage === "none" ? "No-text area" : "Top-left area"}\n\n**Content Elements**:\n- Focus of Display: Product texture and shape\n- Key Selling Points: Material quality and finish\n- Background Elements: Clean studio background\n- Decorative Elements: Subtle reflections\n\n**Text Content** (Using ${outputLanguageLabel(outputLanguage)}):\n${fallbackTextBlock}\n\n**Atmosphere Creation**:\n- Mood Keywords: Premium, Clean, Professional\n- Light and Shadow Effects: Soft directional lighting`,
+      title: isZh ? "产品主图展示" : "Hero Product Showcase",
+      description: isZh ? "简洁高转化的产品视觉概念。" : "A clean, high-conversion product visual concept.",
+      design_content: fallbackDesignContent(0),
     }];
   }
 
   const normalizedCount = Math.max(1, Math.min(15, Number(imageCount || 1)));
   if (images.length < normalizedCount) {
     const base = images[images.length - 1];
+    const imagePattern = isZh ? /图片 \[\d+\]/ : /Image \[\d+\]/;
     for (let i = images.length; i < normalizedCount; i++) {
       images.push({
         title: `${base.title} ${i + 1}`,
         description: base.description,
-        design_content: base.design_content.replace(/Image \[\d+\]/, `Image [${i + 1}]`),
+        design_content: base.design_content.replace(imagePattern, isZh ? `图片 [${i + 1}]` : `Image [${i + 1}]`),
       });
     }
   }
@@ -180,7 +190,9 @@ function normalizeBlueprint(
 
   const designSpecs = sanitizeString(
     parsed.design_specs,
-    "# Overall Design Specifications\n\n## Color System\n- Primary color: Product-led\n- Secondary color: Accent based on brand tone\n- Background color: Clean neutral\n\n## Font System\n- Heading Font: Sans-serif commercial display\n- Body Font: Sans-serif readability\n- Hierarchy: Heading:Subtitle:Body = 3:1.8:1\n\n## Visual Language\n- Decorative Elements: Minimal geometric accents\n- Icon Style: Thin-line icons when needed\n- Negative Space Principle: High whitespace utilization\n\n## Photography Style\n- Lighting: Soft-box diffused light with rim highlights\n- Depth of Field: Product-focused with soft background blur\n- Camera Parameter Reference: ISO 100, 85mm prime\n\n## Quality Requirements\n- Resolution: 4K/HD\n- Style: Professional e-commerce photography\n- Realism: Hyper-realistic",
+    isZh
+      ? "# 整体设计规范\n\n## 色彩体系\n- 主色调：以产品为主导\n- 辅助色：基于品牌调性的点缀色\n- 背景色：干净的中性色\n\n## 字体体系\n- 标题字体：无衬线商业展示字体\n- 正文字体：无衬线易读字体\n- 层级关系：标题:副标题:正文 = 3:1.8:1\n\n## 视觉语言\n- 装饰元素：极简几何点缀\n- 图标风格：细线图标\n- 留白原则：高留白率\n\n## 摄影风格\n- 照明：柔光箱漫射光配合轮廓光\n- 景深：产品聚焦、背景柔化\n- 相机参考参数：ISO 100, 85mm 定焦\n\n## 品质要求\n- 分辨率：4K/高清\n- 风格：专业电商摄影\n- 真实度：超写实"
+      : "# Overall Design Specifications\n\n## Color System\n- Primary color: Product-led\n- Secondary color: Accent based on brand tone\n- Background color: Clean neutral\n\n## Font System\n- Heading Font: Sans-serif commercial display\n- Body Font: Sans-serif readability\n- Hierarchy: Heading:Subtitle:Body = 3:1.8:1\n\n## Visual Language\n- Decorative Elements: Minimal geometric accents\n- Icon Style: Thin-line icons when needed\n- Negative Space Principle: High whitespace utilization\n\n## Photography Style\n- Lighting: Soft-box diffused light with rim highlights\n- Depth of Field: Product-focused with soft background blur\n- Camera Parameter Reference: ISO 100, 85mm prime\n\n## Quality Requirements\n- Resolution: 4K/HD\n- Style: Professional e-commerce photography\n- Realism: Hyper-realistic",
   );
 
   return {
@@ -190,8 +202,8 @@ function normalizeBlueprint(
   };
 }
 
-function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
-  if (!turboEnabled) return model === "nano-banana" ? 3 : 5;
+function computeCost(_model: string, turboEnabled: boolean, imageSize: string): number {
+  if (!turboEnabled) return 5;
   if (imageSize === "1K") return 8;
   if (imageSize === "2K") return 12;
   return 17;
@@ -207,51 +219,10 @@ function imageGenErrorCodeFromError(error: unknown): string {
   return "UPSTREAM_ERROR";
 }
 
-function resolveQnModel(modelFromRequest: string): string | undefined {
-  if (modelFromRequest === "nano-banana" || modelFromRequest === "nano-banana-pro") return undefined;
-  return modelFromRequest;
-}
-
-function resolveStyleReplicateModel(modelFromRequest: string): string | undefined {
-  if (modelFromRequest === "nano-banana" || modelFromRequest === "nano-banana-pro") return undefined;
-  if (modelFromRequest === "doubao-seedream-4.5") {
-    return Deno.env.get("DOUBAO_MODEL_45") ?? "doubao-seedream-4-5-251128";
-  }
-  if (modelFromRequest === "doubao-seedream-5.0-lite") {
-    return Deno.env.get("DOUBAO_MODEL_50_LITE") ?? "doubao-seedream-5.0-lite";
-  }
-  return modelFromRequest;
-}
-
-function isDoubaoModel(modelFromRequest: string): boolean {
-  return modelFromRequest === "doubao-seedream-4.5" || modelFromRequest === "doubao-seedream-5.0-lite";
-}
-
-function doubaoAspectPixels(ratio: string): string {
-  switch (ratio) {
-    case "1:1":
-      return "2048x2048";
-    case "3:4":
-      return "1728x2304";
-    case "4:3":
-      return "2304x1728";
-    case "16:9":
-      return "2848x1600";
-    case "9:16":
-      return "1600x2848";
-    case "3:2":
-      return "2496x1664";
-    case "2:3":
-      return "1664x2496";
-    case "21:9":
-      return "3136x1344";
-    default:
-      return "2048x2048";
-  }
-}
-
-function doubaoTargetSize(imageSize: string): "2K" | "4K" {
-  return imageSize === "4K" ? "4K" : "2K";
+function resolveModel(_modelFromRequest: string): string | undefined {
+  // All image generation now uses the model configured via QN_IMAGE_MODEL env var.
+  // Return undefined to let callQnImageAPI use the env default.
+  return undefined;
 }
 
 function parseSizeToRatio(size?: string): number | null {
@@ -278,6 +249,24 @@ function ratioMatches(actualSize?: string, expectedRatio?: string): boolean {
   if (actual === null) return true;
   const expected = ratioNumber(expectedRatio);
   return Math.abs(actual - expected) <= 0.01;
+}
+
+function scaledRequestSize(aspectRatio: string, imageSize: string): string {
+  const baseSize = aspectRatioToSize(aspectRatio);
+  const match = baseSize.match(/^(\d+)x(\d+)$/i);
+  if (!match) return baseSize;
+
+  const baseWidth = Number(match[1]);
+  const baseHeight = Number(match[2]);
+  const scale = imageSize === "1K" ? 0.5 : imageSize === "4K" ? 2 : 1;
+  if (scale === 1) return baseSize;
+
+  const roundToSupported = (value: number) => {
+    const rounded = Math.round(value / 64) * 64;
+    return Math.max(512, rounded);
+  };
+
+  return `${roundToSupported(baseWidth * scale)}x${roundToSupported(baseHeight * scale)}`;
 }
 
 type StyleOutputItem = {
@@ -331,10 +320,7 @@ function styleReplicateErrorMessage(cause: unknown): string {
     text.includes("InvalidEndpointOrModel.NotFound") ||
     text.includes("does not exist or you do not have access to it")
   ) {
-    return "Selected Doubao model is unavailable for current endpoint/account. Please use Doubao Seedream 4.5 or update DOUBAO_MODEL_* secrets.";
-  }
-  if (text.includes("MISSING_DOUBAO_IMAGE_API_KEY")) {
-    return "Doubao API key is not configured. Please set DOUBAO_IMAGE_API_KEY.";
+    return "Selected model is unavailable for current endpoint/account. Please check your API configuration.";
   }
   if (text.includes("SOURCE_IMAGE_FETCH_FAILED")) {
     return "Failed to load input images. Please re-upload and retry.";
@@ -348,7 +334,9 @@ function styleReplicateErrorMessage(cause: unknown): string {
   if (text.includes("INSUFFICIENT_CREDITS")) {
     return "Not enough credits.";
   }
-  return "Style replication failed. Please retry.";
+  // Include the actual error so it's visible in the DB for debugging
+  const detail = text.length > 200 ? text.slice(0, 200) + "…" : text;
+  return `Style replication failed: ${detail || "unknown error"}`;
 }
 
 function styleReplicateErrorCode(error: unknown): string {
@@ -364,15 +352,13 @@ function styleReplicateErrorCode(error: unknown): string {
   if (message.includes("STYLE_REFERENCE_IMAGE_MISSING")) return "STYLE_REFERENCE_IMAGE_MISSING";
   if (message.includes("STYLE_PRODUCT_IMAGE_MISSING")) return "STYLE_PRODUCT_IMAGE_MISSING";
   if (message.includes("SOURCE_IMAGE_FETCH_FAILED")) return "IMAGE_INPUT_SOURCE_MISSING";
-  if (message.includes("MISSING_DOUBAO_IMAGE_API_KEY")) return "MISSING_DOUBAO_IMAGE_API_KEY";
   if (message.includes("INSUFFICIENT_CREDITS")) return "INSUFFICIENT_CREDITS";
   return "UPSTREAM_ERROR";
 }
 
 function isFatalStyleReplicateError(error: unknown): boolean {
   const code = styleReplicateErrorCode(error);
-  return code === "MISSING_DOUBAO_IMAGE_API_KEY" ||
-    code === "MODEL_UNAVAILABLE" ||
+  return code === "MODEL_UNAVAILABLE" ||
     code === "STYLE_PRODUCT_IMAGE_MISSING" ||
     code === "REFINEMENT_PRODUCT_IMAGES_REQUIRED" ||
     code === "REFINEMENT_BACKGROUND_MODE_INVALID" ||
@@ -452,11 +438,15 @@ async function processAnalysisJob(
   const requirements = sanitizeString(payload.requirements, "");
   const clothingMode = sanitizeString(payload.clothingMode, "");
   const promptConfigKey = sanitizeString(payload.promptConfigKey, "batch_analysis_prompt_en");
-  const mannequinEnabled = Boolean(payload.mannequinEnabled ?? false);
-  const mannequinWhiteBackground = Boolean(payload.mannequinWhiteBackground ?? false);
-  const threeDWhiteBackground = Boolean(payload.threeDWhiteBackground ?? false);
-  const whiteBackground = Boolean(payload.whiteBackground ?? false);
-  const threeDEnabled = Boolean(payload.threeDEnabled ?? false);
+  const mannequinEnabled = Boolean(payload.mannequinEnabled ?? (payload.mannequin as Record<string, unknown>)?.enabled ?? false);
+  const mannequinWhiteBackground = Boolean(payload.mannequinWhiteBackground ?? (payload.mannequin as Record<string, unknown>)?.whiteBackground ?? false);
+  const threeDEnabled = Boolean(payload.threeDEnabled ?? (payload.threeDEffect as Record<string, unknown>)?.enabled ?? false);
+  const threeDWhiteBackground = Boolean(payload.threeDWhiteBackground ?? (payload.threeDEffect as Record<string, unknown>)?.whiteBackground ?? false);
+  const whiteBackground = Boolean(payload.whiteBackground ?? (payload.whiteBgRetouched as Record<string, unknown>)?.front ?? false);
+  const whiteBgFront = Boolean(payload.whiteBgFront ?? false);
+  const whiteBgBack = Boolean(payload.whiteBgBack ?? false);
+  const detailCloseupCount = Number(payload.detailCloseupCount ?? 0);
+  const sellingPointCount = Number(payload.sellingPointCount ?? 0);
   const modelImage = typeof payload.modelImage === "string" && payload.modelImage.trim().length > 0
     ? payload.modelImage
     : null;
@@ -475,25 +465,77 @@ async function processAnalysisJob(
     ? "For Text Content fields, always output Main Title/SubTitle/Description as 'None'."
     : `For Text Content fields, write copy in ${outputLanguageLabel(outputLanguage)}.`;
 
+  // Build per-plan type instructions so the AI generates one plan per selected type
+  const planInstructions: string[] = [];
+  let planIdx = 1;
+  if (whiteBgFront) {
+    planInstructions.push(`- Plan ${planIdx++}: 白底精修图（正面）— Pure white background, front view, product retouching`);
+  }
+  if (whiteBgBack) {
+    planInstructions.push(`- Plan ${planIdx++}: 白底精修图（背面）— Pure white background, back view`);
+  }
+  if (threeDEnabled) {
+    planInstructions.push(`- Plan ${planIdx++}: 3D立体效果图 — 3D volumetric look${threeDWhiteBackground ? ", white background" : ""}`);
+  }
+  if (mannequinEnabled) {
+    planInstructions.push(`- Plan ${planIdx++}: 人台图 — Mannequin display${mannequinWhiteBackground ? ", white background" : ""}`);
+  }
+  for (let i = 0; i < detailCloseupCount; i++) {
+    planInstructions.push(`- Plan ${planIdx++}: 细节特写图 — Close-up of fabric/stitching/texture detail`);
+  }
+  for (let i = 0; i < sellingPointCount; i++) {
+    planInstructions.push(`- Plan ${planIdx++}: 卖点展示图 — Highlight a core selling point with visual emphasis`);
+  }
+
+  // Fallback: generic clothing rules for non-typed modes (e.g. model_strategy)
   const clothingRules: string[] = [];
   if (clothingMode) clothingRules.push(`Clothing mode: ${clothingMode}.`);
   if (clothingMode === "model_strategy") {
     clothingRules.push("Build try-on strategy for a specific model while preserving product realism.");
   }
-  if (mannequinEnabled) clothingRules.push("Include mannequin-centric layouts in at least one blueprint.");
-  if (mannequinWhiteBackground) clothingRules.push("Use pure white mannequin background where mannequin appears.");
-  if (threeDEnabled) clothingRules.push("Allow 3D-styled commercial composition as a valid direction.");
-  if (threeDWhiteBackground) clothingRules.push("When creating 3D-style visuals, keep a pure white background.");
-  if (whiteBackground) clothingRules.push("Prefer pure white seamless background across blueprints.");
-  const clothingRuleBlock = clothingRules.length > 0
-    ? clothingRules.map((line) => `- ${line}`).join("\n")
-    : "- No extra clothing constraints.";
+  if (mannequinEnabled && planInstructions.length === 0) clothingRules.push("Include mannequin-centric layouts in at least one blueprint.");
+  if (mannequinWhiteBackground && planInstructions.length === 0) clothingRules.push("Use pure white mannequin background where mannequin appears.");
+  if (threeDEnabled && planInstructions.length === 0) clothingRules.push("Allow 3D-styled commercial composition as a valid direction.");
+  if (threeDWhiteBackground && planInstructions.length === 0) clothingRules.push("When creating 3D-style visuals, keep a pure white background.");
+  if (whiteBackground && planInstructions.length === 0) clothingRules.push("Prefer pure white seamless background across blueprints.");
+
+  const clothingRuleBlock = planInstructions.length > 0
+    ? `Each plan MUST match the specified type exactly:\n${planInstructions.join("\n")}`
+    : clothingRules.length > 0
+      ? clothingRules.map((line) => `- ${line}`).join("\n")
+      : "- No extra clothing constraints.";
 
   const defaultSystemPrompt = uiLanguage === "zh"
     ? "你是顶级电商视觉总监。你的任务是根据产品图与需求输出可执行的商业图片蓝图。只输出 JSON，不要 markdown 代码块。"
     : "You are a world-class e-commerce visual director. Produce executable commercial image blueprints from product photos and brief. Return JSON only, no markdown fences.";
 
-  const defaultUserPrompt = `
+  const isZhUi = uiLanguage.startsWith("zh");
+
+  const defaultUserPrompt = isZhUi
+    ? `
+请按以下 JSON 结构输出蓝图（所有字段内容使用中文）：
+{
+  "images": [
+    {
+      "title": "4-12 字的标题",
+      "description": "1-2 句定位描述",
+      "design_content": "## 图片 [N]：...\\n\\n**设计目标**：...\\n\\n**产品外观**：...\\n\\n**画面元素**：...\\n\\n**构图方案**：...\\n\\n**内容元素**：...\\n\\n**文案内容**（使用 ${outputLanguageLabel(outputLanguage)}）：...\\n\\n**氛围营造**：..."
+    }
+  ],
+  "design_specs": "# 整体设计规范\\n\\n## 色彩体系\\n...\\n## 字体体系\\n...\\n## 视觉语言\\n...\\n## 摄影风格\\n...\\n## 品质要求\\n..."
+}
+约束条件：
+- images 数组返回正好 ${imageCount} 个对象。
+- 每张图片方案必须不同（角度、布局、场景逻辑各不相同）。
+- ${textContentRule}
+- 如果输出语言为"纯视觉"，文案部分一律输出"无"，并强调纯视觉构图。
+- 保持高转化电商风格，真实的材质与光影细节。
+- 服装模式约束：
+${clothingRuleBlock}
+用户需求：
+${requirements || "（未提供额外需求）"}
+`
+    : `
 Create blueprint JSON with this exact shape:
 {
   "images": [
@@ -607,7 +649,7 @@ ${requirements || "(no extra brief provided)"}
 
   const content = String((chatResponse as Record<string, unknown>)?.choices?.[0]?.message?.content ?? "");
   const parsed = parseJsonFromContent(content);
-  const blueprint = normalizeBlueprint(parsed, imageCount, outputLanguage);
+  const blueprint = normalizeBlueprint(parsed, imageCount, outputLanguage, uiLanguage);
 
   blueprint._ai_meta = {
     model: String((chatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
@@ -648,7 +690,7 @@ async function processImageGenJob(
 ): Promise<void> {
   const startedAt = Date.now();
   const payload = job.payload ?? {};
-  const model = String(payload.model ?? "nano-banana-pro");
+  const model = String(payload.model ?? "flux-kontext-pro");
   const imageSize = String(payload.imageSize ?? "2K");
   const turboEnabled = Boolean(payload.turboEnabled ?? false);
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
@@ -685,38 +727,86 @@ async function processImageGenJob(
     }
     creditDeducted = true;
 
-    const dataUrl = await toDataUrl(source);
+    // Collect ALL input images (product + model) so the AI can see the full product
+    const workflowMode = typeof payload.workflowMode === "string" ? payload.workflowMode : "product";
+    const allImagePaths: string[] = [];
+
+    // For model try-on: model image first, then product images
+    if (workflowMode === "model" && typeof payload.modelImage === "string" && payload.modelImage) {
+      allImagePaths.push(payload.modelImage);
+    }
+    // Add all product images
+    if (Array.isArray(payload.productImages)) {
+      for (const img of payload.productImages) {
+        if (typeof img === "string" && img.trim()) allImagePaths.push(img);
+      }
+    }
+    // Fallback: single productImage
+    if (allImagePaths.length === 0 && typeof payload.productImage === "string" && payload.productImage) {
+      allImagePaths.push(payload.productImage);
+    }
+    // Final fallback: the source we already resolved
+    if (allImagePaths.length === 0) {
+      allImagePaths.push(source);
+    }
+
+    const allDataUrls = await Promise.all(allImagePaths.map(toDataUrl));
+
     // Wrap user prompt with e-commerce photography system prefix
     const ecomPrefix = "Professional e-commerce product photography. High-end commercial catalog quality. " +
       "Studio lighting with soft shadows. Clean, premium aesthetic. Product is the hero — sharp focus, " +
       "realistic materials and textures. White or contextual lifestyle background. 4K ultra-detailed rendering. ";
     const finalPrompt = ecomPrefix + String(payload.prompt);
     const apiResponse = await callQnImageAPI({
-      imageDataUrl: dataUrl,
+      imageDataUrl: allDataUrls[0],
+      imageDataUrls: allDataUrls.length > 1 ? allDataUrls : undefined,
       prompt: finalPrompt,
-      n: Number(payload.imageCount ?? 1),
-      model: resolveQnModel(model),
+      n: 1,
+      model: resolveModel(model),
       size: aspectRatioToSize(aspectRatio),
     });
-    const generatedBase64 = extractGeneratedImageBase64(apiResponse);
-    const imageBytes = base64ToBytes(generatedBase64);
+
+    // Handle both URL and b64 responses (Volcengine returns URL, others may return b64)
+    const generated = extractGeneratedImageResult(apiResponse);
+    const generatedBase64 = generated.b64 ?? null;
+    let resultUrl = generated.url ?? null;
 
     const outputBucket = Deno.env.get("GENERATIONS_BUCKET") ?? "generations";
-    const objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
-    let resultUrl: string | null = null;
+    let objectPath: string | null = null;
+    let actualMime = "image/png";
 
-    const { error: uploadError } = await supabase.storage
-      .from(outputBucket)
-      .upload(objectPath, imageBytes, { contentType: "image/png", upsert: false });
-    if (uploadError) {
-      throw new Error(`STORAGE_UPLOAD_FAILED: ${uploadError.message}`);
+    if (generatedBase64) {
+      // b64 response: decode and upload to our storage
+      const imageBytes = base64ToBytes(generatedBase64);
+      objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
+      const { error: uploadError } = await supabase.storage
+        .from(outputBucket)
+        .upload(objectPath, imageBytes, { contentType: "image/png", upsert: false });
+      if (uploadError) {
+        throw new Error(`STORAGE_UPLOAD_FAILED: ${uploadError.message}`);
+      }
+      const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
+      resultUrl = publicData.publicUrl;
+    } else if (resultUrl) {
+      // URL response: download from provider and re-upload to our storage
+      const imgRes = await fetch(resultUrl);
+      if (!imgRes.ok) throw new Error(`IMAGE_DOWNLOAD_FAILED ${imgRes.status}`);
+      const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
+      actualMime = imgRes.headers.get("content-type") || "image/png";
+      const ext = actualMime.includes("jpeg") || actualMime.includes("jpg") ? "jpg"
+        : actualMime.includes("webp") ? "webp" : "png";
+      objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from(outputBucket)
+        .upload(objectPath, imgBytes, { contentType: actualMime, upsert: false });
+      if (uploadError) {
+        throw new Error(`STORAGE_UPLOAD_FAILED: ${uploadError.message}`);
+      }
+      const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
+      resultUrl = publicData.publicUrl;
     }
-    const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
-    resultUrl = publicData.publicUrl;
 
-    const hasResultUrl = typeof resultUrl === "string" && resultUrl.length > 0;
-    const hasValidB64 = typeof generatedBase64 === "string" && generatedBase64.trim().length > 0;
-    if (!hasResultUrl && !hasValidB64) {
+    if (!resultUrl) {
       throw new Error("IMAGE_RESULT_MISSING");
     }
 
@@ -726,13 +816,12 @@ async function processImageGenJob(
         status: "success",
         result_url: resultUrl,
         result_data: {
-          provider: "qnaigc",
+          provider: "volcengine",
           model,
           image_size: imageSize,
-          mime_type: "image/png",
-          object_path: resultUrl ? `${outputBucket}/${objectPath}` : null,
+          mime_type: actualMime,
+          object_path: objectPath ? `${outputBucket}/${objectPath}` : null,
           b64_json: generatedBase64,
-          raw_response: apiResponse,
         },
         error_code: null,
         error_message: null,
@@ -762,8 +851,10 @@ async function processStyleReplicateJob(
 ): Promise<void> {
   const startedAt = Date.now();
   const payload = job.payload ?? {};
-  const modelName = String(payload.model ?? "doubao-seedream-4.5");
-  const imageSize = String(payload.imageSize ?? "2K");
+  const modelName = String(payload.model ?? "flux-kontext-pro");
+  // Clamp minimum to 2K — many providers require at least ~3.7M pixels (1920×1920)
+  const rawImageSize = String(payload.imageSize ?? "2K");
+  const imageSize = rawImageSize === "1K" ? "2K" : rawImageSize;
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
   const mode: StyleReplicateMode = payload.mode === "batch"
     ? "batch"
@@ -841,30 +932,13 @@ async function processStyleReplicateJob(
   }
 
   const userPrompt = typeof payload.userPrompt === "string" ? payload.userPrompt.trim() : "";
-  const referenceStyleSummary = "从参考图中提取风格元素：场景环境、构图逻辑、镜头视角、光线方向与质感、色彩与氛围。";
-  const styleSystemPrompt =
-    "你是专业电商视觉复刻模型。任务：在不改变产品本体的前提下，将参考图的视觉风格迁移到素材产品图。\n"
-    + "硬性约束（必须满足）：\n"
-    + "1) 产品本体保持不变：不得改变产品形状、结构、材质、纹理、logo/文字、颜色、比例与关键细节。\n"
-    + "2) 仅迁移风格：可以迁移背景环境、构图方式、光线方向与强度、景深、色彩分级、氛围。\n"
-    + "3) 不添加无关主体，不遮挡产品，不裁切导致产品缺失。\n"
-    + "4) 输出应是可用于电商详情页的高真实感商业图片。";
   const refinementBasePrompt =
     "作为专业电商图片精修模型,在不改变产品本体的前提下，对单张产品图进行商业级精修。仅做精修优化,允许进行瑕疵清理、边缘优化、光影校正、色彩与清晰度增强。";
   const refinementWhiteBackgroundPrompt = "除产品主体外的背景与非主体元素统一为纯白背景干净无杂物。";
-  const doubaoEndpoint = Deno.env.get("DOUBAO_IMAGE_API_ENDPOINT")
-    ?? "https://ark.cn-beijing.volces.com/api/v3/images/generations";
-  const doubaoApiKey = Deno.env.get("DOUBAO_IMAGE_API_KEY") ?? "";
-  if (isDoubaoModel(modelName) && !doubaoApiKey) {
-    throw new Error("MISSING_DOUBAO_IMAGE_API_KEY");
-  }
-
-  const requestSize = isDoubaoModel(modelName)
-    ? doubaoTargetSize(imageSize)
-    : aspectRatioToSize(aspectRatio);
+  const requestSize = scaledRequestSize(aspectRatio, imageSize);
   const styleTimeoutMs = Number(
-    Deno.env.get("DOUBAO_IMAGE_REQUEST_TIMEOUT_MS")
-      ?? Deno.env.get("STYLE_REPLICATE_IMAGE_TIMEOUT_MS")
+    Deno.env.get("STYLE_REPLICATE_IMAGE_TIMEOUT_MS")
+      ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS")
       ?? "120000",
   );
   const outputBucket = Deno.env.get("GENERATIONS_BUCKET") ?? "generations";
@@ -919,7 +993,7 @@ async function processStyleReplicateJob(
       successCount,
       failedCount,
       resultData: {
-        provider: "qnaigc",
+        provider: "volcengine",
         model: modelName,
         image_size: imageSize,
         mime_type: firstOutput?.mime_type ?? null,
@@ -935,7 +1009,7 @@ async function processStyleReplicateJob(
         },
         metadata: {
           requested_aspect_ratio: aspectRatio,
-          reference_style_summary: mode === "refinement" ? null : referenceStyleSummary,
+          reference_style_summary: mode === "refinement" ? null : "Style transfer from reference image",
           background_mode: mode === "refinement" ? backgroundMode : null,
           group_count: mode === "batch" ? groupCount : 1,
           single_product_count: mode === "single"
@@ -980,35 +1054,33 @@ async function processStyleReplicateJob(
       if (backgroundMode === "white") {
         promptParts.push(refinementWhiteBackgroundPrompt);
       }
-      if (isDoubaoModel(modelName)) {
-        const normalizedRes = doubaoTargetSize(imageSize);
-        const pixelHint = doubaoAspectPixels(aspectRatio);
-        promptParts.push(`输出比例为 ${aspectRatio}，分辨率档位为 ${normalizedRes}，参考像素尺寸为 ${pixelHint}。`);
-      }
+      promptParts.push(`输出比例为 ${aspectRatio}，参考尺寸为 ${requestSize}。`);
       if (userPrompt) {
         promptParts.push(userPrompt);
       }
       return promptParts.join("\n");
     }
 
+    // Image 1 = reference style image, Image 2 = product image.
+    // The prompt must clearly separate "style reference" from "product identity";
+    // otherwise edit models tend to keep the second image almost unchanged.
     const promptParts = [
-      `[系统提示词]\n${styleSystemPrompt}`,
-      "[输入角色定义]\n你将收到两张输入图：第1张是参考风格图（只用于提取风格）；第2张是产品素材图（必须保持产品本体不变）。",
-      `[参考图部分]\n${referenceStyleSummary}`,
-      "[素材产品图部分]\n产品素材图是唯一产品真值来源。禁止根据参考图替换产品形态或品牌细节；只能迁移场景与拍摄风格。",
-      `[任务上下文]\n当前参考图索引: ${unit.reference_index + 1}/${mode === "batch" ? batchReferences.length : 1}。\n当前产品图索引: ${unit.product_index + 1}/${mode === "batch" ? 1 : singleProductImages.length}。\n当前重复序号: ${unit.group_index + 1}/${mode === "batch" ? groupCount : imageCount}。\n总目标张数: ${units.length}。`,
+      "第1张图仅作为风格参考图，第2张图是需要保留的产品主体图。",
+      "请生成一张全新的电商展示图：继承第1张图的视觉风格，包括构图语言、背景氛围、灯光方向、色彩倾向、景别和版式节奏。",
+      "只保留第2张图中的产品主体本身，保留产品的形状、材质、颜色、纹理、logo、文字和关键设计特征。",
+      "不要直接照搬第2张图原始构图，不要只是对第2张图做轻微修改，不要输出与第2张图几乎相同的画面。",
+      "可以改变产品的位置、角度、大小、裁切、展示方式、场景、人物或道具，只要产品主体本身保持一致。",
+      "如果第2张图里包含人物、手部、模特或原始背景，这些都不是必须保留的内容；请优先保留产品，不必保留原图场景。",
+      "不要复制第1张图里的具体产品主体，只借鉴其风格与展示方式。最终画面应当是新的、自然的、可商用的高质量电商图。",
+      "Image 1 is style reference only. Image 2 contains the product to preserve.",
+      "Create a new e-commerce image in the style of image 1, but do not simply return image 2 or make only a minimal edit to image 2.",
+      "Preserve only the product identity from image 2, not its original composition, pose, scene, or framing.",
+      `Output aspect ratio: ${aspectRatio}, size: ${requestSize}.`,
     ];
-    if (isDoubaoModel(modelName)) {
-      const normalizedRes = doubaoTargetSize(imageSize);
-      const pixelHint = doubaoAspectPixels(aspectRatio);
-      promptParts.push(
-        `[输出规格]\n目标比例: ${aspectRatio}。\n目标分辨率档位: ${normalizedRes}。\n参考像素尺寸: ${pixelHint}。`,
-      );
-    }
     if (userPrompt) {
-      promptParts.push(`[用户补充要求]\n${userPrompt}`);
+      promptParts.push(`Additional instructions: ${userPrompt}`);
     }
-    return promptParts.join("\n\n");
+    return promptParts.join(" ");
   };
 
   await runWithConcurrency(units, batchConcurrency, async (unit, index) => {
@@ -1037,16 +1109,13 @@ async function processStyleReplicateJob(
 
       for (let attempt = 0; attempt < maxRatioRetries; attempt++) {
         const apiResponse = await callQnImageAPI({
-          imageDataUrl: productDataUrl,
+          imageDataUrl: referenceDataUrl ?? productDataUrl,
           ...(referenceDataUrl ? { imageDataUrls: [referenceDataUrl, productDataUrl] } : {}),
           prompt,
           n: 1,
-          model: resolveStyleReplicateModel(modelName),
+          model: resolveModel(modelName),
           ...(requestSize ? { size: requestSize } : {}),
           timeoutMsOverride: styleTimeoutMs,
-          ...(isDoubaoModel(modelName)
-            ? { endpointOverride: doubaoEndpoint, apiKeyOverride: doubaoApiKey }
-            : {}),
         });
 
         const providerEntry = Array.isArray(apiResponse.data) && apiResponse.data.length > 0
@@ -1056,32 +1125,46 @@ async function processStyleReplicateJob(
           ? providerEntry.size
           : null;
         lastProviderSize = providerSize;
-        if (isDoubaoModel(modelName) && !ratioMatches(providerSize ?? undefined, aspectRatio)) {
-          continue;
-        }
 
         const generated = extractGeneratedImageResult(apiResponse);
         const generatedBase64 = generated.b64 ?? null;
         let resultUrl = generated.url ?? null;
         let objectPath: string | null = null;
 
-        if (!resultUrl && generatedBase64) {
+        let unitMime = "image/png";
+
+        if (generatedBase64) {
+          // b64 response: decode and upload to our storage
           const imageBytes = base64ToBytes(generatedBase64);
           objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
           const { error: uploadError } = await supabase.storage
             .from(outputBucket)
             .upload(objectPath, imageBytes, { contentType: "image/png", upsert: false });
-          if (!uploadError) {
-            const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
-            resultUrl = publicData.publicUrl;
-          }
+          if (uploadError) throw new Error(`STORAGE_UPLOAD_FAILED: ${uploadError.message}`);
+          const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
+          resultUrl = publicData.publicUrl;
+        } else if (resultUrl) {
+          // URL response: download from provider and re-upload to our storage
+          const imgRes = await fetch(resultUrl);
+          if (!imgRes.ok) throw new Error(`IMAGE_DOWNLOAD_FAILED ${imgRes.status}`);
+          const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
+          unitMime = imgRes.headers.get("content-type") || "image/png";
+          const ext = unitMime.includes("jpeg") || unitMime.includes("jpg") ? "jpg"
+            : unitMime.includes("webp") ? "webp" : "png";
+          objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+          const { error: uploadError } = await supabase.storage
+            .from(outputBucket)
+            .upload(objectPath, imgBytes, { contentType: unitMime, upsert: false });
+          if (uploadError) throw new Error(`STORAGE_UPLOAD_FAILED: ${uploadError.message}`);
+          const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
+          resultUrl = publicData.publicUrl;
         }
 
         chosen = {
           url: resultUrl,
           b64_json: generatedBase64,
           object_path: objectPath ? `${outputBucket}/${objectPath}` : null,
-          mime_type: generatedBase64 ? "image/png" : null,
+          mime_type: unitMime,
           provider_size: providerSize,
         };
         break;

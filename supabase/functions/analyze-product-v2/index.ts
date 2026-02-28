@@ -17,19 +17,31 @@ Deno.serve(async (req) => {
   const clothingMode = typeof body.clothingMode === "string"
     ? body.clothingMode
     : "";
+  const uiLang = String(body.uiLanguage ?? body.targetLanguage ?? "en");
+  const isZh = uiLang.startsWith("zh");
   const promptConfigKey = typeof body.promptConfigKey === "string" && body.promptConfigKey.trim().length > 0
     ? body.promptConfigKey
     : clothingMode === "model_strategy"
     ? "clothing_model_tryon_strategy_prompt_zh"
+    : isZh
+    ? "batch_analysis_prompt_zh"
     : "batch_analysis_prompt_en";
 
   const supabase = createServiceClient();
   const payload = {
     ...body,
     modelImage: typeof body.modelImage === "string" ? body.modelImage : null,
-    mannequinEnabled: Boolean(body.mannequinEnabled ?? false),
-    mannequinWhiteBackground: Boolean(body.mannequinWhiteBackground ?? false),
-    threeDWhiteBackground: Boolean(body.threeDWhiteBackground ?? false),
+    // Read flat fields first, fall back to nested objects for backwards compatibility
+    mannequinEnabled: Boolean(body.mannequinEnabled ?? (body.mannequin as Record<string, unknown>)?.enabled ?? false),
+    mannequinWhiteBackground: Boolean(body.mannequinWhiteBackground ?? (body.mannequin as Record<string, unknown>)?.whiteBackground ?? false),
+    threeDEnabled: Boolean(body.threeDEnabled ?? (body.threeDEffect as Record<string, unknown>)?.enabled ?? false),
+    threeDWhiteBackground: Boolean(body.threeDWhiteBackground ?? (body.threeDEffect as Record<string, unknown>)?.whiteBackground ?? false),
+    whiteBackground: Boolean(body.whiteBackground ?? (body.whiteBgRetouched as Record<string, unknown>)?.front ?? (body.whiteBgRetouched as Record<string, unknown>)?.back ?? false),
+    // Pass through type breakdown for AI prompt
+    whiteBgFront: Boolean(body.whiteBgFront ?? (body.whiteBgRetouched as Record<string, unknown>)?.front ?? false),
+    whiteBgBack: Boolean(body.whiteBgBack ?? (body.whiteBgRetouched as Record<string, unknown>)?.back ?? false),
+    detailCloseupCount: Number(body.detailCloseupCount ?? (body.detailCloseup as Record<string, unknown>)?.count ?? 0),
+    sellingPointCount: Number(body.sellingPointCount ?? (body.sellingPoint as Record<string, unknown>)?.count ?? 0),
     outputLanguage: String(body.outputLanguage ?? body.targetLanguage ?? body.uiLanguage ?? "en"),
     promptConfigKey,
   };

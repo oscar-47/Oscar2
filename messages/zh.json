@@ -4,7 +4,7 @@
     "aestheticMirror": "风格复刻",
     "clothingStudio": "服装详情组图",
     "refinementStudio": "图片精修",
-    "pricing": "定价",
+    "pricing": "定价策略",
     "history": "历史记录",
     "profile": "个人中心",
     "signIn": "登录",
@@ -36,47 +36,170 @@
   },
   "landing": {
     "hero": {
-      "title": "专业AI电商商品图片生成",
-      "subtitle": "秒级生成专业电商商品图。商品图生成、风格克隆、服装工作室、图片精修——一站搞定。",
-      "cta": "免费开始",
-      "ctaSecondary": "查看定价"
+      "title": "PicSet AI: 你的 AI 电商视觉搭档",
+      "subtitle": "从产品图上传到详情页成片，全流程自动化。支持组图生成、风格迁移与精修输出，让视觉交付稳定且高效。",
+      "cta": "免费试用",
+      "ctaSecondary": "查看演示"
     },
-    "features": {
-      "title": "四大AI功能套件",
-      "studioGenesis": {
-        "name": "商品图生成",
-        "description": "将普通产品图转化为专业电商视觉效果，AI生成场景背景。"
+    "suites": {
+      "genesis": {
+        "title": "组图生成",
+        "subtitle": "一键生成电商详情图组",
+        "desc": "上传产品原图后，系统自动拆解卖点、规划画面层次与信息顺序，批量生成多张高质量详情图，减少反复沟通与排版时间。",
+        "bullet1": "自动识别产品核心卖点",
+        "bullet2": "输出可复用的页面结构",
+        "bullet3": "支持批量产出不同风格方案",
+        "cta": "开始组图生成"
       },
-      "aestheticMirror": {
-        "name": "风格复刻",
-        "description": "复刻任意视觉风格并应用到你的产品上，保持品牌一致性。"
-      },
-      "clothingStudio": {
-        "name": "服装工作室",
-        "description": "一键生成标准展示图、3D幽灵模特、微距细节三种变体。"
-      },
-      "refinementStudio": {
-        "name": "图片精修",
-        "description": "AI驱动的白底处理和图片精修，提升商品图专业度。"
+      "mirror": {
+        "title": "风格复刻",
+        "subtitle": "让设计风格快速可复制",
+        "desc": "导入参考图后，AI 会抽取构图语言、色彩关系和排版节奏，并将其迁移到你的商品素材，保证输出统一且符合品牌调性。",
+        "bullet1": "解析参考图的视觉规律",
+        "bullet2": "自动匹配配色与版式节奏",
+        "bullet3": "兼顾风格统一与商品识别度",
+        "cta": "开始风格复刻"
       }
-    }
+    },
+    "steps": {
+      "title": "三步完成详情图生成",
+      "subtitle": "流程清晰，几分钟即可从素材到可投放成片",
+      "step1": {
+        "label": "Step 1",
+        "title": "上传产品图",
+        "desc": "支持 JPG、PNG 等常见格式，快速导入你的商品素材。"
+      },
+      "step2": {
+        "label": "Step 2",
+        "title": "AI 智能分析",
+        "desc": "自动提炼卖点并规划图文布局，减少人工策划时间。"
+      },
+      "step3": {
+        "label": "Step 3",
+        "title": "一键生成",
+        "desc": "批量输出高质量详情图，并支持继续微调与二次编辑。"
+      }
+    },
+    "highlights": {
+      "title": "技术亮点",
+      "subtitle": "围绕电商实战场景设计，兼顾效率、质量与可控性",
+      "items": {
+        "smartExtract": {
+          "title": "智能卖点提取",
+          "desc": "识别产品核心价值并组织为可直接使用的视觉内容。"
+        },
+        "layoutEngine": {
+          "title": "专业排版引擎",
+          "desc": "自动生成符合电商阅读习惯的图文结构与层级。"
+        },
+        "consistency": {
+          "title": "一致性保障",
+          "desc": "系列图片风格统一，降低页面观感断裂风险。"
+        },
+        "batch": {
+          "title": "批量处理",
+          "desc": "一次提交，多图并行生成，显著提升交付效率。"
+        },
+        "relighting": {
+          "title": "光影重建",
+          "desc": "自动重塑光感与材质细节，提升商品表现力。"
+        },
+        "multilingual": {
+          "title": "多语言支持",
+          "desc": "支持中文与英文等语言输出，适配跨境运营场景。"
+        },
+        "preview": {
+          "title": "即时预览",
+          "desc": "生成过程可快速预览，便于及时调整方向。"
+        },
+        "export": {
+          "title": "高清导出",
+          "desc": "提供多种尺寸导出，满足不同平台投放规范。"
+        },
+        "customSize": {
+          "title": "自定义尺寸",
+          "desc": "灵活设置宽高比，适配不同端口和版位要求。"
+        },
+        "refineEdit": {
+          "title": "二次编辑",
+          "desc": "可在已有结果上继续优化局部细节与文案布局。"
+        },
+        "styleTransfer": {
+          "title": "风格迁移",
+          "desc": "在保留商品特征的基础上快速迁移目标视觉风格。"
+        },
+        "speedMode": {
+          "title": "极速模式",
+          "desc": "针对高频迭代场景优化生成速度与稳定性。"
+        }
+      }
+    },
+    "reasons": {
+      "title": "为什么选择 PicSet AI?",
+      "subtitle": "把高成本、慢节奏的视觉流程，变成可标准化的日常产能",
+      "card1": {
+        "title": "设计与外包成本高?",
+        "desc": "将单张到整套详情图的制作成本压缩到更可控区间。"
+      },
+      "card2": {
+        "title": "沟通反复且周期长?",
+        "desc": "从提案到成片流程集中化，减少多轮往返修改。"
+      },
+      "card3": {
+        "title": "排版文案执行难?",
+        "desc": "AI 协助完成结构与内容落版，团队上手门槛更低。"
+      }
+    },
+    "showcase": {
+      "title": "案例展示",
+      "subtitle": "覆盖多品类商品场景，展示不同风格与质感表达能力"
+    },
+    "faq": {
+      "title": "常见问题",
+      "subtitle": "关于产品能力、版权归属与使用门槛的核心解答",
+      "q1": {
+        "q": "通过 PicSet AI 生成的图片，版权归谁？",
+        "a": "在符合平台协议前提下，您对合法上传素材生成的结果享有使用权。涉及品牌素材时请确认授权链路完整。"
+      },
+      "q2": {
+        "q": "AI 生成会改变我产品的关键外观吗？",
+        "a": "系统默认保留产品识别特征与主要结构。若需更强风格化，可在提示词中明确调整范围。"
+      },
+      "q3": {
+        "q": "没有设计经验也能直接上手吗？",
+        "a": "可以。平台提供模板化流程，按步骤上传素材并选择参数即可获得可用结果。"
+      },
+      "q4": {
+        "q": "输出图片能满足 Amazon 或 Shopify 规范吗？",
+        "a": "支持按分辨率与比例导出。建议在投放前按目标平台最新规范做最终校验。"
+      },
+      "q5": {
+        "q": "相比传统外包，PicSet AI 的优势是什么？",
+        "a": "主要优势在于响应速度、批量能力和风格一致性，适合高频运营和快速测试场景。"
+      },
+      "q6": {
+        "q": "PicSet AI 更适合哪些团队？",
+        "a": "适合跨境卖家、品牌电商团队、内容运营团队，以及需要稳定视觉产能的中小企业。"
+      }
+    },
+    "supportAria": "打开在线支持"
   },
   "studio": {
     "genesis": {
-      "title": "商品图生成",
-      "description": "一键生成完整商品视觉方案，秒级构建你的产品图库。",
+      "title": "一键生成详情图组",
+      "description": "上传产品图，AI 智能分析产品特征，自动生成多角度、多场景的电商详情图组",
       "designBrief": "设计简报",
       "designBriefPlaceholder": "描述你产品的核心卖点和期望的视觉风格",
       "outputLanguage": "输出语言",
       "outputLanguageNone": "无文字（纯视觉）",
-      "analyze": "分析 & 生成蓝图",
-      "emptyState": "上传产品图并填写简报，点击「分析 & 生成蓝图」开始。",
-      "planPreview": "设计蓝图",
-      "planPreviewDesc": "预览并编辑场景逻辑和素材分配方案。",
-      "designSpecs": "设计规范",
-      "designSpecsDesc": "所有图片的通用视觉标准",
-      "imagePlan": "图片方案",
-      "imagePlanCount": "共 {count} 张图片，点击可编辑标题或描述",
+      "analyze": "分析产品",
+      "emptyState": "上传产品图并填写要求后，点击分析产品开始。",
+      "planPreview": "设计规划预览",
+      "planPreviewDesc": "请确认设计规范和图片规划",
+      "designSpecs": "整体设计规范",
+      "designSpecsDesc": "所有图片遵循的统一视觉标准",
+      "imagePlan": "图片规划",
+      "imagePlanCount": "共 {count} 张图片，点击可编辑标题和描述",
       "turboBoost": "极速模式",
       "turboBoostDesc": "更快更稳定",
       "confirmGenerate": "确认生成 {count} 张素材 — 消耗 {cost} 积分",
@@ -122,6 +245,9 @@
     "aestheticMirror": {
       "title": "风格复刻",
       "description": "上传参考图和产品素材图，一键复刻参考图的视觉风格。",
+      "heroBadge": "AI 驱动",
+      "heroTitle": "一键复刻爆款详情页风格",
+      "heroDescription": "上传您喜欢的设计参考图和产品素材，AI 将智能融合风格与产品特性，生成专属于您的高转化详情图",
       "singleMode": "单图复刻",
       "batchMode": "批量复刻",
       "batchComingSoon": "批量复刻即将支持",
@@ -129,11 +255,13 @@
       "referenceCardDesc": "上传有明确风格的参考图",
       "productCardTitle": "产品素材图",
       "productCardDesc": "上传产品图片",
+      "productDropHint": "上传你希望出现在图片中的元素素材",
       "firstImageHint": "当前仅使用第 1 张产品素材图参与生成",
       "promptTitle": "补充提示词（可选）",
       "promptDesc": "可选填写，不填也可直接生成",
       "promptPlaceholder": "例如：添加「限时特惠」文案，使用低饱和柔光场景...",
-      "uploadReference": "拖拽图片到此或点击上传",
+      "uploadReference": "拖拽图片到这里",
+      "referenceUploadHint": "或点击选择文件 (PNG, JPG)",
       "uploadProduct": "上传产品图",
       "generate": "开始复刻风格",
       "generateOne": "生成 1 张详情图",
@@ -157,7 +285,19 @@
       "turboDesc": "当前版本暂不支持",
       "turboOff": "已关闭",
       "noResultError": "未获取到生成结果，请重试。",
-      "creditCost": "消耗：{cost} 积分"
+      "creditCost": "消耗：{cost} 积分",
+      "featureA": {
+        "title": "智能风格融合",
+        "desc": "AI 精准提取参考图的设计语言和视觉风格"
+      },
+      "featureB": {
+        "title": "产品特性保留",
+        "desc": "完整保留产品细节和卖点，突出商品优势"
+      },
+      "featureC": {
+        "title": "一键生成导出",
+        "desc": "快速生成高清大图，支持多种尺寸导出"
+      }
     },
     "clothingStudio": {
       "title": "服装工作室",
@@ -172,13 +312,15 @@
       "creditCost": "消耗：{cost} 积分"
     },
     "refinementStudio": {
-      "title": "图片精修",
-      "description": "上传产品图后逐张智能精修，支持批量处理与失败重试。",
+      "heroBadge": "AI 产品精修",
+      "title": "一键智能产品精修",
+      "description": "上传产品图片，AI 自动分析并优化画质、去除瑕疵、增强细节，让您的产品图更专业",
       "resultTitle": "精修结果",
+      "resultSubtitle": "上传产品图片后查看精修效果",
       "uploadProduct": "上传产品图",
       "productUploadSubtitle": "上传需要精修的产品图片",
-      "uploadDropLabel": "拖拽图片到此或点击上传",
-      "uploadDropMeta": "{count}/{maxImages} images · max {maxSize} MB each",
+      "uploadDropLabel": "点击上传或拖拽图片到此区域",
+      "uploadDropMeta": "支持 JPG、PNG 格式，最多 50 张",
       "uploadSupportHint": "支持 JPG、PNG，最多 50 张",
       "uploadLimitHint": "支持 JPG、PNG，最多 50 张",
       "uploadInvalidFormat": "仅支持 JPG、PNG 格式，且单张不超过 10MB",
@@ -190,13 +332,14 @@
       "backgroundMode": "背景设置",
       "backgroundWhite": "白底图",
       "backgroundOriginal": "原图背景",
-      "generate": "开始精修",
+      "generate": "开始一键精修",
       "generateBatchCount": "开始精修（{count} 张）",
       "generating": "精修中...",
       "creditCost": "消耗：{cost} 积分",
       "turboTitle": "Turbo 加速模式",
-      "turboDesc": "当前版本暂不支持",
-      "waiting": "上传产品图片后开始精修",
+      "turboDesc": "更快、更稳定",
+      "waiting": "上传产品图片后查看精修效果",
+      "waitingActionHint": "点击左侧“开始一键精修”按钮",
       "runningText1": "正在解析产品细节与边缘...",
       "runningText2": "正在执行光影与质感增强...",
       "runningText3": "正在输出高保真精修结果...",

@@ -36,30 +36,153 @@
   },
   "landing": {
     "hero": {
-      "title": "Professional AI E-Commerce Product Images",
-      "subtitle": "Generate stunning product visuals in seconds. Studio Genesis, Aesthetic Mirror, Clothing Studio, and Image Retouching — all in one platform.",
-      "cta": "Start for Free",
-      "ctaSecondary": "View Pricing"
+      "title": "PicSet AI: Your Visual Ops Partner for E-Commerce",
+      "subtitle": "From raw uploads to launch-ready detail pages, automate the full creative pipeline with structure, consistency, and speed.",
+      "cta": "Start Free",
+      "ctaSecondary": "Watch Demo"
     },
-    "features": {
-      "title": "Four Powerful AI Suites",
-      "studioGenesis": {
-        "name": "Studio Genesis",
-        "description": "Transform plain product photos into professional e-commerce visuals with AI-generated scenes."
+    "suites": {
+      "genesis": {
+        "title": "Studio Genesis",
+        "subtitle": "Build complete detail-page image sets",
+        "desc": "Upload your base product image and let AI map selling points, layout hierarchy, and sequence logic to generate a complete visual set in minutes.",
+        "bullet1": "Auto-extract core product selling angles",
+        "bullet2": "Generate reusable detail-page structure",
+        "bullet3": "Produce multiple style directions in batch",
+        "cta": "Start Studio Genesis"
       },
-      "aestheticMirror": {
-        "name": "Aesthetic Mirror",
-        "description": "Clone any visual style and apply it to your products for consistent brand identity."
-      },
-      "clothingStudio": {
-        "name": "Clothing Studio",
-        "description": "Generate standard shots, 3D mannequin, and macro detail variants for fashion products."
-      },
-      "refinementStudio": {
-        "name": "Refinement Studio",
-        "description": "Retouch and refine product images with AI-powered white background and enhancement."
+      "mirror": {
+        "title": "Aesthetic Mirror",
+        "subtitle": "Scale a design style across products",
+        "desc": "Import your reference image and transfer composition rhythm, color language, and layout style to your product assets while preserving recognizability.",
+        "bullet1": "Decode visual patterns from references",
+        "bullet2": "Apply matching color and layout cadence",
+        "bullet3": "Keep brand consistency across new outputs",
+        "cta": "Start Aesthetic Mirror"
       }
-    }
+    },
+    "steps": {
+      "title": "Three Steps to Final Detail Images",
+      "subtitle": "A clean workflow that moves from source files to deployable visuals quickly",
+      "step1": {
+        "label": "Step 1",
+        "title": "Upload Product Images",
+        "desc": "Import JPG and PNG assets directly from your existing catalog workflow."
+      },
+      "step2": {
+        "label": "Step 2",
+        "title": "AI Visual Analysis",
+        "desc": "AI extracts product traits and plans an effective content structure for detail pages."
+      },
+      "step3": {
+        "label": "Step 3",
+        "title": "One-Click Generation",
+        "desc": "Generate high-quality outputs in batch with support for iterative refinement."
+      }
+    },
+    "highlights": {
+      "title": "Technical Highlights",
+      "subtitle": "Built for production-grade e-commerce teams balancing quality and throughput",
+      "items": {
+        "smartExtract": {
+          "title": "Smart USP Extraction",
+          "desc": "Identifies product value points and turns them into visual communication elements."
+        },
+        "layoutEngine": {
+          "title": "Layout Intelligence",
+          "desc": "Composes structures aligned with e-commerce reading behavior."
+        },
+        "consistency": {
+          "title": "Consistency Control",
+          "desc": "Maintains coherent visual style across a full image series."
+        },
+        "batch": {
+          "title": "Batch Processing",
+          "desc": "Run multi-image generation in parallel to improve turnaround."
+        },
+        "relighting": {
+          "title": "Relighting Engine",
+          "desc": "Reconstructs light and texture to enhance material perception."
+        },
+        "multilingual": {
+          "title": "Multilingual Ready",
+          "desc": "Supports multi-language output for global storefront operations."
+        },
+        "preview": {
+          "title": "Live Preview",
+          "desc": "Preview early outputs and adjust direction before full completion."
+        },
+        "export": {
+          "title": "HD Export",
+          "desc": "Export multiple resolutions and sizes for channel-specific requirements."
+        },
+        "customSize": {
+          "title": "Custom Ratios",
+          "desc": "Flexible aspect-ratio controls for placements across channels."
+        },
+        "refineEdit": {
+          "title": "Post-Generation Editing",
+          "desc": "Continue refining copy blocks and composition on generated results."
+        },
+        "styleTransfer": {
+          "title": "Style Transfer",
+          "desc": "Move reference styles onto products while keeping key product features."
+        },
+        "speedMode": {
+          "title": "Speed Mode",
+          "desc": "Optimized for fast iteration cycles and operational stability."
+        }
+      }
+    },
+    "reasons": {
+      "title": "Why Teams Choose PicSet AI",
+      "subtitle": "Turn expensive and slow creative workflows into a repeatable production system",
+      "card1": {
+        "title": "Creative Cost Too High?",
+        "desc": "Reduce per-project visual production cost without sacrificing output quality."
+      },
+      "card2": {
+        "title": "Too Many Revision Loops?",
+        "desc": "Unify planning and execution to cut back-and-forth communication overhead."
+      },
+      "card3": {
+        "title": "Execution Bottlenecks?",
+        "desc": "Use AI-assisted layout and content execution to speed team delivery."
+      }
+    },
+    "showcase": {
+      "title": "Generated Showcase",
+      "subtitle": "Sample outputs across product categories, visual directions, and styles"
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "subtitle": "Quick answers on ownership, quality control, and day-to-day usage",
+      "q1": {
+        "q": "Who owns images generated with PicSet AI?",
+        "a": "Under our terms and your lawful source assets, you retain usage rights for generated outputs. Ensure brand asset authorization where required."
+      },
+      "q2": {
+        "q": "Will AI alter key product identity details?",
+        "a": "Default settings preserve core product characteristics. You can increase or reduce stylization through prompt controls."
+      },
+      "q3": {
+        "q": "Can non-designers use this workflow?",
+        "a": "Yes. The flow is template-driven and designed for operators without formal design backgrounds."
+      },
+      "q4": {
+        "q": "Do exports fit Amazon or Shopify standards?",
+        "a": "You can export by resolution and ratio. We still recommend final checks against each platform's latest listing policy."
+      },
+      "q5": {
+        "q": "Why use PicSet AI instead of outsourcing?",
+        "a": "Speed, batch throughput, and style consistency are the main advantages for teams iterating frequently."
+      },
+      "q6": {
+        "q": "What type of teams is PicSet AI best for?",
+        "a": "Cross-border sellers, e-commerce brands, content operations teams, and SMBs needing stable creative output."
+      }
+    },
+    "supportAria": "Open online support"
   },
   "studio": {
     "genesis": {
@@ -122,6 +245,9 @@
     "aestheticMirror": {
       "title": "Style Replicate",
       "description": "Upload a reference image and product assets to replicate the visual style in one click.",
+      "heroBadge": "AI Powered",
+      "heroTitle": "One-Click Replication of High-Converting Detail Page Styles",
+      "heroDescription": "Upload your preferred design references and product assets. AI intelligently blends style language and product traits to generate conversion-focused detail visuals.",
       "singleMode": "Single Replicate",
       "batchMode": "Batch Replicate",
       "batchComingSoon": "Batch replicate is coming soon",
@@ -129,11 +255,13 @@
       "referenceCardDesc": "Upload a reference image with a clear visual style",
       "productCardTitle": "Product Assets",
       "productCardDesc": "Upload your product images",
+      "productDropHint": "Upload product elements you want to appear in the output image",
       "firstImageHint": "Only the first product image is used for generation in this version",
       "promptTitle": "Extra Prompt (Optional)",
       "promptDesc": "Fill this optionally, or generate directly",
       "promptPlaceholder": "Example: Add a limited-offer sticker, with soft low-saturation lighting...",
-      "uploadReference": "Drop image here or click to upload",
+      "uploadReference": "Drop image here",
+      "referenceUploadHint": "or click to choose file (PNG, JPG)",
       "uploadProduct": "Upload Product Image",
       "generate": "Replicate Style",
       "generateOne": "Generate 1 Detail Image",
@@ -157,7 +285,19 @@
       "turboDesc": "Temporarily unavailable in this version",
       "turboOff": "Off",
       "noResultError": "No output image returned. Please try again.",
-      "creditCost": "Cost: {cost} credits"
+      "creditCost": "Cost: {cost} credits",
+      "featureA": {
+        "title": "Intelligent Style Fusion",
+        "desc": "AI extracts and reproduces the design language and visual style of your references."
+      },
+      "featureB": {
+        "title": "Product Trait Preservation",
+        "desc": "Preserves key product details and selling points while transferring style."
+      },
+      "featureC": {
+        "title": "One-Click Generate & Export",
+        "desc": "Generate high-resolution visuals quickly and export in multiple sizes."
+      }
     },
     "clothingStudio": {
       "title": "Clothing Studio",
@@ -172,13 +312,15 @@
       "creditCost": "Cost: {cost} credits"
     },
     "refinementStudio": {
-      "title": "Refinement Studio",
-      "description": "Upload product photos and refine them one by one with batch processing and failed-item retry.",
+      "heroBadge": "AI Product Refinement",
+      "title": "One-Click Smart Product Refinement",
+      "description": "Upload product images and let AI analyze quality, remove blemishes, and enhance details for more professional product visuals.",
       "resultTitle": "Refinement Results",
+      "resultSubtitle": "View refinement results after uploading product images",
       "uploadProduct": "Upload Product Images",
       "productUploadSubtitle": "Upload product images to refine",
-      "uploadDropLabel": "Drag images here or click to upload",
-      "uploadDropMeta": "{count}/{maxImages} images · max {maxSize} MB each",
+      "uploadDropLabel": "Click to upload or drag images here",
+      "uploadDropMeta": "Supports JPG and PNG formats, up to 50 images",
       "uploadSupportHint": "Supports JPG and PNG, up to 50 images",
       "uploadLimitHint": "Supports JPG and PNG, up to 50 images",
       "uploadInvalidFormat": "Only JPG and PNG are supported, and each image must be <= 10MB",
@@ -190,13 +332,14 @@
       "backgroundMode": "Background Mode",
       "backgroundWhite": "White Background",
       "backgroundOriginal": "Original Background",
-      "generate": "Start Refinement",
+      "generate": "Start One-Click Refinement",
       "generateBatchCount": "Start Refinement ({count} images)",
       "generating": "Refining...",
       "creditCost": "Cost: {cost} credits",
       "turboTitle": "Turbo Mode",
-      "turboDesc": "Not available in current version",
-      "waiting": "Upload product images and start refinement",
+      "turboDesc": "Faster and more stable",
+      "waiting": "Upload product images to view refinement results",
+      "waitingActionHint": "Click the left-side \"Start One-Click Refinement\" button",
       "runningText1": "Analyzing product details and edges...",
       "runningText2": "Enhancing lighting and texture quality...",
       "runningText3": "Rendering high-fidelity refined outputs...",

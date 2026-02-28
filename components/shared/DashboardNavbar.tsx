@@ -1,63 +1,75 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { useTranslations, useLocale } from 'next-intl'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { LanguageSwitcher } from './LanguageSwitcher'
-import { CreditsDisplay } from './CreditsDisplay'
-import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { UserMenu } from './UserMenu'
 import { cn } from '@/lib/utils'
+import { Layers, Image, Shirt, Paintbrush, Monitor } from 'lucide-react'
 
 const NAV_ITEMS = [
-  { key: 'studioGenesis', path: '/studio-genesis' },
-  { key: 'aestheticMirror', path: '/aesthetic-mirror' },
-  { key: 'clothingStudio', path: '/clothing-studio' },
-  { key: 'refinementStudio', path: '/refinement-studio' },
+  { key: 'studioGenesis', path: '/studio-genesis', icon: Layers },
+  { key: 'aestheticMirror', path: '/aesthetic-mirror', icon: Image },
+  { key: 'clothingStudio', path: '/clothing-studio', icon: Shirt },
+  { key: 'refinementStudio', path: '/refinement-studio', icon: Paintbrush },
+  { key: 'pricing', path: '/pricing', icon: Monitor },
 ] as const
 
 interface DashboardNavbarProps {
   userId: string
+  email: string
 }
 
-export function DashboardNavbar({ userId }: DashboardNavbarProps) {
+export function DashboardNavbar({ userId, email }: DashboardNavbarProps) {
   const t = useTranslations('nav')
   const locale = useLocale()
   const pathname = usePathname()
   const router = useRouter()
 
-  async function handleSignOut() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push(`/${locale}`)
-    router.refresh()
-  }
+  useEffect(() => {
+    const hrefs = NAV_ITEMS.map(({ path }) => `/${locale}${path}`)
+    hrefs.forEach((href) => {
+      router.prefetch(href)
+    })
+  }, [locale, router])
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur">
-      <div className="container mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
+    <header className="sticky top-0 z-50 w-full bg-[#f4f5f7]/92 backdrop-blur supports-[backdrop-filter]:bg-[#f4f5f7]/82">
+      <div className="mx-auto flex h-[82px] w-full max-w-6xl items-center justify-between px-5 sm:px-6">
         {/* Logo */}
-        <Link href={`/${locale}/studio-genesis`} className="flex items-center gap-2 font-bold text-lg shrink-0">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background text-sm font-bold">P</span>
-          <span className="hidden sm:inline">Picset AI</span>
+        <Link
+          href={`/${locale}/studio-genesis`}
+          prefetch
+          className="flex shrink-0 items-center gap-2.5 font-bold text-lg"
+        >
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0f1218] text-white shadow-sm">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 0L9.8 5.2L15.6 5.2L10.9 8.8L12.7 14L8 10.4L3.3 14L5.1 8.8L0.4 5.2L6.2 5.2L8 0Z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span className="hidden text-lg tracking-tight text-[#151920] sm:inline">Picset AI</span>
         </Link>
 
-        {/* Feature nav */}
-        <nav className="hidden md:flex items-center gap-1 text-sm">
-          {NAV_ITEMS.map(({ key, path }) => {
+        {/* Feature nav - centered */}
+        <nav className="hidden items-center gap-1.5 md:flex">
+          {NAV_ITEMS.map(({ key, path, icon: Icon }) => {
             const href = `/${locale}${path}`
             const isActive = pathname.startsWith(href)
             return (
               <Link
                 key={key}
                 href={href}
+                prefetch
                 className={cn(
-                  'px-3 py-1.5 rounded-md transition-colors text-sm',
+                  'flex items-center gap-2 rounded-2xl px-4 py-2 text-[15px] whitespace-nowrap transition-colors',
                   isActive
-                    ? 'bg-secondary text-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                    ? 'bg-[#11141b] text-white font-semibold shadow-sm'
+                    : 'text-[#6d7280] hover:text-[#272b33] hover:bg-[#eceef2]'
                 )}
               >
+                <Icon className="h-4 w-4" strokeWidth={1.8} />
                 {t(key as keyof ReturnType<typeof t>)}
               </Link>
             )
@@ -65,21 +77,9 @@ export function DashboardNavbar({ userId }: DashboardNavbarProps) {
         </nav>
 
         {/* Right side */}
-        <div className="flex items-center gap-3">
-          <CreditsDisplay userId={userId} />
+        <div className="flex items-center gap-2.5">
           <LanguageSwitcher />
-          <Link
-            href={`/${locale}/pricing`}
-            className="hidden sm:inline-flex rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-secondary transition-colors"
-          >
-            {t('pricing' as Parameters<typeof t>[0])}
-          </Link>
-          <button
-            onClick={handleSignOut}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {t('signOut' as Parameters<typeof t>[0])}
-          </button>
+          <UserMenu userId={userId} email={email} />
         </div>
       </div>
     </header>

@@ -2,8 +2,8 @@ import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
 
-function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
-  if (!turboEnabled) return model === "nano-banana" ? 3 : 5;
+function computeCost(_model: string, turboEnabled: boolean, imageSize: string): number {
+  if (!turboEnabled) return 5;
   if (imageSize === "1K") return 8;
   if (imageSize === "2K") return 12;
   return 17;

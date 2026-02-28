@@ -15,10 +15,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { MultiImageUploader, type UploadedImage } from '@/components/upload/MultiImageUploader'
-import { GenerationProgress, type ProgressStep } from '@/components/generation/GenerationProgress'
+import type { ProgressStep } from '@/components/generation/GenerationProgress'
+import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
 import { ResultGallery, type ResultImage } from '@/components/generation/ResultGallery'
-import { CreditCostBadge } from '@/components/generation/CreditCostBadge'
 import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
+import { CorePageShell } from '@/components/studio/CorePageShell'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { uploadFiles } from '@/lib/api/upload'
 import {
@@ -28,7 +29,7 @@ import {
   processGenerationJob,
 } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, Loader2, ImageIcon, AlertTriangle, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, ImageIcon, AlertTriangle, RefreshCw, Sparkles, Zap } from 'lucide-react'
 import type {
   GenerationModel,
   AspectRatio,
@@ -45,7 +46,7 @@ import { DEFAULT_CREDIT_COSTS } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const ASPECT_RATIOS: { value: AspectRatio; label: string }[] = [
+const ASPECT_RATIOS_EN: { value: AspectRatio; label: string }[] = [
   { value: '1:1', label: '1:1 Square' },
   { value: '2:3', label: '2:3 Portrait' },
   { value: '3:2', label: '3:2 Landscape' },
@@ -58,16 +59,49 @@ const ASPECT_RATIOS: { value: AspectRatio; label: string }[] = [
   { value: '21:9', label: '21:9 UltraWide' },
 ]
 
+const ASPECT_RATIOS_ZH: { value: AspectRatio; label: string }[] = [
+  { value: '1:1', label: '1:1 方图' },
+  { value: '2:3', label: '2:3 竖版' },
+  { value: '3:2', label: '3:2 横版' },
+  { value: '3:4', label: '3:4 竖版' },
+  { value: '4:3', label: '4:3 横版' },
+  { value: '4:5', label: '4:5 竖版' },
+  { value: '5:4', label: '5:4 横版' },
+  { value: '9:16', label: '9:16 长图' },
+  { value: '16:9', label: '16:9 宽屏' },
+  { value: '21:9', label: '21:9 超宽屏' },
+]
+
 const IMAGE_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
-const RESOLUTION_OPTIONS: { value: ImageSize; label: string; proOnly: boolean }[] = [
+const RESOLUTION_OPTIONS_EN: { value: ImageSize; label: string; proOnly: boolean }[] = [
   { value: '1K', label: '1K Standard', proOnly: false },
   { value: '2K', label: '2K HD (Pro)', proOnly: true },
   { value: '4K', label: '4K UHD (Pro)', proOnly: true },
 ]
 
-const OUTPUT_LANGUAGES: { value: OutputLanguage; label: string }[] = [
+const RESOLUTION_OPTIONS_ZH: { value: ImageSize; label: string; proOnly: boolean }[] = [
+  { value: '1K', label: '1K 标清', proOnly: false },
+  { value: '2K', label: '2K 高清 (仅Pro)', proOnly: true },
+  { value: '4K', label: '4K 超清 (仅Pro)', proOnly: true },
+]
+
+const OUTPUT_LANGUAGES_EN: { value: OutputLanguage; label: string }[] = [
   { value: 'none', label: 'None Text(Visual Only)' },
+  { value: 'en', label: 'English' },
+  { value: 'zh', label: '中文' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+  { value: 'es', label: 'Español' },
+  { value: 'fr', label: 'Français' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'pt', label: 'Português' },
+  { value: 'ar', label: 'العربية' },
+  { value: 'ru', label: 'Русский' },
+]
+
+const OUTPUT_LANGUAGES_ZH: { value: OutputLanguage; label: string }[] = [
+  { value: 'none', label: '无文字(纯视觉)' },
   { value: 'en', label: 'English' },
   { value: 'zh', label: '中文' },
   { value: 'ja', label: '日本語' },
@@ -177,11 +211,12 @@ function patchStep(
 }
 
 function computeCost(model: GenerationModel, turboEnabled: boolean, imageSize: ImageSize, imageCount: number): number {
+  const base = Math.max(DEFAULT_CREDIT_COSTS[model] ?? 5, 5)
   let perImage: number
   if (turboEnabled) {
-    perImage = imageSize === '1K' ? 8 : imageSize === '2K' ? 12 : 17
+    perImage = base + (imageSize === '1K' ? 8 : imageSize === '2K' ? 12 : 16)
   } else {
-    perImage = DEFAULT_CREDIT_COSTS[model] ?? 5
+    perImage = base
   }
   return perImage * imageCount
 }
@@ -193,73 +228,73 @@ function extractResultFromJob(job: GenerationJob, index: number): ResultImage | 
   return url ? { url, label: `Image ${index + 1}` } : null
 }
 
+function hasCjkText(value: string): boolean {
+  return /[\u3400-\u9fff]/.test(value)
+}
+
+function localizeImagePlansForZh(imagePlans: BlueprintImagePlan[]): BlueprintImagePlan[] {
+  return imagePlans.map((plan, index) => {
+    const title = hasCjkText(plan.title) ? plan.title : `图片方案 ${index + 1}`
+    const description = hasCjkText(plan.description) ? plan.description : '请编辑该图片方案的标题和描述'
+    return { ...plan, title, description }
+  })
+}
+
 // ─── Step Indicator ──────────────────────────────────────────────────────────
 
-const PHASE_STEPS: { phase: GenesisPhase; label: string; num: number }[] = [
-  { phase: 'input', label: 'Input', num: 1 },
+const PHASE_STEPS_ZH: { phase: GenesisPhase; label: string; num: number }[] = [
+  { phase: 'input', label: '输入', num: 1 },
+  { phase: 'analyzing', label: '分析中', num: 2 },
+  { phase: 'preview', label: '确认规划', num: 3 },
+  { phase: 'generating', label: '生成中', num: 4 },
+  { phase: 'complete', label: '完成', num: 5 },
+]
+
+const PHASE_STEPS_EN: { phase: GenesisPhase; label: string; num: number }[] = [
+  { phase: 'input', label: 'Upload', num: 1 },
   { phase: 'analyzing', label: 'Analyzing', num: 2 },
-  { phase: 'preview', label: 'Plan Preview', num: 3 },
+  { phase: 'preview', label: 'Preview', num: 3 },
   { phase: 'generating', label: 'Generating', num: 4 },
   { phase: 'complete', label: 'Complete', num: 5 },
 ]
 
-function StepIndicator({ currentPhase }: { currentPhase: GenesisPhase }) {
+function StepIndicator({ currentPhase, locale }: { currentPhase: GenesisPhase; locale: string }) {
   const phaseOrder = ['input', 'analyzing', 'preview', 'generating', 'complete']
   const currentIdx = phaseOrder.indexOf(currentPhase)
+  const steps = locale === 'zh' ? PHASE_STEPS_ZH : PHASE_STEPS_EN
 
   return (
-    <div className="flex items-center justify-center gap-1 mb-8">
-      {PHASE_STEPS.map((step, i) => {
+    <div className="flex w-full items-center justify-center overflow-x-auto pb-1">
+      {steps.map((step, i) => {
         const isDone = i < currentIdx
         const isCurrent = i === currentIdx
+        const isPastOrCurrent = isDone || isCurrent
         return (
-          <div key={step.phase} className="flex items-center gap-1">
-            <div className="flex items-center gap-1.5">
+          <div key={step.phase} className="flex shrink-0 items-center">
+            <div className="flex items-center gap-2">
+              {isCurrent ? (
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#191b22] text-xs font-semibold text-white">
+                  {step.num}
+                </span>
+              ) : (
+                <span className={`w-4 text-center text-sm ${isDone ? 'font-medium text-[#202227]' : 'text-[#6f7380]'}`}>
+                  {step.num}
+                </span>
+              )}
               <span
-                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                  isDone
-                    ? 'bg-primary text-primary-foreground'
-                    : isCurrent
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
+                className={`text-sm ${
+                  isPastOrCurrent ? 'font-medium text-[#202227]' : 'text-[#6f7380]'
                 }`}
               >
-                {isDone ? '✓' : step.num}
-              </span>
-              <span className={`text-sm ${isCurrent ? 'font-semibold' : 'text-muted-foreground'}`}>
                 {step.label}
               </span>
             </div>
-            {i < PHASE_STEPS.length - 1 && (
-              <span className="mx-2 h-px w-8 bg-border" />
+            {i < steps.length - 1 && (
+              <div className="mx-3 h-px w-8 bg-[#d8dbe1] sm:mx-5 sm:w-12" />
             )}
           </div>
         )
       })}
-    </div>
-  )
-}
-
-// ─── Analyzing Animation ────────────────────────────────────────────────────
-
-function AnalyzingAnimation({ messages }: { messages: string[] }) {
-  const [msgIdx, setMsgIdx] = useState(0)
-
-  useEffect(() => {
-    if (messages.length === 0) return
-    const timer = setInterval(() => {
-      setMsgIdx((prev) => (prev + 1) % messages.length)
-    }, 3000)
-    return () => clearInterval(timer)
-  }, [messages])
-
-  return (
-    <div className="flex flex-col items-center justify-center py-16 space-y-4">
-      <div className="h-12 w-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-      <p className="text-lg font-semibold">Analyzing...</p>
-      <p className="text-sm text-muted-foreground animate-pulse">
-        {messages[msgIdx] ?? ''}
-      </p>
     </div>
   )
 }
@@ -319,10 +354,28 @@ function isAnalysisBlueprint(value: unknown): value is AnalysisBlueprint {
 
 // ─── Image Slot Card ────────────────────────────────────────────────────────
 
-function ImageSlotCard({ slot, index }: { slot: ImageSlot; index: number }) {
+function toCssAspectRatio(aspectRatio: AspectRatio): string {
+  const [w, h] = aspectRatio.split(':').map((v) => Number(v))
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return '4 / 3'
+  return `${w} / ${h}`
+}
+
+function ImageSlotCard({
+  slot,
+  index,
+  aspectRatio,
+  isZh,
+}: {
+  slot: ImageSlot
+  index: number
+  aspectRatio: AspectRatio
+  isZh: boolean
+}) {
+  const boxAspectRatio = toCssAspectRatio(aspectRatio)
+
   if (slot.status === 'done' && slot.result) {
     return (
-      <div className="group relative rounded-xl overflow-hidden border border-border bg-muted aspect-[4/3]">
+      <div className="group relative overflow-hidden rounded-xl border border-[#d5d9e2] bg-[#eceef2]" style={{ aspectRatio: boxAspectRatio }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={slot.result.url}
@@ -346,9 +399,9 @@ function ImageSlotCard({ slot, index }: { slot: ImageSlot; index: number }) {
 
   if (slot.status === 'failed') {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-destructive/40 bg-destructive/5 aspect-[4/3] p-4 text-center">
+      <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-destructive/40 bg-destructive/5 p-4 text-center" style={{ aspectRatio: boxAspectRatio }}>
         <AlertTriangle className="h-6 w-6 text-destructive mb-2" />
-        <p className="text-xs text-destructive font-medium">Failed</p>
+        <p className="text-xs text-destructive font-medium">{isZh ? '生成失败' : 'Failed'}</p>
         {slot.error && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{slot.error}</p>}
       </div>
     )
@@ -356,9 +409,9 @@ function ImageSlotCard({ slot, index }: { slot: ImageSlot; index: number }) {
 
   // pending
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/20 bg-muted/30 aspect-[4/3] p-4">
+    <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#cfd4dd] bg-[#f4f5f7] p-4" style={{ aspectRatio: boxAspectRatio }}>
       <Loader2 className="h-6 w-6 text-muted-foreground animate-spin mb-2" />
-      <p className="text-xs text-muted-foreground">Pending</p>
+      <p className="text-xs text-muted-foreground">{isZh ? '生成中' : 'Pending'}</p>
     </div>
   )
 }
@@ -375,10 +428,15 @@ export function StudioGenesisForm() {
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
   const [requirements, setRequirements] = useState('')
   const [imageCount, setImageCount] = useState(1)
-  const [model, setModel] = useState<GenerationModel>('nano-banana')
+  const [model, setModel] = useState<GenerationModel>('flux-kontext-pro')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [imageSize, setImageSize] = useState<ImageSize>('1K')
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>('none')
+
+  // Locale-aware constants
+  const ASPECT_RATIOS = locale === 'zh' ? ASPECT_RATIOS_ZH : ASPECT_RATIOS_EN
+  const RESOLUTION_OPTIONS = locale === 'zh' ? RESOLUTION_OPTIONS_ZH : RESOLUTION_OPTIONS_EN
+  const OUTPUT_LANGUAGES = locale === 'zh' ? OUTPUT_LANGUAGES_ZH : OUTPUT_LANGUAGES_EN
 
   // ── Preview state ──
   const [turboEnabled, setTurboEnabled] = useState(false)
@@ -395,6 +453,7 @@ export function StudioGenesisForm() {
   const [imageSlots, setImageSlots] = useState<ImageSlot[]>([])
   const [failedSlotIndices, setFailedSlotIndices] = useState<number[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [analyzingMessageIndex, setAnalyzingMessageIndex] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
 
   const { total } = useCredits()
@@ -406,17 +465,42 @@ export function StudioGenesisForm() {
     t('analyzingStep3'),
     t('analyzingStep4'),
   ]
+  const isZh = locale.startsWith('zh')
+  const backendLocale = isZh ? 'zh-CN' : 'en'
+  const leftCardClass = 'rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6'
+  const panelInputClass = 'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px]'
+  const rightPanelTitle = phase === 'analyzing'
+    ? (isZh ? '分析中...' : 'Analyzing...')
+    : phase === 'preview'
+      ? t('planPreview')
+    : phase === 'generating'
+      ? (isZh ? '生成中...' : 'Generating...')
+      : isZh
+        ? '生成结果'
+        : tc('results')
+  const rightPanelSubtitle = phase === 'analyzing'
+    ? (isZh ? '正在分析产品并生成设计规范' : 'Analyzing product and generating design specs')
+    : phase === 'preview'
+      ? t('planPreviewDesc')
+    : phase === 'generating'
+      ? (isZh ? '正在根据规划生成图片' : 'Generating images from the approved blueprint')
+      : isZh
+        ? '上传产品图并点击分析开始'
+        : "Upload product images and click 'Analyze' to start."
 
   // Derived: is the left panel disabled?
   const leftPanelDisabled = phase === 'analyzing' || phase === 'generating'
   const leftParamsDisabled = leftPanelDisabled || phase === 'preview' || phase === 'complete'
 
-  // Enforce resolution constraint: nano-banana → 1K only
+
+
   useEffect(() => {
-    if (model === 'nano-banana' && imageSize !== '1K') {
-      setImageSize('1K')
-    }
-  }, [model, imageSize])
+    if (phase !== 'analyzing' || analyzingMessages.length === 0) return
+    const timer = setInterval(() => {
+      setAnalyzingMessageIndex((prev) => (prev + 1) % analyzingMessages.length)
+    }, 2600)
+    return () => clearInterval(timer)
+  }, [phase, analyzingMessages.length])
 
   // ── Image handlers ──
   const handleAddImages = useCallback((files: File[]) => {
@@ -476,8 +560,8 @@ export function StudioGenesisForm() {
         productImages: urls,
         requirements: requirements || undefined,
         imageCount,
-        uiLanguage: locale,
-        targetLanguage: locale,
+        uiLanguage: backendLocale,
+        targetLanguage: backendLocale,
         outputLanguage,
         trace_id,
       })
@@ -489,7 +573,10 @@ export function StudioGenesisForm() {
       if (!isAnalysisBlueprint(analysisJob.result_data)) {
         throw new Error('Analysis output format mismatch')
       }
-      const blueprint = analysisJob.result_data
+      const rawBlueprint = analysisJob.result_data
+      const blueprint: AnalysisBlueprint = isZh
+        ? { ...rawBlueprint, images: localizeImagePlansForZh(rawBlueprint.images ?? []) }
+        : rawBlueprint
 
       set('analyze', { status: 'done' })
       setProgress(100)
@@ -504,7 +591,7 @@ export function StudioGenesisForm() {
       setErrorMessage(err instanceof Error ? err.message : tc('error'))
       setPhase('input')
     }
-  }, [productImages, requirements, imageCount, outputLanguage, locale, t, tc])
+  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, t, tc])
 
   // ── Phase 2: Confirm & Generate ──
   const handleGenerate = useCallback(async () => {
@@ -544,7 +631,7 @@ export function StudioGenesisForm() {
           analysisJson: modifiedBlueprint,
           design_specs: editableDesignSpecs,
           imageCount: editableImagePlans.length,
-          targetLanguage: locale,
+          targetLanguage: backendLocale,
           outputLanguage,
           stream: true,
           trace_id,
@@ -685,7 +772,7 @@ export function StudioGenesisForm() {
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
     }
-  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, locale, t, tc])
+  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, t, tc])
 
   const handleBackToInput = useCallback(() => {
     setPhase('input')
@@ -725,8 +812,9 @@ export function StudioGenesisForm() {
           size="lg"
           onClick={handleAnalyze}
           disabled={productImages.length === 0}
-          className="w-full"
+          className="h-14 w-full rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#13151a] disabled:bg-[#9a9ca3] disabled:text-white"
         >
+          <Sparkles className="mr-2 h-4 w-4" />
           {t('analyze')}
         </Button>
       )
@@ -737,7 +825,7 @@ export function StudioGenesisForm() {
         <Button
           size="lg"
           disabled
-          className="w-full"
+          className="h-14 w-full rounded-2xl bg-[#9a9ca3] text-base font-semibold text-white"
         >
           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           {t('steps.analyze')}
@@ -747,31 +835,39 @@ export function StudioGenesisForm() {
 
     if (phase === 'preview') {
       return (
-        <div className="space-y-3">
-          {/* Turbo Boost */}
-          <div className="flex items-center justify-between p-3 rounded-xl border bg-card">
-            <div>
-              <p className="text-sm font-semibold">{t('turboBoost')}</p>
-              <p className="text-xs text-muted-foreground">{t('turboBoostDesc')}</p>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between rounded-3xl border border-[#d0d4dc] bg-white px-4 py-3.5">
+            <div className="flex items-center gap-3">
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${turboEnabled ? 'bg-[#e7f8ee] text-[#22b968]' : 'bg-[#eceef2] text-[#7a7f8b]'}`}>
+                <Zap className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? 'Turbo 加速模式' : t('turboBoost')}</p>
+                <p className="text-[13px] text-[#7d818d]">{isZh ? '更快、更稳定' : t('turboBoostDesc')}</p>
+              </div>
             </div>
             <Switch
               checked={turboEnabled}
               onCheckedChange={setTurboEnabled}
+              className="h-8 w-14 border-0 data-[state=checked]:bg-[#1a1d24] data-[state=unchecked]:bg-[#d8d9dd]"
             />
-          </div>
-
-          <div className="flex justify-end">
-            <CreditCostBadge cost={totalCost} />
           </div>
 
           <Button
             size="lg"
             onClick={handleGenerate}
             disabled={insufficientCredits}
-            className="w-full"
+            className="h-14 w-full rounded-3xl bg-[#171a22] text-[17px] font-semibold text-white hover:bg-[#11131a] disabled:bg-[#9ca1ad]"
           >
-            {t('confirmGenerate', { count: editableImagePlans.length, cost: totalCost })}
+            <ArrowRight className="mr-2 h-5 w-5" />
+            {isZh
+              ? `确认生成 ${editableImagePlans.length} 张图片`
+              : `Generate ${editableImagePlans.length} ${editableImagePlans.length > 1 ? 'images' : 'image'}`}
           </Button>
+
+          <p className="text-center text-[14px] text-[#7b808c]">
+            {isZh ? `消耗 ${totalCost} 积分` : `Cost ${totalCost} credits`}
+          </p>
 
           {insufficientCredits && (
             <div className="text-center">
@@ -787,12 +883,12 @@ export function StudioGenesisForm() {
           )}
 
           <Button
-            variant="ghost"
-            size="sm"
+            variant="outline"
+            size="lg"
             onClick={handleBackToInput}
-            className="w-full"
+            className="h-14 w-full rounded-3xl border-[#d9dde4] bg-[#f1f3f6] text-[17px] font-semibold text-[#1e2128] hover:bg-[#e8ebf0]"
           >
-            <ArrowLeft className="h-4 w-4 mr-1" />
+            <ArrowLeft className="mr-2 h-5 w-5" />
             {t('backToEdit')}
           </Button>
         </div>
@@ -802,11 +898,20 @@ export function StudioGenesisForm() {
     if (phase === 'generating') {
       return (
         <div className="space-y-3">
-          <Button size="lg" disabled className="w-full">
+          <Button
+            size="lg"
+            disabled
+            className="h-14 w-full rounded-3xl bg-[#8f9199] text-[17px] font-semibold text-white"
+          >
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             {t('steps.generate')}
           </Button>
-          <Button variant="outline" size="sm" onClick={handleStop} className="w-full">
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handleStop}
+            className="h-14 w-full rounded-3xl border-[#d9dde4] bg-[#f1f3f6] text-[17px] font-semibold text-[#1e2128] hover:bg-[#e8ebf0]"
+          >
             {tc('stop')}
           </Button>
         </div>
@@ -816,11 +921,20 @@ export function StudioGenesisForm() {
     // complete
     return (
       <div className="space-y-3">
-        <Button size="lg" onClick={handleNewGeneration} className="w-full">
+        <Button
+          size="lg"
+          onClick={handleNewGeneration}
+          className="h-14 w-full rounded-3xl bg-[#111318] text-[17px] font-semibold text-white hover:bg-[#0a0b10]"
+        >
           {t('newGeneration')}
         </Button>
         {analysisBlueprint && (
-          <Button variant="outline" size="sm" onClick={handleBackToPreview} className="w-full">
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handleBackToPreview}
+            className="h-14 w-full rounded-3xl border-[#d9dde4] bg-[#f1f3f6] text-[17px] font-semibold text-[#1e2128] hover:bg-[#e8ebf0]"
+          >
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t('backToEdit')}
           </Button>
@@ -833,21 +947,25 @@ export function StudioGenesisForm() {
   const renderRightPanel = () => {
     if (phase === 'input') {
       return (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-8 text-center text-muted-foreground min-h-[400px]">
-          <ImageIcon className="h-12 w-12 mb-4 opacity-30" />
-          <p className="text-sm">{t('emptyState')}</p>
+        <div className="flex min-h-[520px] flex-col items-center justify-center px-4 text-center">
+          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#ececef] text-[#7f8390]">
+            <Sparkles className="h-8 w-8" />
+          </div>
+          <p className="max-w-[320px] text-base leading-7 text-[#7b808c]">{t('emptyState')}</p>
         </div>
       )
     }
 
     if (phase === 'analyzing') {
       return (
-        <div className="space-y-6">
-          <AnalyzingAnimation messages={analyzingMessages} />
-          <div className="max-w-md mx-auto">
-            <GenerationProgress steps={steps} overallProgress={progress} errorMessage={errorMessage} />
-          </div>
-        </div>
+        <CoreProcessingStatus
+          title={isZh ? '分析中...' : 'Analyzing...'}
+          subtitle={isZh ? '正在分析产品并生成设计规范' : 'Analyzing product and generating design specs'}
+          progress={progress}
+          statusLine={analyzingMessages[analyzingMessageIndex] ?? ''}
+          showHeader={false}
+          statusPlacement="below"
+        />
       )
     }
 
@@ -865,16 +983,33 @@ export function StudioGenesisForm() {
     }
 
     if (phase === 'generating') {
+      const activeStepLabel =
+        [...steps].reverse().find((step) => step.status === 'active')?.label
+      const generatingStatusLine = isZh
+        ? '正在模拟物理级光影分布...'
+        : (activeStepLabel ?? 'Simulating physically accurate light distribution...')
+
       return (
         <div className="space-y-6">
-          <div className="max-w-md mx-auto rounded-xl border p-5">
-            <GenerationProgress steps={steps} overallProgress={progress} errorMessage={errorMessage} />
-          </div>
+          <CoreProcessingStatus
+            title={isZh ? '生成中...' : 'Generating...'}
+            subtitle={isZh ? '正在根据规划生成图片' : 'Generating images from the approved blueprint'}
+            progress={progress}
+            statusLine={generatingStatusLine}
+            showHeader={false}
+            statusPlacement="below"
+          />
 
           {imageSlots.length > 0 && (
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
               {imageSlots.map((slot, i) => (
-                <ImageSlotCard key={slot.jobId || `slot-${i}`} slot={slot} index={i} />
+                <ImageSlotCard
+                  key={slot.jobId || `slot-${i}`}
+                  slot={slot}
+                  index={i}
+                  aspectRatio={aspectRatio}
+                  isZh={isZh}
+                />
               ))}
             </div>
           )}
@@ -886,7 +1021,7 @@ export function StudioGenesisForm() {
     return (
       <div className="space-y-6">
         {results.length > 0 && (
-          <ResultGallery images={results} />
+          <ResultGallery images={results} aspectRatio={aspectRatio} />
         )}
 
         {/* Show failed slots */}
@@ -926,154 +1061,181 @@ export function StudioGenesisForm() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="text-center">
-        <h1 className="text-2xl font-bold mb-1">{t('title')}</h1>
-        <p className="text-muted-foreground">{t('description')}</p>
-      </div>
+    <CorePageShell maxWidthClass="max-w-[1360px]" contentClassName="space-y-7">
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-4 py-1.5 text-xs font-medium text-[#202227]">
+            <Sparkles className="h-4 w-4" />
+            <span>{isZh ? 'AI 组图生成' : 'AI Product Gallery'}</span>
+          </div>
+          <h1 className="mt-5 text-3xl font-semibold tracking-tight text-[#17181d] sm:text-4xl">{t('title')}</h1>
+          <p className="mx-auto mt-3 max-w-4xl text-sm leading-relaxed text-[#70727a] sm:text-base">{t('description')}</p>
+        </div>
 
-      {/* Step Indicator */}
-      <StepIndicator currentPhase={phase} />
+        <StepIndicator currentPhase={phase} locale={locale} />
 
-      {/* Fixed dual-column layout */}
-      <div className="grid gap-6" style={{ gridTemplateColumns: '420px 1fr' }}>
-        {/* ── Left panel (always visible) ── */}
-        <div className="space-y-5">
-          {/* Product Source */}
-          <fieldset disabled={leftPanelDisabled}>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>{tc('productImage')}</Label>
-                <span className="text-xs text-muted-foreground">{productImages.length}/6</span>
+        <div className="grid gap-6 xl:grid-cols-[540px_minmax(0,1fr)]">
+          <div className="space-y-5">
+            <fieldset disabled={leftPanelDisabled}>
+              <div className={`${leftCardClass} ${leftPanelDisabled ? 'opacity-70' : ''}`}>
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-[15px] font-semibold text-[#1a1d24]">{tc('productImage')}</h3>
+                    <p className="text-[13px] text-[#7d818d]">{isZh ? '上传清晰的产品图片' : tc('uploadSublabel')}</p>
+                  </div>
+                  <span className="text-[13px] text-[#6f7380]">{productImages.length}/6</span>
+                </div>
+                <MultiImageUploader
+                  images={productImages}
+                  onAdd={handleAddImages}
+                  onRemove={handleRemoveImage}
+                  maxImages={6}
+                  compactAfterUpload
+                  thumbnailGridCols={3}
+                  showIndexBadge
+                  label={isZh ? '多图上传建议仅上传必要的视角或sku图，图片不是越多越好' : tc('uploadLabel')}
+                  hideDefaultFooter={isZh}
+                  footerText={`${productImages.length}/6 images · max 10 MB each`}
+                  dropzoneClassName="min-h-[186px] rounded-[20px] border-[#d0d4dc] bg-[#f1f3f6] px-6 py-8 hover:border-[#bcc2ce] hover:bg-[#eef1f4]"
+                  labelClassName={isZh ? 'max-w-[260px] text-sm leading-6 text-[#2b2f38]' : undefined}
+                  footerClassName="text-xs text-[#8b8f99]"
+                />
               </div>
-              <MultiImageUploader
-                images={productImages}
-                onAdd={handleAddImages}
-                onRemove={handleRemoveImage}
-                maxImages={6}
-                label={tc('uploadLabel')}
+            </fieldset>
+
+            <div className={leftCardClass}>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? '组图要求' : 'Requirements'}</h3>
+                  <p className="text-[13px] text-[#7d818d]">{isZh ? '描述您的产品信息和期望的图片风格' : 'Describe your product and desired image style'}</p>
+                </div>
+              </div>
+
+              <Textarea
+                id="sg-req"
+                placeholder={isZh
+                  ? '建议输入：产品名称、卖点、目标人群、详情图风格等\n\n例如：这是一款日式抹茶沐浴露，主打天然成分和舒缓放松功效，目标人群为25-40岁女性白领，希望详情图风格简约高级...'
+                  : tc('requirementsPlaceholder')}
+                value={requirements}
+                onChange={(e) => setRequirements(e.target.value)}
+                rows={5}
+                disabled={leftPanelDisabled}
+                className="min-h-[128px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] leading-6"
               />
-              <p className="text-xs text-muted-foreground">{tc('uploadSublabel')}</p>
-            </div>
-          </fieldset>
 
-          {/* Design Brief */}
-          <div className="space-y-2">
-            <Label htmlFor="sg-req">{t('designBrief')}</Label>
-            <Textarea
-              id="sg-req"
-              placeholder={tc('requirementsPlaceholder')}
-              value={requirements}
-              onChange={(e) => setRequirements(e.target.value)}
-              rows={3}
-              disabled={leftPanelDisabled}
-            />
-          </div>
+              <div className="mt-4 space-y-1.5">
+                <Label className="text-[13px] font-medium text-[#5a5e6b]">{t('outputLanguage')}</Label>
+                <Select
+                  value={outputLanguage}
+                  onValueChange={(v) => setOutputLanguage(v as OutputLanguage)}
+                  disabled={leftParamsDisabled}
+                >
+                  <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {OUTPUT_LANGUAGES.map((lang) => (
+                      <SelectItem key={lang.value} value={lang.value}>{lang.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {/* Output Language */}
-          <div className="space-y-2">
-            <Label>{t('outputLanguage')}</Label>
-            <Select
-              value={outputLanguage}
-              onValueChange={(v) => setOutputLanguage(v as OutputLanguage)}
-              disabled={leftParamsDisabled}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {OUTPUT_LANGUAGES.map((lang) => (
-                  <SelectItem key={lang.value} value={lang.value}>{lang.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('model')}</Label>
+                  <Select
+                    value={model}
+                    onValueChange={(v) => setModel(v as GenerationModel)}
+                    disabled={leftParamsDisabled}
+                  >
+                    <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="flux-kontext-pro">FLUX.1 Kontext Pro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('aspectRatio')}</Label>
+                  <Select
+                    value={aspectRatio}
+                    onValueChange={(v) => setAspectRatio(v as AspectRatio)}
+                    disabled={leftParamsDisabled}
+                  >
+                    <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ASPECT_RATIOS.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('imageSize')}</Label>
+                  <Select
+                    value={imageSize}
+                    onValueChange={(v) => setImageSize(v as ImageSize)}
+                    disabled={leftParamsDisabled}
+                  >
+                    <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {RESOLUTION_OPTIONS.map((opt) => (
+                        <SelectItem
+                          key={opt.value}
+                          value={opt.value}
+                          disabled={false}
+                        >
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('imageCount')}</Label>
+                  <Select
+                    value={String(imageCount)}
+                    onValueChange={(v) => setImageCount(Number(v))}
+                    disabled={leftParamsDisabled}
+                  >
+                    <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {IMAGE_COUNTS.map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n} {locale === 'zh' ? ' 张' : (n === 1 ? ' Image' : ' Images')}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
 
-          {/* Model + Aspect Ratio */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>{tc('model')}</Label>
-              <Select
-                value={model}
-                onValueChange={(v) => setModel(v as GenerationModel)}
-                disabled={leftParamsDisabled}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="nano-banana">Nano Banana</SelectItem>
-                  <SelectItem value="nano-banana-pro">Nano Banana Pro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>{tc('aspectRatio')}</Label>
-              <Select
-                value={aspectRatio}
-                onValueChange={(v) => setAspectRatio(v as AspectRatio)}
-                disabled={leftParamsDisabled}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ASPECT_RATIOS.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Resolution + Quantity */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>{tc('imageSize')}</Label>
-              <Select
-                value={imageSize}
-                onValueChange={(v) => setImageSize(v as ImageSize)}
-                disabled={leftParamsDisabled}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {RESOLUTION_OPTIONS.map((opt) => (
-                    <SelectItem
-                      key={opt.value}
-                      value={opt.value}
-                      disabled={opt.proOnly && model !== 'nano-banana-pro'}
-                    >
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>{tc('imageCount')}</Label>
-              <Select
-                value={String(imageCount)}
-                onValueChange={(v) => setImageCount(Number(v))}
-                disabled={leftParamsDisabled}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {IMAGE_COUNTS.map((n) => (
-                    <SelectItem key={n} value={String(n)}>
-                      {n} {n === 1 ? 'Image' : 'Images'}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="pt-2">
             {renderLeftButton()}
           </div>
-        </div>
 
-        {/* ── Right panel (dynamic content) ── */}
-        <div className="min-h-[400px]">
-          {renderRightPanel()}
+          <div className="flex min-h-[760px] flex-col rounded-[30px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-[15px] font-semibold text-[#1a1d24]">{rightPanelTitle}</h3>
+                <p className="text-[13px] text-[#7d818d]">{rightPanelSubtitle}</p>
+              </div>
+            </div>
+            <div className="flex-1">
+              {renderRightPanel()}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+    </CorePageShell>
   )
 }

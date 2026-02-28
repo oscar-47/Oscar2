@@ -1,10 +1,9 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
-import { useTranslations, useLocale } from 'next-intl'
-import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { useDropzone, type FileRejection } from 'react-dropzone'
-import { Loader2, Plus, Download, Wand2, FileText, Upload, X } from 'lucide-react'
+import { Loader2, Plus, Download, Sparkles, FileText, Upload, X, ImageIcon, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -16,13 +15,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { CreditCostBadge } from '@/components/generation/CreditCostBadge'
+import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
+import { CorePageShell } from '@/components/studio/CorePageShell'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import type { AspectRatio, BackgroundMode, GenerationJob, GenerationModel, ImageSize } from '@/types'
 import { DEFAULT_CREDIT_COSTS } from '@/types'
+import { SectionIcon } from '@/components/shared/SectionIcon'
+import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
 
 type Phase = 'idle' | 'running' | 'success' | 'failed'
 type CardStatus = 'loading' | 'success' | 'failed'
@@ -42,8 +44,15 @@ function fileExt(name: string): string {
 
 function isAllowedProductFile(file: File): boolean {
   const ext = fileExt(file.name)
-  const extAllowed = ext === '.jpg' || ext === '.png'
-  const mimeAllowed = file.type === 'image/jpeg' || file.type === 'image/png'
+  const extAllowed = ext === '.jpg' || ext === '.jpeg' || ext === '.png'
+  const normalizedMime = file.type.toLowerCase()
+  // Some files may have an empty MIME type in certain browser/system combinations.
+  const mimeAllowed =
+    normalizedMime === '' ||
+    normalizedMime === 'image/jpeg' ||
+    normalizedMime === 'image/jpg' ||
+    normalizedMime === 'image/pjpeg' ||
+    normalizedMime === 'image/png'
   return extAllowed && mimeAllowed && file.size <= MAX_SIZE_BYTES
 }
 
@@ -56,6 +65,12 @@ function triggerDirectDownload(url: string, filename: string): void {
   document.body.appendChild(a)
   a.click()
   a.remove()
+}
+
+function toCssAspectRatio(aspectRatio: AspectRatio): string {
+  const [w, h] = aspectRatio.split(':').map((v) => Number(v))
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return '4 / 3'
+  return `${w} / ${h}`
 }
 
 function waitForJob(
@@ -160,15 +175,13 @@ function normalizeCardsFromJob(job: GenerationJob, fallbackCount: number): {
 export function RefinementStudioForm() {
   const t = useTranslations('studio.refinementStudio')
   const tc = useTranslations('studio.common')
-  const locale = useLocale()
-  const router = useRouter()
   const { total } = useCredits()
 
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [userPrompt, setUserPrompt] = useState('')
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>('white')
-  const [model, setModel] = useState<GenerationModel>('doubao-seedream-4.5')
+  const [model, setModel] = useState<GenerationModel>('flux-kontext-pro')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [imageSize, setImageSize] = useState<ImageSize>('2K')
   const [turboEnabled, setTurboEnabled] = useState(false)
@@ -184,11 +197,14 @@ export function RefinementStudioForm() {
   const uploadedUrlsRef = useRef<string[]>([])
 
   const expectedCount = productImages.length
-  const unitCost = DEFAULT_CREDIT_COSTS[model] ?? 5
+  const baseCost = Math.max(DEFAULT_CREDIT_COSTS[model] ?? 5, 5)
+  const turboExtra = imageSize === '1K' ? 8 : imageSize === '2K' ? 12 : 16
+  const unitCost = turboEnabled ? baseCost + turboExtra : baseCost
   const totalCost = unitCost * Math.max(1, expectedCount)
   const insufficientCredits = total !== null && total < totalCost
   const isRunning = phase === 'running'
   const canGenerate = expectedCount > 0 && !isRunning && !insufficientCredits
+  const previewAspectRatio = toCssAspectRatio(aspectRatio)
 
   const addProductImages = useCallback((files: File[]) => {
     const remaining = Math.max(0, MAX_IMAGES - productImages.length)
@@ -228,7 +244,8 @@ export function RefinementStudioForm() {
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     accept: {
-      'image/jpeg': ['.jpg'],
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/jpg': ['.jpg', '.jpeg'],
       'image/png': ['.png'],
     },
     maxSize: MAX_SIZE_BYTES,
@@ -406,69 +423,77 @@ export function RefinementStudioForm() {
     }
   }
 
+  const panelClass = 'rounded-[28px] border border-[#d0d4dc] bg-white'
+  const selectTriggerClass = 'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] text-[#1b1f26] shadow-none'
+  const resultPanelTitle = phase === 'running' ? '分析中...' : t('resultTitle')
+  const resultPanelSubtitle = phase === 'running' ? '正在分析产品并生成设计规范' : t('resultSubtitle')
+
   return (
-    <div className="mx-auto max-w-7xl space-y-4">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold mb-1">{t('title')}</h1>
-        <p className="text-muted-foreground">{t('description')}</p>
+    <CorePageShell maxWidthClass="max-w-[1360px]" contentClassName="space-y-8">
+      <div className="pt-4 text-center">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-4 py-1.5 text-xs font-medium text-[#1e2127]">
+          <Sparkles className="h-4 w-4" />
+          <span>{t('heroBadge')}</span>
+        </div>
+        <h1 className="mt-5 text-3xl font-semibold tracking-tight text-[#17181d] sm:text-4xl">{t('title')}</h1>
+        <p className="mx-auto mt-3 max-w-[900px] text-sm leading-relaxed text-[#5f6672] sm:text-base">{t('description')}</p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[340px_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
         <div className="space-y-4">
-          <section className="rounded-3xl border bg-card p-4">
+          <section className={`${panelClass} p-5`}>
             <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-semibold">{tc('productImage')}</p>
-                <p className="text-xs text-muted-foreground">{t('productUploadSubtitle')}</p>
+              <div className="flex items-start gap-3">
+                <SectionIcon icon={ImageIcon} className="mt-0.5" />
+                <div>
+                  <p className="text-[15px] font-semibold text-[#1a1d24]">{tc('productImage')}</p>
+                  <p className="text-[13px] text-[#666d79]">{t('productUploadSubtitle')}</p>
+                </div>
               </div>
-              <span className="text-xs text-muted-foreground">{productImages.length}/{MAX_IMAGES}</span>
+              <span className="text-[13px] text-[#616875]">{productImages.length}/{MAX_IMAGES}</span>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-4">
               {productImages.length === 0 ? (
                 <div
                   {...getRootProps()}
-                  className={`rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
-                    isDragActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                  className={`cursor-pointer rounded-[24px] border-2 border-dashed p-8 text-center transition-colors ${
+                    isDragActive ? 'border-[#8d94a2] bg-[#e9edf2]' : 'border-[#d0d4dc] bg-[#f1f3f6] hover:border-[#8e96a4]'
                   }`}
                   onClick={open}
                 >
                   <input {...getInputProps()} />
-                  <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                    <Upload className="h-5 w-5 text-muted-foreground" />
+                  <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[#ebedf0]">
+                    <Upload className="h-6 w-6 text-[#70747d]" />
                   </div>
-                  <p className="text-sm text-muted-foreground">{t('uploadDropLabel')}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t('uploadDropMeta', { count: productImages.length, maxImages: MAX_IMAGES, maxSize: MAX_SIZE_MB })}
-                  </p>
+                  <p className="text-[15px] font-medium text-[#2f333b]">{t('uploadDropLabel')}</p>
+                  <p className="mt-1 text-[13px] text-[#686f7c]">{t('uploadDropMeta')}</p>
                 </div>
               ) : (
                 <div
                   {...getRootProps()}
-                  className={`rounded-2xl border p-2 ${isDragActive ? 'border-primary bg-primary/5' : 'border-border'}`}
+                  className={`rounded-[24px] border p-3 ${
+                    isDragActive ? 'border-[#8d94a2] bg-[#e9edf2]' : 'border-[#d0d4dc] bg-[#f1f3f6]'
+                  }`}
                 >
                   <input {...getInputProps()} />
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2.5">
                     {productImages.map((img, i) => (
-                      <div key={img.previewUrl} className="relative h-11 w-11">
-                        <img src={img.previewUrl} alt={`product-${i + 1}`} className="h-full w-full rounded-full object-cover border" />
-                        {!isRunning && (
-                          <button
-                            type="button"
-                            onClick={() => removeProductImage(i)}
-                            className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-white"
-                          >
-                            <X className="h-2.5 w-2.5" />
-                          </button>
-                        )}
-                      </div>
+                      <ImageThumbnail
+                        key={img.previewUrl}
+                        src={img.previewUrl}
+                        alt={`product-${i + 1}`}
+                        size="sm"
+                        onRemove={() => removeProductImage(i)}
+                        disabled={isRunning}
+                      />
                     ))}
                     {productImages.length < MAX_IMAGES && (
                       <button
                         type="button"
                         onClick={open}
                         disabled={isRunning}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-dashed text-muted-foreground hover:bg-muted disabled:opacity-50"
+                        className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-[#c8ccd4] text-[#6f737c] transition-colors hover:bg-[#eceef2] disabled:opacity-50"
                       >
                         <Plus className="h-4 w-4" />
                       </button>
@@ -476,48 +501,44 @@ export function RefinementStudioForm() {
                   </div>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mt-2">{t('uploadSupportHint')}</p>
-              {uploadError && <p className="text-xs text-destructive mt-1">{uploadError}</p>}
+              <p className="mt-3 text-[13px] text-[#5f6672]">{t('uploadSupportHint')}</p>
+              {uploadError && <p className="mt-1 text-xs text-destructive">{uploadError}</p>}
             </div>
           </section>
 
-          <section className="rounded-3xl border bg-card p-4 space-y-3">
-            <div className="flex items-start gap-2">
-              <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </div>
+          <section className={`${panelClass} p-5`}>
+            <div className="flex items-start gap-3">
+              <SectionIcon icon={FileText} className="mt-0.5" />
               <div>
-                <p className="text-base font-semibold leading-5">{t('requirementsTitle')}</p>
-                <p className="text-sm text-muted-foreground">{t('requirementsSubtitle')}</p>
+                <p className="text-[15px] font-semibold text-[#1a1d24]">{t('requirementsTitle')}</p>
+                <p className="text-[13px] text-[#666d79]">{t('requirementsSubtitle')}</p>
               </div>
             </div>
+
             <Textarea
               value={userPrompt}
               onChange={(e) => setUserPrompt(e.target.value)}
               rows={4}
               placeholder={t('requirementsExample')}
               disabled={isRunning}
-              className="rounded-2xl border-2 border-border bg-background shadow-sm"
+              className="mt-4 resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] px-4 py-3 text-[14px] text-[#20242c] placeholder:text-[#7c8390] focus-visible:ring-0 focus-visible:ring-offset-0"
             />
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-2 gap-3">
               <div>
-                <Label>{tc('model')}</Label>
+                <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{tc('model')}</Label>
                 <Select value={model} onValueChange={(v) => setModel(v as GenerationModel)} disabled={isRunning}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="nano-banana">Nano Banana</SelectItem>
-                    <SelectItem value="nano-banana-pro">Nano Banana Pro</SelectItem>
-                    <SelectItem value="doubao-seedream-4.5">Doubao Seedream 4.5</SelectItem>
-                    <SelectItem value="doubao-seedream-5.0-lite">Doubao Seedream 5.0 Lite</SelectItem>
+                    <SelectItem value="flux-kontext-pro">FLUX.1 Kontext Pro</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <Label>{t('backgroundMode')}</Label>
+                <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{t('backgroundMode')}</Label>
                 <Select value={backgroundMode} onValueChange={(v) => setBackgroundMode(v as BackgroundMode)} disabled={isRunning}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="white">{t('backgroundWhite')}</SelectItem>
                     <SelectItem value="original">{t('backgroundOriginal')}</SelectItem>
@@ -526,9 +547,9 @@ export function RefinementStudioForm() {
               </div>
 
               <div>
-                <Label>{tc('aspectRatio')}</Label>
+                <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{tc('aspectRatio')}</Label>
                 <Select value={aspectRatio} onValueChange={(v) => setAspectRatio(v as AspectRatio)} disabled={isRunning}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {(['1:1', '3:4', '4:3', '16:9', '9:16', '3:2', '2:3', '21:9'] as AspectRatio[]).map((ratio) => (
                       <SelectItem key={ratio} value={ratio}>{ratio}</SelectItem>
@@ -538,9 +559,9 @@ export function RefinementStudioForm() {
               </div>
 
               <div>
-                <Label>{tc('imageSize')}</Label>
+                <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{tc('imageSize')}</Label>
                 <Select value={imageSize} onValueChange={(v) => setImageSize(v as ImageSize)} disabled={isRunning}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="1K">1K</SelectItem>
                     <SelectItem value="2K">2K</SelectItem>
@@ -549,79 +570,108 @@ export function RefinementStudioForm() {
                 </Select>
               </div>
             </div>
+          </section>
 
-            <div className="rounded-2xl border p-3 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold">{t('turboTitle')}</p>
-                <p className="text-xs text-muted-foreground">{t('turboDesc')}</p>
+          <section className={`${panelClass} p-4`}>
+            <div className="flex items-center justify-between rounded-[16px] border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-2.5">
+              <div className="flex items-start gap-2">
+                <div className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full ${turboEnabled ? 'bg-[#e7f8ee] text-[#22b968]' : 'bg-[#eceef2] text-[#6f737c]'}`}>
+                  <Zap className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <p className="text-[14px] font-semibold text-[#1a1d24]">{t('turboTitle')}</p>
+                  <p className="text-[12px] text-[#636b78]">{t('turboDesc')}</p>
+                </div>
               </div>
-              <Switch checked={turboEnabled} onCheckedChange={setTurboEnabled} disabled />
+              <Switch
+                checked={turboEnabled}
+                onCheckedChange={setTurboEnabled}
+                className="h-8 w-14 border-0 data-[state=checked]:bg-[#1a1d24] data-[state=unchecked]:bg-[#d8d9dd]"
+              />
             </div>
 
-            {isRunning ? (
-              <div className="grid grid-cols-2 gap-2">
-                <Button className="w-full" disabled>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t('generating')}
-                </Button>
+            <div className="mt-4">
+              {isRunning ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button className="h-12 w-full rounded-2xl bg-[#8e9096] text-white hover:bg-[#84868d]" disabled>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {t('generating')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-12 rounded-2xl border-[#d0d3da] bg-[#f4f5f6] text-[#242830]"
+                    onClick={() => {
+                      abortRef.current?.abort()
+                      setPhase('idle')
+                      setProgress(0)
+                    }}
+                  >
+                    {tc('stop')}
+                  </Button>
+                </div>
+              ) : (
                 <Button
-                  variant="outline"
-                  onClick={() => {
-                    abortRef.current?.abort()
-                    setPhase('idle')
-                    setProgress(0)
-                  }}
+                  className="h-12 w-full rounded-2xl bg-[#191b22] text-white hover:bg-[#13151a] disabled:bg-[#9a9ca3] disabled:text-white"
+                  disabled={!canGenerate}
+                  onClick={handleSubmit}
                 >
-                  {tc('stop')}
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  {t('generate')}
                 </Button>
-              </div>
-            ) : (
-              <Button className="w-full" disabled={!canGenerate} onClick={handleSubmit}>
-                <Wand2 className="mr-2 h-4 w-4" />
-                {t('generateBatchCount', { count: Math.max(1, expectedCount) })}
-              </Button>
-            )}
-
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{t('eta', { seconds: 7 })}</span>
-              <CreditCostBadge cost={totalCost} />
+              )}
             </div>
 
             {insufficientCredits && (
-              <button className="text-xs text-primary underline" onClick={() => router.push(`/${locale}/pricing`)}>
-                {tc('buyCredits')}
-              </button>
+              <p className="mt-2 text-xs text-destructive">{tc('insufficientCredits')}</p>
             )}
           </section>
         </div>
 
-        <div className="rounded-3xl border bg-card p-4 sm:p-5 min-h-[760px]">
-          <h2 className="mb-3 text-sm font-semibold">{t('resultTitle')}</h2>
+        <div className={`${panelClass} min-h-[840px] p-5 sm:p-6`}>
+          <div className="mb-4 flex items-start gap-3">
+            <SectionIcon icon={Sparkles} className="mt-0.5" />
+            <div>
+              <h2 className="text-[15px] font-semibold text-[#1a1d24]">{resultPanelTitle}</h2>
+              <p className="text-[13px] text-[#666d79]">{resultPanelSubtitle}</p>
+            </div>
+          </div>
 
           {phase === 'running' && (
-            <div className="space-y-3">
-              <div className="h-1.5 overflow-hidden rounded bg-muted">
-                <div className="h-full bg-foreground transition-all" style={{ width: `${progress}%` }} />
-              </div>
-              <p className="text-center text-xs text-muted-foreground">{statusLine}</p>
-            </div>
+            <CoreProcessingStatus
+              title="分析中..."
+              subtitle="正在分析产品并生成设计规范"
+              progress={progress}
+              statusLine={statusLine}
+              showHeader={false}
+              statusPlacement="below"
+            />
           )}
 
           {phase === 'failed' && errorMessage && (
-            <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive mb-3">
+            <div className="mb-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
               {errorMessage}
             </div>
           )}
 
           {phase === 'idle' && cards.length === 0 ? (
-            <div className="flex min-h-[520px] items-center justify-center">
-              <div className="text-center text-sm text-muted-foreground">{t('waiting')}</div>
+            <div className="flex min-h-[620px] items-center justify-center">
+              <div className="text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#e8eaef] text-[#767b86]">
+                  <Sparkles className="h-8 w-8" />
+                </div>
+                <p className="text-[15px] text-[#5f6672]">{t('waiting')}</p>
+                <p className="mt-1 text-[15px] text-[#5f6672]">{t('waitingActionHint')}</p>
+              </div>
             </div>
           ) : (
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
               {cards.map((card, i) =>
                 card.status === 'success' && card.url ? (
-                  <div key={i} className="group relative overflow-hidden rounded-2xl border bg-muted">
+                  <div
+                    key={i}
+                    className="group relative overflow-hidden rounded-2xl border border-[#d2d6de] bg-[#eef0f4]"
+                    style={{ aspectRatio: previewAspectRatio }}
+                  >
                     <img src={card.url} alt={`result-${i + 1}`} className="w-full object-cover" />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
@@ -639,8 +689,12 @@ export function RefinementStudioForm() {
                     {card.error ?? tc('error')}
                   </div>
                 ) : (
-                  <div key={i} className="flex h-[240px] items-center justify-center rounded-2xl border bg-muted/30">
-                    <Loader2 className="h-5 w-5 animate-spin" />
+                  <div
+                    key={i}
+                    className="flex items-center justify-center rounded-2xl border border-[#d0d4db] bg-[#eff1f4]"
+                    style={{ aspectRatio: previewAspectRatio }}
+                  >
+                    <Loader2 className="h-5 w-5 animate-spin text-[#6f737c]" />
                   </div>
                 )
               )}
@@ -648,9 +702,10 @@ export function RefinementStudioForm() {
           )}
 
           {cards.length > 0 && phase !== 'running' && (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 mt-3">
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <Button
                 variant="outline"
+                className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
                 onClick={downloadAll}
                 disabled={!cards.some((x) => x.status === 'success') || downloadingAll || downloadingIndex !== null}
               >
@@ -659,6 +714,7 @@ export function RefinementStudioForm() {
               </Button>
               <Button
                 variant="outline"
+                className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
                 onClick={retryFailed}
                 disabled={!cards.some((x) => x.status === 'failed') || downloadingAll || downloadingIndex !== null}
               >
@@ -666,6 +722,7 @@ export function RefinementStudioForm() {
               </Button>
               <Button
                 variant="outline"
+                className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
                 onClick={handleSubmit}
                 disabled={!canGenerate || downloadingAll || downloadingIndex !== null}
               >
@@ -676,6 +733,6 @@ export function RefinementStudioForm() {
           )}
         </div>
       </div>
-    </div>
+    </CorePageShell>
   )
 }

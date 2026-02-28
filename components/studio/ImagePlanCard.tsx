@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, Pencil } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { ChevronDown } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import type { BlueprintImagePlan } from '@/types'
 import { cn } from '@/lib/utils'
@@ -18,34 +17,30 @@ export function ImagePlanCard({ index, plan, onChange, disabled = false }: Image
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="rounded-2xl border bg-card p-5">
+    <div className="rounded-[24px] border border-[#d0d4dc] bg-white p-5">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-4 flex-1 min-w-0">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-base font-semibold">
-            {index + 1}
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2]">
+            <span className="text-[14px] font-semibold text-[#1a1d24]">{index + 1}</span>
           </div>
-          <div className="space-y-2 flex-1 min-w-0">
-            <div className="relative">
-              <Input
-                value={plan.title}
-                onChange={(e) => onChange({ ...plan, title: e.target.value })}
-                disabled={disabled}
-                className="pr-10 text-lg font-semibold"
-              />
-              <Pencil className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          {!open && (
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <h4 className="truncate text-[15px] font-semibold text-[#1a1d24]">{plan.title}</h4>
+              <p className="line-clamp-2 text-[13px] leading-5 text-[#7d818d]">{plan.description}</p>
             </div>
-            <Input
-              value={plan.description}
-              onChange={(e) => onChange({ ...plan, description: e.target.value })}
-              disabled={disabled}
-              className="text-base text-muted-foreground"
-            />
-          </div>
+          )}
+          {open && (
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-[#7d818d]">
+                {plan.title || `Image ${index + 1}`}
+              </p>
+            </div>
+          )}
         </div>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="rounded-md p-2 text-[#7a7f8b] hover:bg-[#eceff4] hover:text-[#31343c]"
           disabled={disabled}
         >
           <ChevronDown className={cn('h-5 w-5 transition-transform', open && 'rotate-180')} />
@@ -53,14 +48,16 @@ export function ImagePlanCard({ index, plan, onChange, disabled = false }: Image
       </div>
 
       {open && (
-        <div className="mt-4 border-t pt-4">
-          <Textarea
-            value={plan.design_content}
-            onChange={(e) => onChange({ ...plan, design_content: e.target.value })}
-            disabled={disabled}
-            rows={14}
-            className="font-mono text-sm leading-6"
-          />
+        <div className="mt-4 border-t border-[#e1e4ea] pt-4">
+          <div className="space-y-3">
+            <Textarea
+              value={plan.design_content}
+              onChange={(e) => onChange({ ...plan, design_content: e.target.value })}
+              disabled={disabled}
+              rows={12}
+              className="resize-none rounded-2xl border-[#d0d4dc] bg-[#f5f6f8] text-[14px] leading-7 text-[#262a32]"
+            />
+          </div>
         </div>
       )}
     </div>

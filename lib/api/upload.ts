@@ -12,8 +12,9 @@ export interface UploadResult {
   path: string
 }
 
-function sanitizeFileName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_')
+function normalizeUploadFileName(name: string): string {
+  const sanitized = name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  return sanitized.replace(/\.jpeg$/i, '.jpg')
 }
 
 function joinUrl(base: string, path: string): string {
@@ -29,9 +30,9 @@ function joinUrl(base: string, path: string): string {
  * - POST form upload (qiniu)
  */
 export async function uploadFile(file: File): Promise<UploadResult> {
-  const key = `temp/uploads/${Date.now()}_${sanitizeFileName(file.name)}`
+  const key = `uploads/${Date.now()}_${normalizeUploadFileName(file.name)}`
   const creds: OssStsCredentials = await getOssSts({
-    prefix: 'temp/uploads',
+    prefix: 'uploads',
     key,
     bucket: 'temp',
   })

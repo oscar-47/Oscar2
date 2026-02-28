@@ -16,11 +16,18 @@ interface ResultGalleryProps {
   isLoading?: boolean
   loadingCount?: number
   className?: string
+  aspectRatio?: string
 }
 
-function SkeletonCard() {
+function toCssAspectRatio(aspectRatio: string): string {
+  const [w, h] = aspectRatio.split(':').map((v) => Number(v))
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return '4 / 3'
+  return `${w} / ${h}`
+}
+
+function SkeletonCard({ aspectRatio }: { aspectRatio: string }) {
   return (
-    <div className="aspect-[4/3] rounded-xl bg-muted animate-pulse" />
+    <div className="rounded-xl bg-muted animate-pulse" style={{ aspectRatio }} />
   )
 }
 
@@ -29,8 +36,10 @@ export function ResultGallery({
   isLoading = false,
   loadingCount = 1,
   className,
+  aspectRatio = '4:3',
 }: ResultGalleryProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const cssAspectRatio = toCssAspectRatio(aspectRatio)
 
   const openLightbox = (i: number) => setLightboxIndex(i)
   const closeLightbox = () => setLightboxIndex(null)
@@ -48,7 +57,7 @@ export function ResultGallery({
       <div className={cn('grid gap-3', className)} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         {isLoading &&
           Array.from({ length: loadingCount }).map((_, i) => (
-            <SkeletonCard key={`skel-${i}`} />
+            <SkeletonCard key={`skel-${i}`} aspectRatio={cssAspectRatio} />
           ))}
 
         {images.map((img, i) => (
@@ -57,7 +66,8 @@ export function ResultGallery({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: i * 0.08 }}
-            className="group relative aspect-[4/3] rounded-xl overflow-hidden border border-border bg-muted"
+            className="group relative rounded-xl overflow-hidden border border-border bg-muted"
+            style={{ aspectRatio: cssAspectRatio }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { Image as ImageIcon, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
+import { SectionIcon } from '@/components/shared/SectionIcon'
 import { MultiImageUploader, type UploadedImage } from '@/components/upload/MultiImageUploader'
-import { GenerationProgress, type ProgressStep } from '@/components/generation/GenerationProgress'
+import type { ProgressStep } from '@/components/generation/GenerationProgress'
+import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
 import { ResultGallery, type ResultImage } from '@/components/generation/ResultGallery'
 import { ModelImageSection } from './ModelImageSection'
 import { ClothingSettingsSection } from './ClothingSettingsSection'
@@ -13,7 +15,6 @@ import { uploadFile } from '@/lib/api/upload'
 import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationModel, AspectRatio, ImageSize, GenerationJob, ClothingPhase } from '@/types'
-import type { UploadedImage as LocalUploadedImage } from '@/components/upload/MultiImageUploader'
 
 function uid() {
   return crypto.randomUUID()
@@ -66,11 +67,11 @@ interface ModelTryOnTabProps {
 
 export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
   const [phase, setPhase] = useState<ClothingPhase>('input')
-  const [productImages, setProductImages] = useState<LocalUploadedImage[]>([])
-  const [modelImage, setModelImage] = useState<LocalUploadedImage | null>(null)
+  const [productImages, setProductImages] = useState<UploadedImage[]>([])
+  const [modelImage, setModelImage] = useState<UploadedImage | null>(null)
   const [requirements, setRequirements] = useState('')
   const [language, setLanguage] = useState('zh')
-  const [model, setModel] = useState<GenerationModel>('nano-banana-pro')
+  const [model, setModel] = useState<GenerationModel>('flux-kontext-pro')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [resolution, setResolution] = useState<ImageSize>('2K')
   const [turboEnabled, setTurboEnabled] = useState(false)
@@ -105,7 +106,6 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     setPhase('analyzing')
 
     try {
-      // 1. Upload product images and model image
       set('upload', { status: 'active' })
       const uploadedProductUrls = await Promise.all(
         productImages.map((img) => uploadFile(img.file).then((r) => r.publicUrl))
@@ -114,7 +114,6 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       set('upload', { status: 'done' })
       setProgress(30)
 
-      // 2. Analyze
       set('analyze', { status: 'active' })
       const { job_id: analysisJobId } = await analyzeProductV2({
         productImage: uploadedProductUrls[0],
@@ -130,7 +129,6 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       set('analyze', { status: 'done' })
       setProgress(70)
 
-      // 3. Generate prompts (SSE)
       set('preview', { status: 'active' })
       let promptText = ''
       const stream = await generatePromptsV2Stream(
@@ -186,13 +184,11 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     setPhase('generating')
 
     try {
-      // Re-upload (or use cached URLs if available)
       const uploadedProductUrls = await Promise.all(
         productImages.map((img) => uploadFile(img.file).then((r) => r.publicUrl))
       )
       const { publicUrl: uploadedModelUrl } = await uploadFile(modelImage!.file)
 
-      // Get prompt from preview step
       const promptText = steps.find((s) => s.id === 'preview')?.streamedText ?? ''
 
       set('generate', { status: 'active' })
@@ -236,105 +232,118 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     setErrorMessage(null)
   }, [])
 
-  return (
-    <div className="space-y-6">
-      {/* Input Phase */}
-      {phase === 'input' && (
-        <div className="space-y-5">
-          <div className="space-y-2">
-            <Label>产品图片</Label>
-            <MultiImageUploader
-              images={productImages}
-              onAdd={(files) => {
-                const newImages = files.map((f) => ({
-                  file: f,
-                  previewUrl: URL.createObjectURL(f),
-                }))
-                setProductImages((prev) => [...prev, ...newImages])
-              }}
-              onRemove={(index) => {
-                setProductImages((prev) => prev.filter((_, i) => i !== index))
-              }}
-              maxImages={5}
-              label="上传产品图片"
-            />
-          </div>
+  const handleCancel = useCallback(() => {
+    abortRef.current?.abort()
+  }, [])
 
+  // ─── Left Panel (form inputs) ───
+  const leftPanel = (
+    <>
+      <fieldset disabled={isProcessing} className="space-y-4">
+        {/* Product Image Card */}
+        <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 space-y-3">
+          <div className="flex items-center gap-3">
+            <SectionIcon icon={ImageIcon} />
+            <div className="flex-1">
+              <h3 className="text-[15px] font-semibold text-[#1a1d24]">产品图</h3>
+              <p className="text-[13px] text-[#7d818d]">上传多角度产品图或细节图</p>
+            </div>
+            <span className="text-[13px] text-[#6f7380]">{productImages.length}/5</span>
+          </div>
+          <MultiImageUploader
+            images={productImages}
+            onAdd={(files) => {
+              const newImages = files.map((f) => ({
+                file: f,
+                previewUrl: URL.createObjectURL(f),
+              }))
+              setProductImages((prev) => [...prev, ...newImages])
+            }}
+            onRemove={(index) => {
+              setProductImages((prev) => prev.filter((_, i) => i !== index))
+            }}
+            maxImages={5}
+            label="拖拽或点击上传"
+          />
+        </div>
+
+        {/* Model Image Card */}
+        <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 space-y-3">
+          <div className="flex items-center gap-3">
+            <SectionIcon icon={User} />
+            <div>
+              <h3 className="text-[15px] font-semibold text-[#1a1d24]">模特图片</h3>
+              <p className="text-[13px] text-[#7d818d]">上传模特照片或AI生成</p>
+            </div>
+          </div>
           <ModelImageSection
             modelImage={modelImage}
             onModelImageChange={setModelImage}
             onGenerateAIModel={() => setShowAIModelDialog(true)}
           />
-
-          <ClothingSettingsSection
-            requirements={requirements}
-            onRequirementsChange={setRequirements}
-            language={language}
-            onLanguageChange={setLanguage}
-            model={model}
-            onModelChange={setModel}
-            aspectRatio={aspectRatio}
-            onAspectRatioChange={setAspectRatio}
-            resolution={resolution}
-            onResolutionChange={setResolution}
-            turboEnabled={turboEnabled}
-            onTurboChange={setTurboEnabled}
-          />
-
-          <Button onClick={handleAnalyze} disabled={!canStart} className="w-full">
-            开始分析
-          </Button>
         </div>
-      )}
 
-      {/* Analyzing Phase */}
-      {phase === 'analyzing' && (
-        <div className="rounded-xl border p-5">
-          <GenerationProgress steps={steps} overallProgress={progress} errorMessage={errorMessage} />
-          <Button variant="outline" onClick={() => abortRef.current?.abort()} className="mt-4 w-full">
-            取消
+        {/* Settings Card (ClothingSettingsSection already has card styling) */}
+        <ClothingSettingsSection
+          requirements={requirements}
+          onRequirementsChange={setRequirements}
+          language={language}
+          onLanguageChange={setLanguage}
+          model={model}
+          onModelChange={setModel}
+          aspectRatio={aspectRatio}
+          onAspectRatioChange={setAspectRatio}
+          resolution={resolution}
+          onResolutionChange={setResolution}
+          turboEnabled={turboEnabled}
+          onTurboChange={setTurboEnabled}
+          disabled={isProcessing}
+        />
+      </fieldset>
+
+      {/* Action buttons */}
+      <div className="pt-3">
+        {phase === 'input' && (
+          <Button
+            onClick={handleAnalyze}
+            disabled={!canStart}
+            className="h-12 w-full rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#111318] disabled:bg-[#9a9ca3] disabled:text-white"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
+            分析产品
           </Button>
-        </div>
-      )}
-
-      {/* Preview Phase */}
-      {phase === 'preview' && (
-        <div className="space-y-4">
-          <div className="rounded-xl border p-5">
-            <GenerationProgress steps={steps} overallProgress={progress} errorMessage={errorMessage} />
-          </div>
+        )}
+        {phase === 'analyzing' && (
+          <Button variant="outline" onClick={handleCancel} className="w-full h-12 rounded-2xl">
+            取消分析
+          </Button>
+        )}
+        {phase === 'preview' && (
           <div className="flex gap-3">
-            <Button variant="outline" onClick={handleReset} className="flex-1">
+            <Button variant="outline" onClick={handleReset} className="flex-1 h-12 rounded-2xl">
               重新开始
             </Button>
-            <Button onClick={handleGenerate} className="flex-1">
+            <Button
+              onClick={handleGenerate}
+              className="h-12 flex-1 rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#111318]"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
               生成图片
             </Button>
           </div>
-        </div>
-      )}
-
-      {/* Generating Phase */}
-      {phase === 'generating' && (
-        <div className="rounded-xl border p-5">
-          <GenerationProgress steps={steps} overallProgress={progress} errorMessage={errorMessage} />
-          <Button variant="outline" onClick={() => abortRef.current?.abort()} className="mt-4 w-full">
-            取消
+        )}
+        {phase === 'generating' && (
+          <Button variant="outline" onClick={handleCancel} className="w-full h-12 rounded-2xl">
+            取消生成
           </Button>
-        </div>
-      )}
-
-      {/* Complete Phase */}
-      {phase === 'complete' && (
-        <div className="space-y-4">
-          <ResultGallery images={results} />
-          <Button variant="outline" onClick={handleReset} className="w-full">
+        )}
+        {phase === 'complete' && (
+          <Button variant="outline" onClick={handleReset} className="w-full h-12 rounded-2xl">
             重新生成
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* AI Model Generator Dialog */}
       <AIModelGeneratorDialog
         open={showAIModelDialog}
         onOpenChange={setShowAIModelDialog}
@@ -345,6 +354,78 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
         }}
         productImages={productImages}
       />
-    </div>
+    </>
   )
+
+  // ─── Right Panel (status / results) ───
+  const rightPanel = (() => {
+    if (phase === 'input') {
+      return (
+        <div className="flex min-h-[700px] flex-col items-center justify-center text-center text-[#7f838f]">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#eceef2] text-[#717682]">
+            <svg
+              className="h-8 w-8"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+          </div>
+          <p className="text-sm leading-relaxed">
+            上传产品图片和模特图片后
+            <br />
+            点击“分析产品”开始
+          </p>
+        </div>
+      )
+    }
+
+    if (phase === 'analyzing' || phase === 'generating') {
+      const activeStep =
+        [...steps].reverse().find((step) => step.status === 'active')?.label
+        ?? (phase === 'generating' ? '生成中' : '分析中')
+      const title = phase === 'generating' ? '生成中...' : '分析中...'
+      const subtitle = phase === 'generating' ? '正在根据规划生成图片' : '正在分析产品并生成设计规范'
+
+      return (
+        <CoreProcessingStatus
+          title={title}
+          subtitle={subtitle}
+          progress={progress}
+          statusLine={errorMessage ?? activeStep}
+          showHeader={false}
+          statusPlacement="below"
+        />
+      )
+    }
+
+    if (phase === 'preview') {
+      return (
+        <CoreProcessingStatus
+          title="确认规划..."
+          subtitle="方案已生成，请确认后开始生成"
+          progress={progress}
+          statusLine={errorMessage ?? '确认规划'}
+          showHeader={false}
+          statusPlacement="below"
+        />
+      )
+    }
+
+    // complete
+    return (
+      <div className="space-y-4">
+        {results.length > 0 && <ResultGallery images={results} aspectRatio={aspectRatio} />}
+        {results.length === 0 && errorMessage && (
+          <div className="text-center text-sm text-destructive">{errorMessage}</div>
+        )}
+      </div>
+    )
+  })()
+
+  return { leftPanel, rightPanel, phase, previewCount: phase === 'preview' ? 1 : results.length }
 }

@@ -72,7 +72,7 @@ ${designSpecs ?? "(none)"}
 `;
 
   const config = getQnChatConfig();
-  const isAzure = config.endpoint.includes(".openai.azure.com");
+  const isAzure = config.endpoint.includes(".openai.azure.com") || config.endpoint.includes(".cognitiveservices.azure.com") || config.endpoint.includes(".services.ai.azure.com");
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({

@@ -135,10 +135,9 @@ Deno.serve(async (req) => {
     }
 
     const baseUrl = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/+$/, "");
-    const configuredHost = Deno.env.get("UPLOAD_PUBLIC_HOST");
-    const publicHost = !configuredHost || configuredHost.includes("cdn.picsetai.com")
-      ? `${baseUrl}/storage/v1/object/public/${bucket}`
-      : configuredHost;
+    // Always use the Supabase-native public URL format: {base}/storage/v1/object/public/{bucket}
+    // This ensures the endpoint + objectKey always resolves to a valid public storage URL.
+    const publicHost = `${baseUrl}/storage/v1/object/public/${bucket}`;
     const signedUrl = data.signedUrl.startsWith("http")
       ? data.signedUrl
       : data.signedUrl.startsWith("/storage/v1/")

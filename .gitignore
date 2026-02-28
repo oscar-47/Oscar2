@@ -45,5 +45,18 @@ supabase/.branches
 supabase/.temp
 supabase/functions/.env.local
 
+# Claude Code
+.claude/
+
+# Temp debug/scraping files
+analyze_images.py
+chrome_grid.html
+chrome_hero.html
+picset_studio.html
+get_dom.js
+scrape_ui.js
+err_danger.txt
+out_danger.txt
+
 # Test output
 scripts/test-output/

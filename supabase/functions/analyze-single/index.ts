@@ -2,8 +2,8 @@ import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
 
-function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
-  if (!turboEnabled) return model === "nano-banana" ? 3 : 5;
+function computeCost(_model: string, turboEnabled: boolean, imageSize: string): number {
+  if (!turboEnabled) return 5;
   if (imageSize === "1K") return 8;
   if (imageSize === "2K") return 12;
   return 17;
@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
     body.backgroundMode = backgroundMode;
   }
 
-  const modelName = String(body.model ?? "doubao-seedream-4.5");
+  const modelName = String(body.model ?? "flux-kontext-pro");
   const imageSize = String(body.imageSize ?? "2K");
   const imageCount = Math.max(1, Math.min(9, Number(body.imageCount ?? 1)));
   const groupCount = Math.max(1, Math.min(9, Number(body.groupCount ?? 1)));

@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
   const supabase = createServiceClient();
 
   const generateImagePayload = {
-    model: typeof body.model === "string" ? body.model : "nano-banana-pro",
+    model: typeof body.model === "string" ? body.model : "flux-kontext-pro",
     prompt: portraitPrompt,
     productImage: sourceImage,
     workflowMode: "product",
