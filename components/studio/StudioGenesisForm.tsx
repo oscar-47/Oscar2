@@ -1159,7 +1159,8 @@ export function StudioGenesisForm() {
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="flux-kontext-pro">FLUX.1 Kontext Pro</SelectItem>
+                      <SelectItem value="flux-kontext-pro">{isZh ? '标准' : 'Standard'}</SelectItem>
+                      <SelectItem value="gemini-flash-image">{isZh ? '极速' : 'Fast'}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

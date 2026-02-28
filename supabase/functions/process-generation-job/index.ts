@@ -219,10 +219,12 @@ function imageGenErrorCodeFromError(error: unknown): string {
   return "UPSTREAM_ERROR";
 }
 
-function resolveModel(_modelFromRequest: string): string | undefined {
-  // All image generation now uses the model configured via QN_IMAGE_MODEL env var.
-  // Return undefined to let callQnImageAPI use the env default.
-  return undefined;
+function resolveModel(modelFromRequest: string): string | undefined {
+  // 'gemini-flash-image' → fast model; everything else → env default
+  if (modelFromRequest === "gemini-flash-image") {
+    return Deno.env.get("QN_IMAGE_FLASH_MODEL") ?? "gemini-2.0-flash-preview-image-generation";
+  }
+  return undefined; // use QN_IMAGE_MODEL env var default
 }
 
 function parseSizeToRatio(size?: string): number | null {
@@ -605,13 +607,15 @@ ${clothingRuleBlock}
 ${requirements || "（未提供额外需求）"}
 `
       : `
+**重要：所有字段内容必须使用简体中文撰写（色值除外，保留英文 hex 格式）。**
+
 请按以下 JSON 结构输出蓝图：
 {
-  "design_specs": "（用英文撰写）# 整体设计规范\\n\\n> 所有图片须遵循以下统一规范以确保视觉一致性\\n\\n## 色彩体系\\n- **主色**：[根据产品分析确定]（十六进制色值）\\n- **辅助色**：[根据产品分析确定]（十六进制色值）\\n- **背景色**：[根据产品分析确定]（十六进制色值）\\n\\n## 字体体系\\n- **标题字体**：[推荐字体类型]\\n- **正文字体**：[推荐字体类型]\\n- **层级比例**：标题:副标题:正文 = 3:1.8:1\\n\\n## 视觉语言\\n- **装饰元素**：[根据产品类型推荐]\\n- **图标风格**：[推荐风格]\\n- **留白原则**：[具体说明]\\n\\n## 摄影风格\\n- **布光方式**：[具体说明]\\n- **景深设置**：[具体说明]\\n- **相机参数参考**：[如 ISO 100、85mm 定焦镜头]\\n\\n## 品质要求\\n- 分辨率：4K/高清\\n- 风格：专业产品摄影 / 商业广告级\\n- 真实感：超写实 / 照片级真实",
+  "design_specs": "# 整体设计规范\\n\\n> 所有图片须遵循以下统一规范以确保视觉一致性\\n\\n## 色彩体系\\n- **主色**：[根据产品分析确定]（十六进制色值）\\n- **辅助色**：[根据产品分析确定]（十六进制色值）\\n- **背景色**：[根据产品分析确定]（十六进制色值）\\n\\n## 字体体系\\n- **标题字体**：[推荐字体类型]\\n- **正文字体**：[推荐字体类型]\\n- **层级比例**：标题:副标题:正文 = 3:1.8:1\\n\\n## 视觉语言\\n- **装饰元素**：[根据产品类型推荐]\\n- **图标风格**：[推荐风格]\\n- **留白原则**：[具体说明]\\n\\n## 摄影风格\\n- **布光方式**：[具体说明]\\n- **景深设置**：[具体说明]\\n- **相机参数参考**：[如 ISO 100、85mm 定焦镜头]\\n\\n## 品质要求\\n- 分辨率：4K/高清\\n- 风格：专业产品摄影 / 商业广告级\\n- 真实感：超写实 / 照片级真实",
   "images": [
     {
-      "title": "4-8 字的英文标题，简洁有力",
-      "description": "1-2 句英文定位描述，说明本图的设计目标与定位",
+      "title": "4-8 字的中文标题，简洁有力",
+      "description": "1-2 句中文定位描述，说明本图的设计目标与定位",
       "design_content": "## 图片 [N]：[图片类型]\\n\\n**设计目标**：[具体目标]\\n\\n**产品外观**：[是/否 — 描述展示产品的哪个角度/面]\\n\\n**画面元素**：\\n- [每个元素说明：类型、形状、位置、占比（%）、内容]\\n\\n**构图方案**：\\n- 产品占比：[如 65%]\\n- 布局方式：[如居中竖向排列，轻微15度倾斜]\\n- 文字区域：[具体位置，若无文案则写"无文字区域"]\\n\\n**内容元素**：\\n- 展示焦点：[具体视觉焦点]\\n- 核心卖点：[具体卖点]\\n- 背景元素：[详细描述]\\n- 装饰元素：[详细描述]\\n\\n**文案内容**（使用 ${outputLanguageLabel(outputLanguage)}）：\\n- 主标题：[具体文字 / 若纯视觉则填"无"]\\n- 副标题：[具体文字 / 若纯视觉则填"无"]\\n- 描述文案：[具体文字 / 若纯视觉则填"无"]\\n\\n**氛围营造**：\\n- 情绪关键词：[3-5 个关键词]\\n- 光影效果：[详细描述]"
     }
   ]

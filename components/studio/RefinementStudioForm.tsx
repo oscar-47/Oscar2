@@ -530,7 +530,8 @@ export function RefinementStudioForm() {
                 <Select value={model} onValueChange={(v) => setModel(v as GenerationModel)} disabled={isRunning}>
                   <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="flux-kontext-pro">FLUX.1 Kontext Pro</SelectItem>
+                    <SelectItem value="flux-kontext-pro">标准 / Standard</SelectItem>
+                    <SelectItem value="gemini-flash-image">极速 / Fast</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
