@@ -587,6 +587,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
           designSpecs={editableDesignSpecs}
           onDesignSpecsChange={setEditableDesignSpecs}
           imagePlans={editableImagePlans}
+          aspectRatio={aspectRatio}
           onImagePlanChange={(i, plan) => {
             setEditableImagePlans((prev) => prev.map((p, idx) => (idx === i ? plan : p)))
           }}

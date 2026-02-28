@@ -375,7 +375,7 @@ function ImageSlotCard({
 
   if (slot.status === 'done' && slot.result) {
     return (
-      <div className="group relative overflow-hidden rounded-xl border border-[#d5d9e2] bg-[#eceef2]" style={{ aspectRatio: boxAspectRatio }}>
+      <div className="group relative w-[220px] max-w-full overflow-hidden rounded-xl border border-[#d5d9e2] bg-[#eceef2]" style={{ aspectRatio: boxAspectRatio }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={slot.result.url}
@@ -399,7 +399,7 @@ function ImageSlotCard({
 
   if (slot.status === 'failed') {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-destructive/40 bg-destructive/5 p-4 text-center" style={{ aspectRatio: boxAspectRatio }}>
+      <div className="flex w-[220px] max-w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-destructive/40 bg-destructive/5 p-4 text-center" style={{ aspectRatio: boxAspectRatio }}>
         <AlertTriangle className="h-6 w-6 text-destructive mb-2" />
         <p className="text-xs text-destructive font-medium">{isZh ? '生成失败' : 'Failed'}</p>
         {slot.error && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{slot.error}</p>}
@@ -409,7 +409,7 @@ function ImageSlotCard({
 
   // pending
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#cfd4dd] bg-[#f4f5f7] p-4" style={{ aspectRatio: boxAspectRatio }}>
+    <div className="flex w-[220px] max-w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#cfd4dd] bg-[#f4f5f7] p-4" style={{ aspectRatio: boxAspectRatio }}>
       <Loader2 className="h-6 w-6 text-muted-foreground animate-spin mb-2" />
       <p className="text-xs text-muted-foreground">{isZh ? '生成中' : 'Pending'}</p>
     </div>
@@ -975,6 +975,7 @@ export function StudioGenesisForm() {
           designSpecs={editableDesignSpecs}
           onDesignSpecsChange={setEditableDesignSpecs}
           imagePlans={editableImagePlans}
+          aspectRatio={aspectRatio}
           onImagePlanChange={(i, plan) => {
             setEditableImagePlans((prev) => prev.map((p, idx) => (idx === i ? plan : p)))
           }}
@@ -1001,7 +1002,7 @@ export function StudioGenesisForm() {
           />
 
           {imageSlots.length > 0 && (
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            <div className="flex flex-wrap content-start items-start gap-3">
               {imageSlots.map((slot, i) => (
                 <ImageSlotCard
                   key={slot.jobId || `slot-${i}`}

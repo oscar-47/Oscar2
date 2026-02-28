@@ -11,6 +11,7 @@ import { ResultGallery, type ResultImage } from '@/components/generation/ResultG
 import { ModelImageSection } from './ModelImageSection'
 import { ClothingSettingsSection } from './ClothingSettingsSection'
 import { AIModelGeneratorDialog } from './AIModelGeneratorDialog'
+import { PreviewTileGrid } from '@/components/generation/PreviewTileGrid'
 import { uploadFile } from '@/lib/api/upload'
 import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
@@ -147,13 +148,16 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
         const { done, value } = await reader.read()
         if (done) break
         for (const line of decoder.decode(value, { stream: true }).split('\n')) {
-          if (line.startsWith('data: ')) {
-            const payload = line.slice(6).trim()
-            if (payload && payload !== '[DONE]') {
-              promptText += payload
-              set('preview', { status: 'active', streamedText: promptText })
-            }
+          if (!line.startsWith('data: ')) continue
+          const payload = line.slice(6).trim()
+          if (!payload || payload === '[DONE]') continue
+          try {
+            const parsed = JSON.parse(payload) as { fullText?: string }
+            promptText = parsed.fullText ?? promptText
+          } catch {
+            promptText += payload
           }
+          set('preview', { status: 'active', streamedText: promptText })
         }
       }
       set('preview', { status: 'done', streamedText: promptText })
@@ -405,14 +409,14 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
 
     if (phase === 'preview') {
       return (
-        <CoreProcessingStatus
-          title="确认规划..."
-          subtitle="方案已生成，请确认后开始生成"
-          progress={progress}
-          statusLine={errorMessage ?? '确认规划'}
-          showHeader={false}
-          statusPlacement="below"
-        />
+        <div className="space-y-4">
+          <PreviewTileGrid
+            count={1}
+            aspectRatio={aspectRatio}
+            labels={['模特试穿预览']}
+          />
+          <p className="text-sm text-[#7d818d]">方案已生成，请确认后开始生成</p>
+        </div>
       )
     }
 

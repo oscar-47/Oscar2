@@ -536,11 +536,11 @@ export function AestheticMirrorForm() {
                   showHeader={false}
                   statusPlacement="below"
                 />
-                <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
+                <div className="flex flex-wrap content-start items-start gap-3">
                   {cards.map((_, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-center rounded-2xl border border-[#e1e1e5] bg-white/70"
+                      className="flex w-[220px] max-w-full items-center justify-center rounded-2xl border border-[#e1e1e5] bg-white/70"
                       style={{ aspectRatio: previewAspectRatio }}
                     >
                       <Loader2 className="h-5 w-5 animate-spin text-[#666973]" />
@@ -551,11 +551,11 @@ export function AestheticMirrorForm() {
             )}
             {phase === 'success' && (
               <div className="space-y-3">
-                <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
+                <div className="flex flex-wrap content-start items-start gap-3">
                   {cards.map((c, i) => c.status === 'success' && c.url ? (
                     <div
                       key={i}
-                      className="group relative overflow-hidden rounded-2xl border border-[#dcdce1] bg-white"
+                      className="group relative w-[220px] max-w-full overflow-hidden rounded-2xl border border-[#dcdce1] bg-white"
                       style={{ aspectRatio: previewAspectRatio }}
                     >
                       <img src={c.url} alt={`result-${i + 1}`} className="w-full object-cover" />
@@ -564,7 +564,7 @@ export function AestheticMirrorForm() {
                       </div>
                     </div>
                   ) : (
-                    <div key={i} className="rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">{c.error ?? tc('error')}</div>
+                    <div key={i} className="w-[220px] max-w-full rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">{c.error ?? tc('error')}</div>
                   ))}
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">

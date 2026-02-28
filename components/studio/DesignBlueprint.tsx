@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ImagePlanCard } from './ImagePlanCard'
 import { SectionIcon } from '@/components/shared/SectionIcon'
+import { PreviewTileGrid } from '@/components/generation/PreviewTileGrid'
 import type { BlueprintImagePlan } from '@/types'
 
 interface DesignBlueprintProps {
@@ -15,6 +16,7 @@ interface DesignBlueprintProps {
   imagePlans: BlueprintImagePlan[]
   onImagePlanChange: (index: number, plan: BlueprintImagePlan) => void
   disabled?: boolean
+  aspectRatio?: string
 }
 
 export function DesignBlueprint({
@@ -23,12 +25,30 @@ export function DesignBlueprint({
   imagePlans,
   onImagePlanChange,
   disabled,
+  aspectRatio = '4:3',
 }: DesignBlueprintProps) {
   const t = useTranslations('studio.genesis')
-  const [specsExpanded, setSpecsExpanded] = useState(true)
+  const [specsExpanded, setSpecsExpanded] = useState(false)
 
   return (
     <div className="space-y-6">
+      <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <SectionIcon icon={ImageIcon} />
+          <div>
+            <p className="text-[15px] font-semibold text-[#1a1d24]">{t('imagePlan')}</p>
+            <p className="text-[13px] text-[#7d818d]">
+              {t('imagePlanCount', { count: imagePlans.length })}
+            </p>
+          </div>
+        </div>
+        <PreviewTileGrid
+          count={imagePlans.length}
+          aspectRatio={aspectRatio}
+          labels={imagePlans.map((plan, index) => plan.title || `预览 ${index + 1}`)}
+        />
+      </div>
+
       {/* Design Specifications — collapsible */}
       <div className="rounded-[28px] border border-[#d0d4dc] bg-white">
         <button
@@ -73,16 +93,6 @@ export function DesignBlueprint({
 
       {/* Image Plan */}
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <SectionIcon icon={ImageIcon} />
-          <div>
-            <p className="text-[15px] font-semibold text-[#1a1d24]">{t('imagePlan')}</p>
-            <p className="text-[13px] text-[#7d818d]">
-              {t('imagePlanCount', { count: imagePlans.length })}
-            </p>
-          </div>
-        </div>
-
         <div className="space-y-3">
           {imagePlans.map((plan, i) => (
             <ImagePlanCard

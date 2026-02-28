@@ -27,7 +27,7 @@ function toCssAspectRatio(aspectRatio: string): string {
 
 function SkeletonCard({ aspectRatio }: { aspectRatio: string }) {
   return (
-    <div className="rounded-xl bg-muted animate-pulse" style={{ aspectRatio }} />
+    <div className="w-[220px] max-w-full rounded-xl bg-muted animate-pulse" style={{ aspectRatio }} />
   )
 }
 
@@ -54,7 +54,7 @@ export function ResultGallery({
 
   return (
     <>
-      <div className={cn('grid gap-3', className)} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+      <div className={cn('flex flex-wrap content-start items-start gap-3', className)}>
         {isLoading &&
           Array.from({ length: loadingCount }).map((_, i) => (
             <SkeletonCard key={`skel-${i}`} aspectRatio={cssAspectRatio} />
@@ -66,7 +66,7 @@ export function ResultGallery({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: i * 0.08 }}
-            className="group relative rounded-xl overflow-hidden border border-border bg-muted"
+            className="group relative w-[220px] max-w-full overflow-hidden rounded-xl border border-border bg-muted"
             style={{ aspectRatio: cssAspectRatio }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}

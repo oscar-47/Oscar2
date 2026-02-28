@@ -505,14 +505,80 @@ async function processAnalysisJob(
       ? clothingRules.map((line) => `- ${line}`).join("\n")
       : "- No extra clothing constraints.";
 
-  const defaultSystemPrompt = uiLanguage === "zh"
-    ? "你是顶级电商视觉总监。你的任务是根据产品图与需求输出可执行的商业图片蓝图。只输出 JSON，不要 markdown 代码块。"
-    : "You are a world-class e-commerce visual director. Produce executable commercial image blueprints from product photos and brief. Return JSON only, no markdown fences.";
+  const isClothingMode = Boolean(clothingMode);
+  const isModelStrategy = clothingMode === "model_strategy";
+
+  const defaultSystemPrompt = isModelStrategy
+    ? "你是一位顶级电商视觉导演。你的任务是分析上传的服装图片和模特参考图，并根据用户的设计需求，为一次模特拍摄活动制定一套完整的视觉指南。你需要先定义全局的视觉调性，然后针对每一张照片（镜头）制定极具营销感的构图、卖点展示方案。必须且仅输出一个合法的 JSON 对象，不要包含 Markdown 代码块标签或任何说明文字。"
+    : uiLanguage === "zh"
+    ? isClothingMode
+      ? "你是顶级电商视觉总监与服装分析专家。你的任务是对服装产品图进行深度视觉解构，输出精确的商业图片蓝图。分析时必须识别面料类型、提取精确颜色色值（十六进制）、记录关键设计细节，并为每种图片类型制定专业的拍摄方案。只输出 JSON，不要 markdown 代码块。"
+      : "你是顶级电商视觉总监。你的任务是根据产品图与需求输出可执行的商业图片蓝图。只输出 JSON，不要 markdown 代码块。"
+    : isClothingMode
+      ? "You are a world-class e-commerce visual director and apparel analysis expert. Your task is to deeply analyze clothing product images and produce precise commercial image blueprints. During analysis, identify fabric type, extract exact hex color values, document key design details, and define professional shot plans for each image type. Return JSON only, no markdown fences."
+      : "You are a world-class e-commerce visual director. Produce executable commercial image blueprints from product photos and brief. Return JSON only, no markdown fences.";
 
   const isZhUi = uiLanguage.startsWith("zh");
 
-  const defaultUserPrompt = isZhUi
-    ? `
+  const modelStrategyUserPrompt = `
+你需要基于服装调性和模特特质，输出如下 JSON 结构（不要 Markdown 代码块）：
+{
+  "design_specs": "...",
+  "images": [{ "title": "...", "description": "...", "design_content": "..." }]
+}
+
+design_specs 必须包含以下五个维度：
+
+**1. 核心视觉基调 (Overall Visual Theme)**
+基于图片特征定义整组照片的视觉灵魂、背景环境设定、全局色彩调性。
+
+**2. 全局摄影参数建议 (Global Photography Specs)**
+镜头焦段建议、全局布光原则、画质与技术参数标准。
+
+**3. 模特基础画像 (Model Profile)**
+基于模特参考图，识别并提取 4 个核心特征：性别、肤色/人种、发色、发型。表述极其精炼（如：亚裔女性，肤色白皙，棕黑色直短发），仅作为身份锁定的锚点，严禁过度描述。
+
+**4. 服装基础特征 (Garment Core Features)**
+服装核心特征：色彩 + 材质 + 版型的（服装名称），仅作为服装锚点，严禁过度描述。
+
+**5. 文字系统规范 (Typography System)**
+标题字体类型与颜色（十六进制）、正文字体、字号层级（3:1.8:1）、字体风格。
+${outputLanguage === "none" ? "当前目标语言为纯视觉（无文字），文字内容统一输出 None。" : `文字内容使用 ${outputLanguageLabel(outputLanguage)}。`}
+
+images 数组输出正好 ${imageCount} 个镜头方案，每个方案 design_content 必须包含：
+**设计目标** | **模特要求**（姿势/表情/动作，并强调必须与模特参考图保持绝对的面部和身份一致性）| **服饰工艺焦点** | **构图方案**（景别+占比+布局）| **光影方案** | **背景描述** | **配色方案**（含精确 hex 色值）| **文字内容** | **视觉氛围关键词**
+
+用户需求：${requirements || "（无额外需求）"}
+`;
+
+  const defaultUserPrompt = isModelStrategy
+    ? modelStrategyUserPrompt
+    : isZhUi
+    ? isClothingMode
+      ? `
+请对服装产品图进行深度视觉分析，然后按以下 JSON 结构输出蓝图（所有字段内容使用中文）：
+{
+  "images": [
+    {
+      "title": "4-12 字的标题（含图片类型，如：白底精修图、3D幽灵模特图、细节特写图）",
+      "description": "1-2 句定位描述",
+      "design_content": "## 图片 [N]：...\\n\\n**图片类型**：（白底精修图 / 3D幽灵模特图 / 细节特写图 / 卖点展示图）\\n\\n**服装属性**：类型、面料材质（含视觉特征如哑光/光泽）\\n\\n**精确颜色**：主色 #XXXXXX，辅色 #XXXXXX（必须从产品图中提取十六进制色值）\\n\\n**关键设计细节**：图案、印花、logo、工艺细节、特殊结构\\n\\n**构图方案**：主体占比（如75%）、构图方式（居中/对角线等）\\n\\n**光影方案**：光源方向、光质（软光/硬光）、阴影处理\\n\\n**文案内容**（使用 ${outputLanguageLabel(outputLanguage)}）：...\\n\\n**氛围关键词**：..."
+    }
+  ],
+  "design_specs": "# 整体设计规范\\n\\n## 色彩体系（含精确 hex 色值）\\n...\\n## 面料材质\\n...\\n## 摄影风格\\n...\\n## 品质要求\\n..."
+}
+约束条件：
+- images 数组返回正好 ${imageCount} 个对象。
+- 每个 design_content 必须包含精确的十六进制颜色值（从产品图中提取）。
+- 每张图片方案必须不同（角度、布局、场景逻辑各不相同）。
+- ${textContentRule}
+- 如果输出语言为"纯视觉"，文案部分一律输出"无"，并强调纯视觉构图。
+- 服装拍摄类型约束：
+${clothingRuleBlock}
+用户需求：
+${requirements || "（未提供额外需求）"}
+`
+      : `
 请按以下 JSON 结构输出蓝图（所有字段内容使用中文）：
 {
   "images": [
@@ -530,12 +596,34 @@ async function processAnalysisJob(
 - ${textContentRule}
 - 如果输出语言为"纯视觉"，文案部分一律输出"无"，并强调纯视觉构图。
 - 保持高转化电商风格，真实的材质与光影细节。
-- 服装模式约束：
-${clothingRuleBlock}
 用户需求：
 ${requirements || "（未提供额外需求）"}
 `
-    : `
+    : isClothingMode
+      ? `
+Perform a deep visual analysis of the clothing product image, then output a blueprint with this exact JSON shape:
+{
+  "images": [
+    {
+      "title": "4-12 words title (include shot type: White Background Refined / 3D Ghost Mannequin / Detail Close-up / Selling Point)",
+      "description": "1-2 sentence positioning",
+      "design_content": "## Image [N]: ...\\n\\n**Shot Type**: (White Background / 3D Ghost Mannequin / Detail Close-up / Selling Point)\\n\\n**Garment Attributes**: type, fabric/material (matte/glossy/textured)\\n\\n**Exact Colors**: Primary #XXXXXX, Secondary #XXXXXX (MUST extract hex values from product image)\\n\\n**Key Design Details**: pattern, print, logo, stitching, special structure\\n\\n**Composition**: subject framing % (e.g. 75%), layout style (centered/diagonal)\\n\\n**Lighting Plan**: light source direction, quality (soft/hard), shadow treatment\\n\\n**Text Content** (Using ${outputLanguageLabel(outputLanguage)}): ...\\n\\n**Atmosphere Keywords**: ..."
+    }
+  ],
+  "design_specs": "# Overall Design Specifications\\n\\n## Color System (with exact hex values)\\n...\\n## Fabric & Material\\n...\\n## Photography Style\\n...\\n## Quality Requirements\\n..."
+}
+Constraints:
+- Return exactly ${imageCount} objects in images.
+- Every design_content MUST include precise hex color values extracted from the product image.
+- Every image plan must be different (angle, layout, scene logic).
+- ${textContentRule}
+- If output language is visual-only, keep typography as None.
+- Clothing shot type constraints:
+${clothingRuleBlock}
+User brief:
+${requirements || "(no extra brief provided)"}
+`
+      : `
 Create blueprint JSON with this exact shape:
 {
   "images": [
@@ -553,8 +641,6 @@ Constraints:
 - ${textContentRule}
 - If output language is visual-only, keep typography as None and emphasize pure visual composition.
 - Keep high-conversion e-commerce style, realistic material/lighting details.
-- Clothing-specific constraints:
-${clothingRuleBlock}
 User brief:
 ${requirements || "(no extra brief provided)"}
 `;
@@ -845,6 +931,52 @@ async function processImageGenJob(
   }
 }
 
+const STYLE_ANALYSIS_SYSTEM_PROMPT =
+  `你是顶级电商视觉总监与AI图像生成专家。你的任务是深度解构"参考图"的视觉基因，生成一段详细的英文图像生成提示词，使"产品图"中的产品主体完美融入参考图的视觉风格。
+
+请从以下六个维度精细拆解参考图，并结合产品图特征生成提示词：
+
+1. 布局拓扑（Layout Topology）：空间构图方式（对称/对角线/F型等），产品的视觉落点与画面结构。
+2. 视觉流向（Visual Flow）：背景如何引导视线落向产品主体，产品与背景的主次层次关系。
+3. 元素逻辑（Element Logic）：元素排列密度与组合方式，产品与场景/道具之间的物理交互（遮挡、投影、嵌入）。
+4. 色彩机理（Color Mechanism）：配色逻辑与饱和度策略，精确描述主色调与辅助色（尽量提供十六进制色值），确保与参考图高度统一。
+5. 文字容器（Container Typography）——逻辑触发：首先判断参考图是否含有文字。若无文字，提示词中严禁出现任何文字或字体描述。若有文字，必须复刻其语种、字体描述与容器形状，字体描述必须唯一且明确，严禁出现"或类似"等模糊表述。
+6. 光影质感（Light & Texture）：光源方向（单侧硬光/环境柔光等）、材质属性与阴影细节，确保统一照亮所有产品元素。
+
+输出要求：
+- 完整保留产品图中产品主体的形态、材质、颜色、纹理、logo等核心设计特征，仅改变其展示场景与风格。
+- 输出必须是一段高度详细、工程化、无冗余解释的图像生成提示词。
+- 仅输出英文提示词文本，不含Markdown格式，不含任何中文，不含解释说明。`;
+
+async function generateStyleAnalysisPrompt(
+  productDataUrl: string,
+  referenceDataUrl: string,
+): Promise<string> {
+  const response = await callQnChatAPI({
+    messages: [
+      { role: "system", content: STYLE_ANALYSIS_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: productDataUrl } },
+          { type: "image_url", image_url: { url: referenceDataUrl } },
+          {
+            type: "text",
+            text: "图1是产品图（需完整保留产品主体），图2是参考风格图（只学习其视觉风格）。请生成一段详细的英文图像生成提示词，将图1的产品主体以图2的视觉风格重新呈现。",
+          },
+        ],
+      },
+    ],
+    maxTokens: 800,
+  });
+  // deno-lint-ignore no-explicit-any
+  const content = (response as any)?.choices?.[0]?.message?.content;
+  if (typeof content === "string" && content.trim().length > 0) {
+    return content.trim();
+  }
+  throw new Error("STYLE_ANALYSIS_EMPTY_RESPONSE");
+}
+
 async function processStyleReplicateJob(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
@@ -965,6 +1097,16 @@ async function processStyleReplicateJob(
     return pending;
   };
 
+  // Two-stage style analysis: cache by (productUrl || referenceUrl) to avoid duplicate vision calls
+  const stylePromptCache = new Map<string, Promise<string>>();
+  const getStyleAnalysisPrompt = (productUrl: string, referenceUrl: string): Promise<string> => {
+    const key = `${productUrl}||${referenceUrl}`;
+    if (!stylePromptCache.has(key)) {
+      stylePromptCache.set(key, generateStyleAnalysisPrompt(productUrl, referenceUrl));
+    }
+    return stylePromptCache.get(key)!;
+  };
+
   const outputs: StyleOutputItem[] = new Array(units.length);
   let fatalError: unknown = null;
   let completedCount = 0;
@@ -1048,7 +1190,7 @@ async function processStyleReplicateJob(
       });
   };
 
-  const buildPrompt = (unit: StyleReplicateUnit): string => {
+  const buildPrompt = (unit: StyleReplicateUnit, analysisPrompt?: string): string => {
     if (unit.mode === "refinement") {
       const promptParts = [refinementBasePrompt];
       if (backgroundMode === "white") {
@@ -1061,20 +1203,27 @@ async function processStyleReplicateJob(
       return promptParts.join("\n");
     }
 
-    // Image 1 = reference style image, Image 2 = product image.
-    // The prompt must clearly separate "style reference" from "product identity";
-    // otherwise edit models tend to keep the second image almost unchanged.
+    if (analysisPrompt) {
+      // Two-stage: use the vision-model-generated detailed style prompt.
+      // Image 1 = reference style, Image 2 = product to preserve.
+      const parts = [
+        analysisPrompt,
+        "Image 1 is the reference style image only — do not copy its products or subjects.",
+        "Image 2 contains the product to preserve — maintain its exact shape, material, color, texture, logo, and all key design details.",
+        "Do not simply return Image 2 unchanged or make only a minimal edit.",
+        `Output aspect ratio: ${aspectRatio}, size: ${requestSize}.`,
+      ];
+      if (userPrompt) parts.push(`Additional instructions: ${userPrompt}`);
+      return parts.join(" ");
+    }
+
+    // Fallback single-stage prompt (used if vision analysis fails)
     const promptParts = [
-      "第1张图仅作为风格参考图，第2张图是需要保留的产品主体图。",
-      "请生成一张全新的电商展示图：继承第1张图的视觉风格，包括构图语言、背景氛围、灯光方向、色彩倾向、景别和版式节奏。",
-      "只保留第2张图中的产品主体本身，保留产品的形状、材质、颜色、纹理、logo、文字和关键设计特征。",
-      "不要直接照搬第2张图原始构图，不要只是对第2张图做轻微修改，不要输出与第2张图几乎相同的画面。",
-      "可以改变产品的位置、角度、大小、裁切、展示方式、场景、人物或道具，只要产品主体本身保持一致。",
-      "如果第2张图里包含人物、手部、模特或原始背景，这些都不是必须保留的内容；请优先保留产品，不必保留原图场景。",
-      "不要复制第1张图里的具体产品主体，只借鉴其风格与展示方式。最终画面应当是新的、自然的、可商用的高质量电商图。",
       "Image 1 is style reference only. Image 2 contains the product to preserve.",
-      "Create a new e-commerce image in the style of image 1, but do not simply return image 2 or make only a minimal edit to image 2.",
-      "Preserve only the product identity from image 2, not its original composition, pose, scene, or framing.",
+      "Create a brand-new high-quality e-commerce image: adopt the visual style, composition, background, lighting direction, color palette, and layout rhythm of Image 1.",
+      "Preserve only the product identity from Image 2 — its shape, material, color, texture, logo, and key design details.",
+      "Do not copy the original composition, pose, or scene from Image 2. Do not simply return Image 2 unchanged.",
+      "Do not copy any product subjects from Image 1 — only borrow its style and presentation.",
       `Output aspect ratio: ${aspectRatio}, size: ${requestSize}.`,
     ];
     if (userPrompt) {
@@ -1103,7 +1252,19 @@ async function processStyleReplicateJob(
 
       const productDataUrl = await getCachedDataUrl(unit.product_image);
       const referenceDataUrl = unit.reference_image ? await getCachedDataUrl(unit.reference_image) : null;
-      const prompt = buildPrompt(unit);
+
+      // Stage 1: vision model analyzes reference+product and generates a detailed style prompt.
+      // Falls back gracefully to single-stage if the analysis call fails.
+      let analysisPrompt: string | undefined;
+      if (unit.mode !== "refinement" && referenceDataUrl) {
+        try {
+          analysisPrompt = await getStyleAnalysisPrompt(productDataUrl, referenceDataUrl);
+        } catch {
+          analysisPrompt = undefined;
+        }
+      }
+
+      const prompt = buildPrompt(unit, analysisPrompt);
       let chosen: Omit<StyleOutputItem, "reference_index" | "group_index" | "unit_status" | "error_message"> | null = null;
       let lastProviderSize: string | null = null;
 
