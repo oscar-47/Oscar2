@@ -52,6 +52,7 @@ supabase/functions/.env.local
 analyze_images.py
 chrome_grid.html
 chrome_hero.html
+picset_studio.html
 shopix_studio.html
 get_dom.js
 scrape_ui.js
