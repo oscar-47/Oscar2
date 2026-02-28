@@ -377,7 +377,8 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
 
       const parsedPrompts = parsePromptArray(promptText, editableImagePlans.length)
       const prompts = Array.from({ length: editableImagePlans.length }, (_, i) => {
-        return parsedPrompts[i] ?? parsedPrompts[i % parsedPrompts.length] ?? editableImagePlans[i].design_content
+        // Use || (not ??) so empty strings also fall back to design_content
+        return parsedPrompts[i] || parsedPrompts[i % Math.max(parsedPrompts.length, 1)] || editableImagePlans[i].design_content
       })
 
       set('prompts', { status: 'done' })
