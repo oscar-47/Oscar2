@@ -1005,6 +1005,43 @@ async function generateStyleAnalysisPrompt(
   throw new Error("STYLE_ANALYSIS_EMPTY_RESPONSE");
 }
 
+const REFINEMENT_ANALYSIS_SYSTEM_PROMPT =
+  `你是一名专业的商业产品精修师，需要对所有品类的产品进行专业级精修处理，以达到崭新、高级且极具吸引力的视觉效果。必须强调：产品外观需与原图完全一致，包含造型、尺寸比例、细节结构、标识/Logo的位置与样式，不得随意修改产品原有形态、细节与核心特征。
+
+核心精修要求：
+1. 背景规范：将背景统一替换为纯净无杂色的纯白，色号为 #FFFFFF（RGB: 255, 255, 255），确保背景无渐变、无阴影、无任何干扰元素，让产品主体成为绝对视觉焦点。
+2. 质感还原与强化：强化产品材质的原始特性，如玻璃的通透感、布料的柔软纹理、塑料的细腻哑光等，并全面优化，去除表面划痕、污渍、指纹、氧化痕迹等所有瑕疵，使其呈现崭新无瑕的状态。
+3. 光影与立体感优化：采用专业商业棚拍级布光，通过添加柔和渐变的底部倒影、细腻的高光层次和自然的阴影过渡，增强产品的立体感与悬浮感，让产品从背景中脱颖而出，光影贴合产品原有形态，层次自然不突兀。
+4. 细节精致度提升：强化产品上的文字、Logo、标签等元素的锐利度，确保边缘干净利落、颜色均匀饱满；处理接缝、螺丝、边角等细节，使其整齐无痕，精准还原产品本身的精致肌理。
+5. 色彩与氛围营造：根据产品的定位与目标受众，调整整体色调至舒适高级的状态，做到无偏色、不发灰、色彩饱和度适中；美妆类可营造清新治愈感，电子类可营造科技未来感，家居类可营造温暖氛围感。添加轻微的空气感光晕或环境光效提升吸引力，光效不抢占产品主体视觉。
+6. 构图优化：构图上遵循居中或黄金分割原则，确保画面平衡、专业，产品在画面中占比合理，无裁切不全、位置偏移等问题。
+
+金属材质特殊要求：金属材质按原图特性还原并强化，普通金属必须统一加上一句：完美镀铬表面。哑光/拉丝/磨砂等金属需强化其低反光、细腻的原始材质质感，无额外反光干扰。
+
+输出格式：单行文本精修提示词，中文描述，不要输出 JSON，直接输出文本即可。`;
+
+async function generateRefinementPrompt(productDataUrl: string): Promise<string> {
+  const response = await callQnChatAPI({
+    messages: [
+      { role: "system", content: REFINEMENT_ANALYSIS_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: productDataUrl } },
+          { type: "text", text: "请分析这张产品图，生成一段专业的商业级精修提示词，描述如何对该产品进行精修处理。" },
+        ],
+      },
+    ],
+    maxTokens: 600,
+  });
+  // deno-lint-ignore no-explicit-any
+  const content = (response as any)?.choices?.[0]?.message?.content;
+  if (typeof content === "string" && content.trim().length > 0) {
+    return content.trim();
+  }
+  throw new Error("REFINEMENT_ANALYSIS_EMPTY_RESPONSE");
+}
+
 async function processStyleReplicateJob(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
@@ -1135,6 +1172,15 @@ async function processStyleReplicateJob(
     return stylePromptCache.get(key)!;
   };
 
+  // Refinement analysis: cache by productUrl to avoid duplicate vision calls per product image
+  const refinementPromptCache = new Map<string, Promise<string>>();
+  const getRefinementPrompt = (productUrl: string): Promise<string> => {
+    if (!refinementPromptCache.has(productUrl)) {
+      refinementPromptCache.set(productUrl, generateRefinementPrompt(productUrl));
+    }
+    return refinementPromptCache.get(productUrl)!;
+  };
+
   const outputs: StyleOutputItem[] = new Array(units.length);
   let fatalError: unknown = null;
   let completedCount = 0;
@@ -1218,8 +1264,15 @@ async function processStyleReplicateJob(
       });
   };
 
-  const buildPrompt = (unit: StyleReplicateUnit, analysisPrompt?: string): string => {
+  const buildPrompt = (unit: StyleReplicateUnit, analysisPrompt?: string, refinementAnalysisPrompt?: string): string => {
     if (unit.mode === "refinement") {
+      if (refinementAnalysisPrompt) {
+        // Two-stage: use vision-model-generated product-specific refinement prompt
+        const parts = [refinementAnalysisPrompt];
+        if (userPrompt) parts.push(userPrompt);
+        return parts.join("\n");
+      }
+      // Fallback: use hardcoded generic prompt
       const promptParts = [refinementBasePrompt];
       if (backgroundMode === "white") {
         promptParts.push(refinementWhiteBackgroundPrompt);
@@ -1281,18 +1334,27 @@ async function processStyleReplicateJob(
       const productDataUrl = await getCachedDataUrl(unit.product_image);
       const referenceDataUrl = unit.reference_image ? await getCachedDataUrl(unit.reference_image) : null;
 
-      // Stage 1: vision model analyzes reference+product and generates a detailed style prompt.
-      // Falls back gracefully to single-stage if the analysis call fails.
+      // Stage 1: vision model generates a detailed prompt before image gen.
+      // Style replicate: analyze reference+product for style transfer.
+      // Refinement: analyze product for product-specific retouching instructions.
+      // Both fall back gracefully to hardcoded prompt if the analysis call fails.
       let analysisPrompt: string | undefined;
+      let refinementAnalysisPrompt: string | undefined;
       if (unit.mode !== "refinement" && referenceDataUrl) {
         try {
           analysisPrompt = await getStyleAnalysisPrompt(productDataUrl, referenceDataUrl);
         } catch {
           analysisPrompt = undefined;
         }
+      } else if (unit.mode === "refinement") {
+        try {
+          refinementAnalysisPrompt = await getRefinementPrompt(productDataUrl);
+        } catch {
+          refinementAnalysisPrompt = undefined;
+        }
       }
 
-      const prompt = buildPrompt(unit, analysisPrompt);
+      const prompt = buildPrompt(unit, analysisPrompt, refinementAnalysisPrompt);
       let chosen: Omit<StyleOutputItem, "reference_index" | "group_index" | "unit_status" | "error_message"> | null = null;
       let lastProviderSize: string | null = null;
 
