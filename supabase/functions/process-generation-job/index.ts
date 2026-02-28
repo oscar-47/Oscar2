@@ -513,10 +513,36 @@ async function processAnalysisJob(
     : uiLanguage === "zh"
     ? isClothingMode
       ? "你是顶级电商视觉总监与服装分析专家。你的任务是对服装产品图进行深度视觉解构，输出精确的商业图片蓝图。分析时必须识别面料类型、提取精确颜色色值（十六进制）、记录关键设计细节，并为每种图片类型制定专业的拍摄方案。只输出 JSON，不要 markdown 代码块。"
-      : "你是顶级电商视觉总监。你的任务是根据产品图与需求输出可执行的商业图片蓝图。只输出 JSON，不要 markdown 代码块。"
+      : `你是资深电商视觉规划专家，精通为各品类产品制定视觉设计方案。请为用户创建正好 ${imageCount} 张独立且各不重复的图片设计方案。
+
+你的任务：
+1. 分析用户上传的产品图片。
+2. 结合用户需求描述（重点关注是否要求"纯视觉/无文字"版本）。
+3. 制定整体设计规范（design_specs）。
+4. 为每张图片制定详细的设计方案。
+
+重要逻辑规则：
+- 文案区分原则：区分"设计文案"（后期排版叠加的标题/卖点）与"产品原有文字"（产品瓶身/包装上固有的 logo、成分、标签）。禁止在 design_content 中要求擦除产品固有信息。
+- 保真要求：无论是否添加设计文案，design_content 中必须明确要求保留产品所有固有细节。
+- 纯视觉模式：若用户要求"纯视觉"设计，design_specs 的字体体系部分输出"无（纯视觉设计，不涉及排版）"，文案内容全部填写"无"，构图焦点强调"以纯视觉构图和光影展示产品"。
+
+只输出原始 JSON 字符串，不要 markdown 代码块，不要任何说明文字。`
     : isClothingMode
       ? "You are a world-class e-commerce visual director and apparel analysis expert. Your task is to deeply analyze clothing product images and produce precise commercial image blueprints. During analysis, identify fabric type, extract exact hex color values, document key design details, and define professional shot plans for each image type. Return JSON only, no markdown fences."
-      : "You are a world-class e-commerce visual director. Produce executable commercial image blueprints from product photos and brief. Return JSON only, no markdown fences.";
+      : `You are a senior e-commerce visual planning expert, proficient in formulating visual design specifications for products across multiple categories. Please create independent and non-repetitive design plans for exactly ${imageCount} image(s).
+
+Your tasks are:
+1. Analyze the product images provided by the user.
+2. Combine the analysis with the user's requirement descriptions (pay close attention to whether the user requests a "no-text/pure" version).
+3. Formulate the overall design specifications (design_specs).
+4. Develop a detailed design plan for each image.
+
+Important Logic Rules:
+- Copywriting Distinction: Distinguish between "Design Copy" (titles/selling points added during post-production) and "Product Text" (inherent logos, ingredients, labels on the product packaging). Never erase product text.
+- Fidelity Requirement: Always explicitly require the preservation of all inherent product details in design_content.
+- No-Text Processing: If the user requests a "no-text" design, set the Font System section in design_specs to "None (Pure visual design, no typography involved)". Fill all Text Content fields with "None" and emphasize pure visual composition.
+
+Return only the raw JSON string. No markdown fences. No explanatory text.`;
 
   const isZhUi = uiLanguage.startsWith("zh");
 
@@ -579,22 +605,23 @@ ${clothingRuleBlock}
 ${requirements || "（未提供额外需求）"}
 `
       : `
-请按以下 JSON 结构输出蓝图（所有字段内容使用中文）：
+请按以下 JSON 结构输出蓝图：
 {
+  "design_specs": "（用英文撰写）# 整体设计规范\\n\\n> 所有图片须遵循以下统一规范以确保视觉一致性\\n\\n## 色彩体系\\n- **主色**：[根据产品分析确定]（十六进制色值）\\n- **辅助色**：[根据产品分析确定]（十六进制色值）\\n- **背景色**：[根据产品分析确定]（十六进制色值）\\n\\n## 字体体系\\n- **标题字体**：[推荐字体类型]\\n- **正文字体**：[推荐字体类型]\\n- **层级比例**：标题:副标题:正文 = 3:1.8:1\\n\\n## 视觉语言\\n- **装饰元素**：[根据产品类型推荐]\\n- **图标风格**：[推荐风格]\\n- **留白原则**：[具体说明]\\n\\n## 摄影风格\\n- **布光方式**：[具体说明]\\n- **景深设置**：[具体说明]\\n- **相机参数参考**：[如 ISO 100、85mm 定焦镜头]\\n\\n## 品质要求\\n- 分辨率：4K/高清\\n- 风格：专业产品摄影 / 商业广告级\\n- 真实感：超写实 / 照片级真实",
   "images": [
     {
-      "title": "4-12 字的标题",
-      "description": "1-2 句定位描述",
-      "design_content": "## 图片 [N]：...\\n\\n**设计目标**：...\\n\\n**产品外观**：...\\n\\n**画面元素**：...\\n\\n**构图方案**：...\\n\\n**内容元素**：...\\n\\n**文案内容**（使用 ${outputLanguageLabel(outputLanguage)}）：...\\n\\n**氛围营造**：..."
+      "title": "4-8 字的英文标题，简洁有力",
+      "description": "1-2 句英文定位描述，说明本图的设计目标与定位",
+      "design_content": "## 图片 [N]：[图片类型]\\n\\n**设计目标**：[具体目标]\\n\\n**产品外观**：[是/否 — 描述展示产品的哪个角度/面]\\n\\n**画面元素**：\\n- [每个元素说明：类型、形状、位置、占比（%）、内容]\\n\\n**构图方案**：\\n- 产品占比：[如 65%]\\n- 布局方式：[如居中竖向排列，轻微15度倾斜]\\n- 文字区域：[具体位置，若无文案则写"无文字区域"]\\n\\n**内容元素**：\\n- 展示焦点：[具体视觉焦点]\\n- 核心卖点：[具体卖点]\\n- 背景元素：[详细描述]\\n- 装饰元素：[详细描述]\\n\\n**文案内容**（使用 ${outputLanguageLabel(outputLanguage)}）：\\n- 主标题：[具体文字 / 若纯视觉则填"无"]\\n- 副标题：[具体文字 / 若纯视觉则填"无"]\\n- 描述文案：[具体文字 / 若纯视觉则填"无"]\\n\\n**氛围营造**：\\n- 情绪关键词：[3-5 个关键词]\\n- 光影效果：[详细描述]"
     }
-  ],
-  "design_specs": "# 整体设计规范\\n\\n## 色彩体系\\n...\\n## 字体体系\\n...\\n## 视觉语言\\n...\\n## 摄影风格\\n...\\n## 品质要求\\n..."
+  ]
 }
 约束条件：
 - images 数组返回正好 ${imageCount} 个对象。
 - 每张图片方案必须不同（角度、布局、场景逻辑各不相同）。
 - ${textContentRule}
-- 如果输出语言为"纯视觉"，文案部分一律输出"无"，并强调纯视觉构图。
+- 如果输出语言为"纯视觉"，字体体系输出"无（纯视觉设计）"，所有文案内容填"无"，强调纯视觉构图。
+- 所有色值须基于实际产品图提取。
 - 保持高转化电商风格，真实的材质与光影细节。
 用户需求：
 ${requirements || "（未提供额外需求）"}
@@ -624,23 +651,24 @@ User brief:
 ${requirements || "(no extra brief provided)"}
 `
       : `
-Create blueprint JSON with this exact shape:
+Output a blueprint JSON with this exact shape:
 {
+  "design_specs": "(Written in English) # Overall Design Specifications\\n\\n> All images must follow the unified specifications below to ensure visual consistency\\n\\n## Color System\\n- **Primary Color**: [Determined from product image] (hex code)\\n- **Secondary Color**: [Determined from product image] (hex code)\\n- **Background Color**: [Determined from product image] (hex code)\\n\\n## Font System\\n- **Heading Font**: [Recommended font type]\\n- **Body Font**: [Recommended font type]\\n- **Hierarchy**: Heading:Subtitle:Body = 3:1.8:1\\n\\n## Visual Language\\n- **Decorative Elements**: [Based on product type]\\n- **Icon Style**: [Recommended style]\\n- **Negative Space Principle**: [Specific instructions]\\n\\n## Photography Style\\n- **Lighting**: [Specific instructions]\\n- **Depth of Field**: [Specific instructions]\\n- **Camera Parameter Reference**: [e.g. ISO 100, 85mm Prime Lens]\\n\\n## Quality Requirements\\n- Resolution: 4K/HD\\n- Style: Professional product photography / Commercial advertising grade\\n- Realism: Hyper-realistic / Photorealistic",
   "images": [
     {
-      "title": "4-12 words title",
-      "description": "1-2 sentence positioning",
-      "design_content": "## Image [N]: ...\\n\\n**Design Goal**: ...\\n\\n**Product Appearance**: ...\\n\\n**In-Graphic Elements**: ...\\n\\n**Composition Plan**: ...\\n\\n**Content Elements**: ...\\n\\n**Text Content** (Using ${outputLanguageLabel(outputLanguage)}): ...\\n\\n**Atmosphere Creation**: ..."
+      "title": "[English title, concise and powerful, 4-8 words]",
+      "description": "[English description of design goal and positioning, 1-2 sentences]",
+      "design_content": "## Image [N]: [Image Type]\\n\\n**Design Goal**: [Specific goal]\\n\\n**Product Appearance**: [Yes/No — describe which angle/side of product is shown]\\n\\n**In-Graphic Elements**:\\n- [For each element: type, shape, position, size (% of frame), content]\\n\\n**Composition Plan**:\\n- Product Proportion: [e.g. 65% of frame]\\n- Layout Method: [e.g. central vertical alignment, slight 15-degree tilt]\\n- Text Area: [Specific location, or 'No-text area' if no copy]\\n\\n**Content Elements**:\\n- Focus of Display: [Specific visual focus]\\n- Key Selling Points: [Concrete selling points]\\n- Background Elements: [Detailed description]\\n- Decorative Elements: [Detailed description]\\n\\n**Text Content** (Using ${outputLanguageLabel(outputLanguage)}):\\n- Main Title: [Specific text / None if no-text]\\n- Subtitle: [Specific text / None if no-text]\\n- Description Text: [Specific text / None if no-text]\\n\\n**Atmosphere Creation**:\\n- Mood Keywords: [3-5 keywords]\\n- Light and Shadow Effects: [Detailed description]"
     }
-  ],
-  "design_specs": "# Overall Design Specifications\\n\\n## Color System\\n...\\n## Font System\\n...\\n## Visual Language\\n...\\n## Photography Style\\n...\\n## Quality Requirements\\n..."
+  ]
 }
 Constraints:
-- Return exactly ${imageCount} objects in images.
-- Every image plan must be different (angle, layout, scene logic).
+- Return exactly ${imageCount} objects in images array.
+- Each image plan must be unique — different angles, layouts, and scene logic.
 - ${textContentRule}
-- If output language is visual-only, keep typography as None and emphasize pure visual composition.
-- Keep high-conversion e-commerce style, realistic material/lighting details.
+- If output language is visual-only, set Font System to "None (Pure visual design)", fill all Text Content fields with "None", and emphasize pure visual composition.
+- Base all color values on actual product image analysis.
+- Keep high-conversion e-commerce style with realistic material and lighting details.
 User brief:
 ${requirements || "(no extra brief provided)"}
 `;

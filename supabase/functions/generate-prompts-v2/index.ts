@@ -124,10 +124,20 @@ Universal requirements:
     : language === "zh"
     ? isClothing
       ? systemPromptClothingZh
-      : "你是电商视觉提示词工程专家。根据蓝图输出严格 JSON 数组，每个元素只有 prompt 字段。不要输出解释。"
+      : `你是顶级电商视觉提示词工程专家。根据产品分析蓝图，为每张图片生成一段结构化、高精度的图像生成提示词。
+
+每段提示词必须按以下顺序覆盖全部维度（自然段落式英文）：
+Subject（主体：产品描述，必须与参考图完全一致）→ Composition（构图：占比/布局/倾斜角度）→ Background（背景：多层景深描述）→ Lighting（光影：光源类型/方向/补光/氛围效果）→ Color scheme（配色：含精确十六进制色值）→ Material details（材质：面料/表面质感/物理特性）→ Text layout（文字排布：位置/内容，若无文字则写"No typography"）→ Inset images（嵌入图：若有则说明位置与尺寸，否则省略此段）→ Atmosphere（氛围：关键词）→ Style（风格：摄影风格/焦段）→ Quality（画质：固定写 "8K resolution, hyper-realistic, commercial photography grade"）。
+
+输出要求：严格 JSON 数组，每个元素仅含 prompt 字段，不含 Markdown，不含解释。`
     : isClothing
       ? systemPromptClothingEn
-      : "You are an e-commerce visual prompt engineering expert. Return a strict JSON array where each item only has a prompt field. No explanations.";
+      : `You are a top-tier e-commerce visual prompt engineer. Based on the product analysis blueprint, generate one structured, high-precision image generation prompt per image plan.
+
+Each prompt must cover all of the following dimensions in order (written as natural English paragraphs):
+Subject (product description matching reference image exactly) → Composition (framing %, layout, tilt angle) → Background (multi-layer depth description) → Lighting (source type, direction, fill light, shadow atmosphere) → Color scheme (exact hex values from blueprint) → Material details (surface texture, physical properties, finish) → Text layout (position and copy; write "No typography" if no text) → Inset images (position and size if any, otherwise omit) → Atmosphere (mood keywords) → Style (photography style, focal length) → Quality (always end with: "8K resolution, hyper-realistic, commercial photography grade, zero artifacts").
+
+Output a strict JSON array only; each element has only a prompt field; no Markdown; no explanations.`;
 
   const userPrompt = `
 Generate exactly ${imageCount} prompt objects.
