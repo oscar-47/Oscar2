@@ -30,11 +30,12 @@ Deno.serve(async (req) => {
     return err("BAD_REQUEST", "modelImage is required when workflowMode is model");
   }
 
-  // Quick Edit fields (optional)
+  // Quick Edit / Text Edit fields (optional)
   const editMode = Boolean(body.editMode ?? false);
   const editType = typeof body.editType === "string" ? body.editType : null;
   const originalImage = typeof body.originalImage === "string" ? body.originalImage : null;
   const referenceImages = Array.isArray(body.referenceImages) ? body.referenceImages.filter((x: unknown) => typeof x === "string") : [];
+  const textEdits = typeof body.textEdits === "object" && body.textEdits !== null ? body.textEdits as Record<string, string> : null;
 
   const payload = {
     ...body,
@@ -43,11 +44,15 @@ Deno.serve(async (req) => {
     editType,
     originalImage,
     referenceImages,
+    ...(textEdits ? { textEdits } : {}),
     modelImage: workflowMode === "model" && typeof body.modelImage === "string"
       ? body.modelImage
       : body.modelImage ?? null,
     metadata: {
       ...(typeof body.metadata === "object" && body.metadata ? body.metadata as Record<string, unknown> : {}),
+      ...(editMode ? { is_edit: true, edit_type: editType } : {}),
+      ...(textEdits ? { text_edits: textEdits } : {}),
+      ...(originalImage ? { original_image_url: originalImage } : {}),
     },
   };
 

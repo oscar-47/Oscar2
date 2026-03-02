@@ -12,7 +12,12 @@ import type { GenerationModel, AspectRatio, ImageSize } from '@/types'
 import { cn } from '@/lib/utils'
 
 const MODEL_OPTIONS: Array<{ value: GenerationModel; label: string }> = [
-  { value: 'flux-kontext-pro', label: 'Standard' },
+  { value: 'azure-flux', label: 'Azure FLUX' },
+  { value: 'gpt-image', label: 'GPT-Image' },
+  { value: 'qiniu-gemini-pro', label: 'Qiniu Gemini Pro' },
+  { value: 'qiniu-gemini-flash', label: 'Qiniu Gemini Flash' },
+  { value: 'volc-seedream-4.5', label: 'Volc Seedream 4.5' },
+  { value: 'volc-seedream-5.0-lite', label: 'Volc Seedream 5.0 Lite' },
 ]
 
 const RESOLUTION_OPTIONS: Array<{ value: ImageSize; label: string; labelZh: string }> = [
@@ -61,10 +66,10 @@ export function QuickEditPanel() {
   })
 
   const computeCost = useCallback(() => {
-    if (!quickEdit.turboEnabled) return DEFAULT_CREDIT_COSTS['flux-kontext-pro'] ?? 5
+    if (!quickEdit.turboEnabled) return DEFAULT_CREDIT_COSTS[quickEdit.model] ?? 5
     const key = `turbo-${quickEdit.imageSize.toLowerCase()}`
     return DEFAULT_CREDIT_COSTS[key] ?? 12
-  }, [quickEdit.turboEnabled, quickEdit.imageSize])
+  }, [quickEdit.turboEnabled, quickEdit.imageSize, quickEdit.model])
 
   const handleRefUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

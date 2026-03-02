@@ -98,7 +98,17 @@ export interface RedeemCodeClaim {
 
 // --- AI generation models ---
 
-export type GenerationModel = 'flux-kontext-pro' | 'gemini-flash-image'
+export type GenerationModel =
+  | 'azure-flux'
+  | 'gpt-image'
+  | 'qiniu-gemini-pro'
+  | 'qiniu-gemini-flash'
+  | 'volc-seedream-4.5'
+  | 'volc-seedream-5.0-lite'
+  // Legacy aliases kept for compatibility with existing data.
+  | 'flux-kontext-pro'
+  | 'gemini-pro-image'
+  | 'gemini-flash-image'
 export type AspectRatio =
   | '1:1' | '2:3' | '3:2' | '3:4' | '4:3'
   | '4:5' | '5:4' | '9:16' | '16:9' | '21:9'
@@ -107,7 +117,15 @@ export type BackgroundMode = 'white' | 'original'
 
 // Credit costs — loaded from get-public-config, fallback values here
 export const DEFAULT_CREDIT_COSTS: Record<string, number> = {
+  'azure-flux': 5,
+  'gpt-image': 5,
+  'qiniu-gemini-pro': 5,
+  'qiniu-gemini-flash': 5,
+  'volc-seedream-4.5': 5,
+  'volc-seedream-5.0-lite': 5,
   'flux-kontext-pro': 5,
+  'gemini-pro-image': 5,
+  'gemini-flash-image': 5,
   'turbo-1k': 8,
   'turbo-2k': 12,
   'turbo-4k': 17,

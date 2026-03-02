@@ -85,7 +85,7 @@ export function AestheticMirrorForm() {
   const [batchRefs, setBatchRefs] = useState<UImg[]>([])
   const [batchProduct, setBatchProduct] = useState<UImg | null>(null)
   const [userPrompt, setUserPrompt] = useState('')
-  const [model, setModel] = useState<GenerationModel>('flux-kontext-pro')
+  const [model, setModel] = useState<GenerationModel>('azure-flux')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [imageSize, setImageSize] = useState<ImageSize>('1K')
   const [imageCount, setImageCount] = useState(1)
@@ -433,8 +433,12 @@ export function AestheticMirrorForm() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="flux-kontext-pro">{isZh ? '标准' : 'Standard'}</SelectItem>
-                      <SelectItem value="gemini-flash-image">{isZh ? '极速' : 'Fast'}</SelectItem>
+                      <SelectItem value="azure-flux">Azure FLUX</SelectItem>
+                      <SelectItem value="gpt-image">GPT-Image</SelectItem>
+                      <SelectItem value="qiniu-gemini-pro">Qiniu Gemini Pro</SelectItem>
+                      <SelectItem value="qiniu-gemini-flash">Qiniu Gemini Flash</SelectItem>
+                      <SelectItem value="volc-seedream-4.5">Volc Seedream 4.5</SelectItem>
+                      <SelectItem value="volc-seedream-5.0-lite">Volc Seedream 5.0 Lite</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -219,12 +219,75 @@ function imageGenErrorCodeFromError(error: unknown): string {
   return "UPSTREAM_ERROR";
 }
 
-function resolveModel(modelFromRequest: string): string | undefined {
-  // 'gemini-flash-image' → fast model; everything else → env default
-  if (modelFromRequest === "gemini-flash-image") {
-    return Deno.env.get("QN_IMAGE_FLASH_MODEL") ?? "gemini-2.0-flash-preview-image-generation";
+type ImageRoute = {
+  provider: "azure" | "openai" | "qiniu" | "volcengine" | "default";
+  model?: string;
+  endpoint?: string;
+  apiKey?: string;
+};
+
+function resolveImageRoute(modelFromRequest: string): ImageRoute {
+  const model = modelFromRequest.trim();
+  const qnEndpoint = Deno.env.get("QN_IMAGE_API_ENDPOINT");
+  const qnApiKey = Deno.env.get("QN_IMAGE_API_KEY");
+
+  if (model === "azure-flux" || model === "flux-kontext-pro") {
+    return {
+      provider: "azure",
+      endpoint: Deno.env.get("AZURE_FLUX_API_ENDPOINT") ?? qnEndpoint,
+      apiKey: Deno.env.get("AZURE_FLUX_API_KEY") ?? qnApiKey,
+      model: Deno.env.get("AZURE_FLUX_MODEL")
+        ?? Deno.env.get("QN_IMAGE_MODEL")
+        ?? "black-forest-labs/FLUX.1-Kontext-pro",
+    };
   }
-  return undefined; // use QN_IMAGE_MODEL env var default
+
+  if (model === "qiniu-gemini-pro" || model === "gemini-pro-image") {
+    return {
+      provider: "qiniu",
+      endpoint: Deno.env.get("QINIU_GEMINI_API_ENDPOINT") ?? qnEndpoint,
+      apiKey: Deno.env.get("QINIU_GEMINI_API_KEY") ?? qnApiKey,
+      model: Deno.env.get("QN_IMAGE_GEMINI_PRO_MODEL") ?? "gemini-3.0-pro-image-preview",
+    };
+  }
+
+  if (model === "qiniu-gemini-flash" || model === "gemini-flash-image") {
+    return {
+      provider: "qiniu",
+      endpoint: Deno.env.get("QINIU_GEMINI_API_ENDPOINT") ?? qnEndpoint,
+      apiKey: Deno.env.get("QINIU_GEMINI_API_KEY") ?? qnApiKey,
+      model: Deno.env.get("QN_IMAGE_FLASH_MODEL") ?? "gemini-2.0-flash-preview-image-generation",
+    };
+  }
+
+  if (model === "gpt-image") {
+    return {
+      provider: "openai",
+      endpoint: Deno.env.get("GPT_IMAGE_API_ENDPOINT") ?? "https://api.openai.com/v1/images/edits",
+      apiKey: Deno.env.get("GPT_IMAGE_API_KEY") ?? Deno.env.get("OPENAI_API_KEY") ?? "",
+      model: Deno.env.get("GPT_IMAGE_MODEL") ?? "gpt-image-1",
+    };
+  }
+
+  if (model === "volc-seedream-4.5") {
+    return {
+      provider: "volcengine",
+      endpoint: Deno.env.get("DOUBAO_IMAGE_API_ENDPOINT") ?? "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+      apiKey: Deno.env.get("DOUBAO_IMAGE_API_KEY") ?? "",
+      model: Deno.env.get("DOUBAO_MODEL_45") ?? "doubao-seedream-4-5-250915",
+    };
+  }
+
+  if (model === "volc-seedream-5.0-lite") {
+    return {
+      provider: "volcengine",
+      endpoint: Deno.env.get("DOUBAO_IMAGE_API_ENDPOINT") ?? "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+      apiKey: Deno.env.get("DOUBAO_IMAGE_API_KEY") ?? "",
+      model: Deno.env.get("DOUBAO_MODEL_50_LITE") ?? "doubao-seedream-5.0-lite",
+    };
+  }
+
+  return { provider: "default" };
 }
 
 function parseSizeToRatio(size?: string): number | null {
@@ -428,10 +491,84 @@ async function syncModelHistoryStatus(
     .eq("user_id", userId);
 }
 
+async function processOcrJob(
+  supabase: ReturnType<typeof createServiceClient>,
+  job: GenerationJobRow,
+): Promise<void> {
+  const startedAt = Date.now();
+  const payload = job.payload ?? {};
+  const image = String(payload.image ?? "");
+  if (!image) throw new Error("OCR_IMAGE_MISSING");
+
+  const dataUrl = await toDataUrl(image);
+
+  const chatResult = await callQnChatAPI({
+    messages: [
+      {
+        role: "system",
+        content: `You are a precise OCR assistant. Detect ALL visible text in the image.
+Return valid JSON only (no markdown, no explanation):
+{
+  "data": [
+    { "text": "exact text content", "box_2d": [y1, x1, y2, x2] }
+  ]
+}
+- box_2d uses coordinates from 0 to 1000 (normalized to image dimensions).
+- y1,x1 = top-left corner; y2,x2 = bottom-right corner.
+- Include ALL text: titles, labels, captions, watermarks, brand names.
+- If no text found, return { "data": [] }.`,
+      },
+      {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: dataUrl } },
+          { type: "text", text: "Detect all visible text in this image with bounding box positions. Return JSON." },
+        ],
+      },
+    ],
+    maxTokens: 2048,
+  });
+
+  const choices = chatResult.choices as Array<{ message?: { content?: string } }> | undefined;
+  const content = choices?.[0]?.message?.content ?? "";
+
+  let ocrData: Array<{ text: string; box_2d: number[] }> = [];
+  try {
+    const parsed = parseJsonFromContent(content);
+    if (Array.isArray(parsed.data)) {
+      ocrData = parsed.data
+        .filter((item: unknown) => typeof item === "object" && item !== null && typeof (item as Record<string, unknown>).text === "string")
+        .map((item: Record<string, unknown>) => ({
+          text: String(item.text),
+          box_2d: Array.isArray(item.box_2d) ? (item.box_2d as number[]).map(Number) : [0, 0, 0, 0],
+        }));
+    }
+  } catch {
+    ocrData = [];
+  }
+
+  await supabase
+    .from("generation_jobs")
+    .update({
+      status: "success",
+      result_data: { data: ocrData },
+      result_url: null,
+      error_code: null,
+      error_message: null,
+      duration_ms: Date.now() - startedAt,
+    })
+    .eq("id", job.id);
+}
+
 async function processAnalysisJob(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
 ): Promise<void> {
+  // Route OCR tasks to dedicated handler
+  if (job.payload?.task === "ocr") {
+    return processOcrJob(supabase, job);
+  }
+
   const startedAt = Date.now();
   const payload = job.payload ?? {};
   const uiLanguage = String(payload.uiLanguage ?? payload.targetLanguage ?? "en");
@@ -808,7 +945,8 @@ async function processImageGenJob(
 ): Promise<void> {
   const startedAt = Date.now();
   const payload = job.payload ?? {};
-  const model = String(payload.model ?? "flux-kontext-pro");
+  const model = String(payload.model ?? "azure-flux");
+  const imageRoute = resolveImageRoute(model);
   const imageSize = String(payload.imageSize ?? "2K");
   const turboEnabled = Boolean(payload.turboEnabled ?? false);
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
@@ -845,13 +983,14 @@ async function processImageGenJob(
     }
     creditDeducted = true;
 
-    // Quick Edit mode: different image assembly + prompt prefix
+    // Quick Edit / Text Edit mode: different image assembly + prompt prefix
     const isQuickEdit = Boolean(payload.editMode) && payload.editType === "quick";
+    const isTextEdit = Boolean(payload.editMode) && payload.editType === "text";
     const workflowMode = typeof payload.workflowMode === "string" ? payload.workflowMode : "product";
     const allImagePaths: string[] = [];
 
-    if (isQuickEdit) {
-      // Quick Edit: originalImage first, then referenceImages
+    if (isQuickEdit || isTextEdit) {
+      // Edit modes: originalImage first, then referenceImages
       if (typeof payload.originalImage === "string" && payload.originalImage) {
         allImagePaths.push(payload.originalImage);
       }
@@ -886,7 +1025,20 @@ async function processImageGenJob(
 
     // Build prompt
     let finalPrompt = String(payload.prompt);
-    if (isQuickEdit) {
+    if (isTextEdit) {
+      // Text Edit mode: build bilingual replacement prompt from textEdits
+      const textEdits = typeof payload.textEdits === "object" && payload.textEdits !== null
+        ? payload.textEdits as Record<string, string>
+        : {};
+      const entries = Object.entries(textEdits);
+      if (entries.length > 0) {
+        // English part
+        const enParts = entries.map(([from, to]) => `"${from}" to "${to}"`).join(", ");
+        // Chinese part
+        const zhParts = entries.map(([from, to]) => `文字${from}替换为${to}`).join(",");
+        finalPrompt = `Replace text in image: ${enParts}. ${zhParts}，字体样式大小颜色保持不变，图中其他元素保持不变。`;
+      }
+    } else if (isQuickEdit) {
       // Idempotent System Hint prefix for Quick Edit
       if (!finalPrompt.startsWith("[System Hint:")) {
         const refCount = allImagePaths.length - 1;
@@ -904,7 +1056,7 @@ async function processImageGenJob(
         "realistic materials and textures. White or contextual lifestyle background. 4K ultra-detailed rendering. ";
       finalPrompt = ecomPrefix + finalPrompt;
     }
-    const imageGenTimeoutMs = isQuickEdit
+    const imageGenTimeoutMs = (isQuickEdit || isTextEdit)
       ? Number(Deno.env.get("QUICK_EDIT_IMAGE_TIMEOUT_MS") ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "120000")
       : Number(Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "60000");
     const apiResponse = await callQnImageAPI({
@@ -912,7 +1064,9 @@ async function processImageGenJob(
       imageDataUrls: allDataUrls.length > 1 ? allDataUrls : undefined,
       prompt: finalPrompt,
       n: 1,
-      model: resolveModel(model),
+      model: imageRoute.model,
+      endpointOverride: imageRoute.endpoint,
+      apiKeyOverride: imageRoute.apiKey,
       size: aspectRatioToSize(aspectRatio),
       timeoutMsOverride: imageGenTimeoutMs,
     });
@@ -967,8 +1121,8 @@ async function processImageGenJob(
         status: "success",
         result_url: resultUrl,
         result_data: {
-          provider: "volcengine",
-          model,
+          provider: imageRoute.provider,
+          model: imageRoute.model ?? model,
           image_size: imageSize,
           mime_type: actualMime,
           object_path: objectPath ? `${outputBucket}/${objectPath}` : null,
@@ -1079,7 +1233,8 @@ async function processStyleReplicateJob(
 ): Promise<void> {
   const startedAt = Date.now();
   const payload = job.payload ?? {};
-  const modelName = String(payload.model ?? "flux-kontext-pro");
+  const modelName = String(payload.model ?? "azure-flux");
+  const imageRoute = resolveImageRoute(modelName);
   // Clamp minimum to 2K — many providers require at least ~3.7M pixels (1920×1920)
   const rawImageSize = String(payload.imageSize ?? "2K");
   const imageSize = rawImageSize === "1K" ? "2K" : rawImageSize;
@@ -1240,8 +1395,8 @@ async function processStyleReplicateJob(
       successCount,
       failedCount,
       resultData: {
-        provider: "volcengine",
-        model: modelName,
+        provider: imageRoute.provider,
+        model: imageRoute.model ?? modelName,
         image_size: imageSize,
         mime_type: firstOutput?.mime_type ?? null,
         object_path: firstOutput?.object_path ?? null,
@@ -1395,7 +1550,9 @@ async function processStyleReplicateJob(
           ...(referenceDataUrl ? { imageDataUrls: [referenceDataUrl, productDataUrl] } : {}),
           prompt,
           n: 1,
-          model: resolveModel(modelName),
+          model: imageRoute.model,
+          endpointOverride: imageRoute.endpoint,
+          apiKeyOverride: imageRoute.apiKey,
           ...(requestSize ? { size: requestSize } : {}),
           timeoutMsOverride: styleTimeoutMs,
         });

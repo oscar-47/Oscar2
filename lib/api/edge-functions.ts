@@ -221,11 +221,12 @@ export interface GenerateImageParams {
   trace_id: string
   workflowMode?: 'product' | 'model'
   modelImage?: string
-  // Quick Edit fields
+  // Quick Edit / Text Edit fields
   editMode?: boolean
-  editType?: 'quick'
+  editType?: 'quick' | 'text'
   originalImage?: string
   referenceImages?: string[]
+  textEdits?: Record<string, string>
 }
 
 export async function generateImage(
@@ -346,13 +347,20 @@ export async function createPortalSession(returnTo?: string): Promise<{ url: str
 
 // ── Text Detection ────────────────────────────────────────────────────────────
 
-export interface TextDetectionResult {
-  hasText: boolean
-  texts: Array<{ content: string; position: string }>
+export interface TextDetectionJobResult {
+  status: string
+  job_id: string
 }
 
-export async function detectImageText(image: string): Promise<TextDetectionResult> {
-  return invokeFunction<TextDetectionResult>('detect-image-text', { image })
+export interface OcrTextItem {
+  text: string
+  box_2d: number[] // [y1, x1, y2, x2] normalized 0-1000
+}
+
+export async function detectImageText(image: string): Promise<TextDetectionJobResult> {
+  const res = await invokeFunction<TextDetectionJobResult>('detect-image-text', { image })
+  void processGenerationJob(res.job_id)
+  return res
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────

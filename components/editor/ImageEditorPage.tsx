@@ -9,6 +9,7 @@ import { EditorSidebar } from './EditorSidebar'
 import { EditorCanvas } from './EditorCanvas'
 import { EditorBottomToolbar } from './EditorBottomToolbar'
 import { QuickEditPanel } from './QuickEditPanel'
+import { TextEditPanel } from './TextEditPanel'
 import { CropToolbar } from './CropToolbar'
 
 interface ImageEditorPageProps {
@@ -76,6 +77,7 @@ export function ImageEditorPage({ sid }: ImageEditorPageProps) {
       </div>
       <CropToolbar />
       <QuickEditPanel />
+      <TextEditPanel />
       <EditorBottomToolbar />
     </div>
   )

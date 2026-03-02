@@ -47,6 +47,25 @@ export interface TextDetectionState {
   texts: Array<{ content: string; position: string }>
 }
 
+export interface TextEditItem {
+  id: string
+  original: string
+  edited: string
+  position: string
+}
+
+export interface TextEditState {
+  open: boolean
+  objectId: string | null
+  requestId: string | null
+  items: TextEditItem[]
+  turboEnabled: boolean
+  isProcessing: boolean
+  isDetecting: boolean
+  ocrJobId: string | null  // job_id from detect-image-text
+  jobId: string | null     // job_id from generate-image (apply)
+}
+
 interface EditorState {
   objects: CanvasObject[]
   selectedId: string | null
@@ -57,6 +76,7 @@ interface EditorState {
   crop: CropState
   quickEdit: QuickEditState
   textDetection: TextDetectionState
+  textEdit: TextEditState
 
   // Actions
   initFromUrls: (urls: string[]) => void
@@ -83,6 +103,13 @@ interface EditorState {
 
   // Text Detection
   setTextDetection: (patch: Partial<TextDetectionState>) => void
+
+  // Text Edit
+  openTextEdit: (objectId: string) => void
+  closeTextEdit: () => void
+  setTextEditItems: (items: TextEditItem[], requestId: string) => void
+  setEditedText: (id: string, value: string) => void
+  setTextEditField: <K extends keyof TextEditState>(key: K, value: TextEditState[K]) => void
 }
 
 const DEFAULT_DISPLAY_WIDTH = 300
@@ -104,7 +131,7 @@ const defaultQuickEdit: QuickEditState = {
   prompt: '',
   referenceImage: null,
   referencePreview: null,
-  model: 'flux-kontext-pro',
+  model: 'azure-flux',
   aspectRatio: '1:1',
   imageSize: '2K',
   turboEnabled: false,
@@ -119,6 +146,18 @@ const defaultTextDetection: TextDetectionState = {
   texts: [],
 }
 
+const defaultTextEdit: TextEditState = {
+  open: false,
+  objectId: null,
+  requestId: null,
+  items: [],
+  turboEnabled: false,
+  isProcessing: false,
+  isDetecting: false,
+  ocrJobId: null,
+  jobId: null,
+}
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   objects: [],
   selectedId: null,
@@ -129,6 +168,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   crop: defaultCrop,
   quickEdit: defaultQuickEdit,
   textDetection: defaultTextDetection,
+  textEdit: defaultTextEdit,
 
   initFromUrls: (urls) => {
     let currentY = 40
@@ -293,5 +333,44 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   // Text Detection
   setTextDetection: (patch) => {
     set({ textDetection: { ...get().textDetection, ...patch } })
+  },
+
+  // Text Edit
+  openTextEdit: (objectId) => {
+    const obj = get().objects.find((o) => o.id === objectId)
+    if (!obj) return
+    set({
+      textEdit: {
+        ...defaultTextEdit,
+        open: true,
+        objectId,
+        isDetecting: true,
+        requestId: crypto.randomUUID(),
+      },
+      selectedId: objectId,
+    })
+  },
+
+  closeTextEdit: () => set({ textEdit: defaultTextEdit }),
+
+  setTextEditItems: (items, requestId) => {
+    const state = get()
+    if (state.textEdit.requestId !== requestId) return
+    set({ textEdit: { ...state.textEdit, items, isDetecting: false } })
+  },
+
+  setEditedText: (id, value) => {
+    set({
+      textEdit: {
+        ...get().textEdit,
+        items: get().textEdit.items.map((item) =>
+          item.id === id ? { ...item, edited: value } : item
+        ),
+      },
+    })
+  },
+
+  setTextEditField: (key, value) => {
+    set({ textEdit: { ...get().textEdit, [key]: value } })
   },
 }))

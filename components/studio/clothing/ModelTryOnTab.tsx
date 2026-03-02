@@ -72,7 +72,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
   const [modelImage, setModelImage] = useState<UploadedImage | null>(null)
   const [requirements, setRequirements] = useState('')
   const [language, setLanguage] = useState('zh')
-  const [model, setModel] = useState<GenerationModel>('flux-kontext-pro')
+  const [model, setModel] = useState<GenerationModel>('azure-flux')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [resolution, setResolution] = useState<ImageSize>('2K')
   const [turboEnabled, setTurboEnabled] = useState(false)

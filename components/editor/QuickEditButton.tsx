@@ -22,7 +22,7 @@ export function QuickEditButton({ objectId, x, y, width, height, zoom }: QuickEd
 
   if (crop.active || quickEdit.open) return null
 
-  const cost = DEFAULT_CREDIT_COSTS['flux-kontext-pro'] ?? 5
+  const cost = DEFAULT_CREDIT_COSTS['azure-flux'] ?? 5
 
   const btnY = y + height * zoom + 8
   const btnX = x + (width * zoom) / 2

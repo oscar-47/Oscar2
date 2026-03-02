@@ -3,7 +3,18 @@
   "$id": "generate_image_request",
   "type": "object",
   "properties": {
-    "model": { "type": "string", "enum": ["nano-banana", "nano-banana-pro"], "default": "nano-banana-pro" },
+    "model": {
+      "type": "string",
+      "enum": [
+        "azure-flux",
+        "gpt-image",
+        "qiniu-gemini-pro",
+        "qiniu-gemini-flash",
+        "volc-seedream-4.5",
+        "volc-seedream-5.0-lite"
+      ],
+      "default": "azure-flux"
+    },
     "prompt": { "type": "string" },
     "productImage": { "type": "string" },
     "productImages": { "type": "array", "items": { "type": "string" } },

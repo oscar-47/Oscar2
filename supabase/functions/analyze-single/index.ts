@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
     body.backgroundMode = backgroundMode;
   }
 
-  const modelName = String(body.model ?? "flux-kontext-pro");
+  const modelName = String(body.model ?? "azure-flux");
   const imageSize = String(body.imageSize ?? "2K");
   const imageCount = Math.max(1, Math.min(9, Number(body.imageCount ?? 1)));
   const groupCount = Math.max(1, Math.min(9, Number(body.groupCount ?? 1)));
