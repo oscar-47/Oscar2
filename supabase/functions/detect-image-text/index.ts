@@ -33,6 +33,23 @@ function guessMime(url: string): string {
   return "image/png";
 }
 
+function isTrustedUrl(url: string): boolean {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const cdnHost = Deno.env.get("SOURCE_IMAGE_BASE_URL")
+    ?? Deno.env.get("QINIU_CDN_HOST")
+    ?? Deno.env.get("UPLOAD_PUBLIC_HOST")
+    ?? "";
+  const allowed = [supabaseUrl, cdnHost, "https://cdn.shopix.ai"].filter(Boolean);
+  try {
+    const origin = new URL(url).origin;
+    return allowed.some((h) => {
+      try { return new URL(h).origin === origin; } catch { return false; }
+    });
+  } catch {
+    return false;
+  }
+}
+
 function toPublicUrl(pathOrUrl: string): string {
   if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
   const base = Deno.env.get("SOURCE_IMAGE_BASE_URL")
@@ -61,6 +78,11 @@ Deno.serve(async (req) => {
   }
 
   const imageUrl = toPublicUrl(body.image as string);
+
+  // SSRF protection: only allow trusted storage/CDN hosts
+  if ((imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) && !isTrustedUrl(imageUrl)) {
+    return err("BAD_REQUEST", "Image URL must be from trusted storage domains");
+  }
 
   try {
     // Fetch image with timeout
@@ -112,7 +134,18 @@ Deno.serve(async (req) => {
     try {
       // Try to parse JSON from content (may be wrapped in markdown code block)
       const jsonStr = content.replace(/```json?\s*/gi, "").replace(/```/g, "").trim();
-      parsed = JSON.parse(jsonStr);
+      const raw = JSON.parse(jsonStr);
+      // Normalize: ensure shape matches expected contract
+      const hasText = typeof raw.hasText === "boolean" ? raw.hasText : false;
+      const texts = Array.isArray(raw.texts)
+        ? raw.texts
+            .filter((t: unknown) => typeof t === "object" && t !== null && typeof (t as Record<string, unknown>).content === "string")
+            .map((t: Record<string, unknown>) => ({
+              content: String(t.content),
+              position: typeof t.position === "string" ? t.position : "unknown",
+            }))
+        : [];
+      parsed = { hasText: hasText && texts.length > 0, texts };
     } catch {
       // If parsing fails, return no text detected
       parsed = { hasText: false, texts: [] };

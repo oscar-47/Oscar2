@@ -136,7 +136,6 @@ export interface OssStsCredentials {
 
 export interface JobResponse {
   job_id: string
-  job_ids?: string[]
   status?: 'processing'
 }
 

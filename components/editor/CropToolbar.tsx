@@ -54,7 +54,7 @@ export function CropToolbar() {
 
       if (ratio === 'original') {
         updateCropRegion({
-          aspectRatioLock: null,
+          aspectRatioLock: 'original',
           x: 0,
           y: 0,
           width: natW,
@@ -143,7 +143,12 @@ export function CropToolbar() {
         <button
           type="button"
           onClick={() => setAspectRatio('original')}
-          className="rounded-md px-2.5 py-1 text-xs font-medium text-[#6b7280] hover:bg-[#f3f4f6] transition-colors"
+          className={cn(
+            'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+            crop.aspectRatioLock === 'original'
+              ? 'bg-[#111827] text-white'
+              : 'text-[#6b7280] hover:bg-[#f3f4f6]'
+          )}
         >
           {t('cropOriginal')}
         </button>

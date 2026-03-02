@@ -306,7 +306,7 @@ export function HistoryPage() {
           {items.map((item) => (
             <div
               key={item.id}
-              className="overflow-hidden rounded-2xl border border-[#d0d4dc] bg-white"
+              className="group overflow-hidden rounded-2xl border border-[#d0d4dc] bg-white"
               onClick={() => selectionMode && item.url && toggleSelection(item.id)}
             >
               <div className="relative aspect-[3/4] overflow-hidden bg-[#f1f3f6]">

@@ -250,10 +250,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   applyCrop: (croppedUrl) => {
     const { crop } = get()
     if (!crop.objectId) return
+    const cropW = Math.round(crop.width)
+    const cropH = Math.round(crop.height)
     set({
-      objects: get().objects.map((o) =>
-        o.id === crop.objectId ? { ...o, url: croppedUrl } : o
-      ),
+      objects: get().objects.map((o) => {
+        if (o.id !== crop.objectId) return o
+        const displayHeight = cropW > 0 ? (cropH / cropW) * o.width : o.height
+        return {
+          ...o,
+          url: croppedUrl,
+          naturalWidth: cropW,
+          naturalHeight: cropH,
+          height: displayHeight,
+        }
+      }),
       crop: defaultCrop,
     })
   },

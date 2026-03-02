@@ -73,7 +73,7 @@ export function CropOverlay() {
           }
         }
 
-        if (crop.aspectRatioLock) {
+        if (crop.aspectRatioLock && crop.aspectRatioLock !== 'original') {
           const [rw, rh] = crop.aspectRatioLock.split(':').map(Number)
           const ratio = rw / rh
           if (d.type.includes('e') || d.type.includes('w')) {
