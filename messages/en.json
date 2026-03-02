@@ -4,7 +4,8 @@
     "aestheticMirror": "Aesthetic Mirror",
     "clothingStudio": "Clothing Details Suite",
     "refinementStudio": "Refinement Studio",
-    "pricing": "Pricing",
+    "imageEditor": "Image Editor",
+    "pricing": "Buy Now",
     "history": "History",
     "profile": "Profile",
     "signIn": "Sign In",
@@ -35,154 +36,47 @@
     "createAccount": "Create your account"
   },
   "landing": {
+    "nav": {
+      "tagline": "AI Imaging for Fashion Commerce",
+      "cta": "Enter Workspace"
+    },
     "hero": {
-      "title": "Shopix AI: Your Visual Ops Partner for E-Commerce",
-      "subtitle": "From raw uploads to launch-ready detail pages, automate the full creative pipeline with structure, consistency, and speed.",
-      "cta": "Start Free",
-      "ctaSecondary": "Watch Demo"
+      "badge": "AI Business Visual Engine",
+      "title": "Professional AI Visual Solutions",
+      "subtitle": "Image Suite Generation · Style Replication · Detail-Page Production · Commercial Retouching, all in one workflow for faster e-commerce output.",
+      "cta": "Enter Workspace",
+      "platformHint": "Compatible with 30+ mainstream domestic and global e-commerce style and size standards.",
+      "platforms": "Taobao|Tmall|JD.com|Pinduoduo|Douyin E-Commerce|Kuaishou E-Commerce|Xiaohongshu|WeChat Shop|Amazon|Shopee|Lazada|AliExpress|SHEIN|TikTok Shop"
     },
-    "suites": {
-      "genesis": {
-        "title": "Studio Genesis",
-        "subtitle": "Build complete detail-page image sets",
-        "desc": "Upload your base product image and let AI map selling points, layout hierarchy, and sequence logic to generate a complete visual set in minutes.",
-        "bullet1": "Auto-extract core product selling angles",
-        "bullet2": "Generate reusable detail-page structure",
-        "bullet3": "Produce multiple style directions in batch",
-        "cta": "Start Studio Genesis"
+    "modules": {
+      "before": "Before",
+      "after": "After",
+      "compareArrow": "Before → After",
+      "smallBefore": "Raw Input (Flatlay / Basic Photo)",
+      "smallAfter": "AI Output (Multi-Angle / Detail Set)",
+      "smart": {
+        "title": "Smart / Replicated Generation",
+        "desc": "Upload one flatlay image and let AI generate multi-angle outputs with precise style replication. Produce listing covers and detail visuals in batch for Tmall, JD, and Amazon formats."
       },
-      "mirror": {
-        "title": "Aesthetic Mirror",
-        "subtitle": "Scale a design style across products",
-        "desc": "Import your reference image and transfer composition rhythm, color language, and layout style to your product assets while preserving recognizability.",
-        "bullet1": "Decode visual patterns from references",
-        "bullet2": "Apply matching color and layout cadence",
-        "bullet3": "Keep brand consistency across new outputs",
-        "cta": "Start Aesthetic Mirror"
+      "batch": {
+        "title": "Batch Generation",
+        "desc": "Support bulk uploads and one-click generation for multi-angle, multi-background clothing detail visuals. Accelerate large-scale output while matching mainstream marketplace requirements."
+      },
+      "detail": {
+        "title": "Clothing Detail Suite",
+        "desc": "Auto-produce complete fashion detail sets including flatlay, model shots, zoomed texture close-ups, and lifestyle scenes. Export ready-to-use layouts for Pinduoduo, Douyin, Xiaohongshu, and Taobao ratios."
       }
     },
-    "steps": {
-      "title": "Three Steps to Final Detail Images",
-      "subtitle": "A clean workflow that moves from source files to deployable visuals quickly",
-      "step1": {
-        "label": "Step 1",
-        "title": "Upload Product Images",
-        "desc": "Import JPG and PNG assets directly from your existing catalog workflow."
-      },
-      "step2": {
-        "label": "Step 2",
-        "title": "AI Visual Analysis",
-        "desc": "AI extracts product traits and plans an effective content structure for detail pages."
-      },
-      "step3": {
-        "label": "Step 3",
-        "title": "One-Click Generation",
-        "desc": "Generate high-quality outputs in batch with support for iterative refinement."
-      }
+    "bottomCta": {
+      "title": "Help Brands Boost Shooting & Retouching Efficiency by 10x",
+      "button": "Your AI Commerce Imaging Tool",
+      "platforms": "Taobao|Tmall|JD.com|Pinduoduo|Douyin E-Commerce|Kuaishou E-Commerce|Xiaohongshu|WeChat Shop|Amazon|Shopee|Lazada|AliExpress|SHEIN|TikTok Shop"
     },
-    "highlights": {
-      "title": "Technical Highlights",
-      "subtitle": "Built for production-grade e-commerce teams balancing quality and throughput",
-      "items": {
-        "smartExtract": {
-          "title": "Smart USP Extraction",
-          "desc": "Identifies product value points and turns them into visual communication elements."
-        },
-        "layoutEngine": {
-          "title": "Layout Intelligence",
-          "desc": "Composes structures aligned with e-commerce reading behavior."
-        },
-        "consistency": {
-          "title": "Consistency Control",
-          "desc": "Maintains coherent visual style across a full image series."
-        },
-        "batch": {
-          "title": "Batch Processing",
-          "desc": "Run multi-image generation in parallel to improve turnaround."
-        },
-        "relighting": {
-          "title": "Relighting Engine",
-          "desc": "Reconstructs light and texture to enhance material perception."
-        },
-        "multilingual": {
-          "title": "Multilingual Ready",
-          "desc": "Supports multi-language output for global storefront operations."
-        },
-        "preview": {
-          "title": "Live Preview",
-          "desc": "Preview early outputs and adjust direction before full completion."
-        },
-        "export": {
-          "title": "HD Export",
-          "desc": "Export multiple resolutions and sizes for channel-specific requirements."
-        },
-        "customSize": {
-          "title": "Custom Ratios",
-          "desc": "Flexible aspect-ratio controls for placements across channels."
-        },
-        "refineEdit": {
-          "title": "Post-Generation Editing",
-          "desc": "Continue refining copy blocks and composition on generated results."
-        },
-        "styleTransfer": {
-          "title": "Style Transfer",
-          "desc": "Move reference styles onto products while keeping key product features."
-        },
-        "speedMode": {
-          "title": "Speed Mode",
-          "desc": "Optimized for fast iteration cycles and operational stability."
-        }
-      }
-    },
-    "reasons": {
-      "title": "Why Teams Choose Shopix AI",
-      "subtitle": "Turn expensive and slow creative workflows into a repeatable production system",
-      "card1": {
-        "title": "Creative Cost Too High?",
-        "desc": "Reduce per-project visual production cost without sacrificing output quality."
-      },
-      "card2": {
-        "title": "Too Many Revision Loops?",
-        "desc": "Unify planning and execution to cut back-and-forth communication overhead."
-      },
-      "card3": {
-        "title": "Execution Bottlenecks?",
-        "desc": "Use AI-assisted layout and content execution to speed team delivery."
-      }
-    },
-    "showcase": {
-      "title": "Generated Showcase",
-      "subtitle": "Sample outputs across product categories, visual directions, and styles"
-    },
-    "faq": {
-      "title": "Frequently Asked Questions",
-      "subtitle": "Quick answers on ownership, quality control, and day-to-day usage",
-      "q1": {
-        "q": "Who owns images generated with Shopix AI?",
-        "a": "Under our terms and your lawful source assets, you retain usage rights for generated outputs. Ensure brand asset authorization where required."
-      },
-      "q2": {
-        "q": "Will AI alter key product identity details?",
-        "a": "Default settings preserve core product characteristics. You can increase or reduce stylization through prompt controls."
-      },
-      "q3": {
-        "q": "Can non-designers use this workflow?",
-        "a": "Yes. The flow is template-driven and designed for operators without formal design backgrounds."
-      },
-      "q4": {
-        "q": "Do exports fit Amazon or Shopify standards?",
-        "a": "You can export by resolution and ratio. We still recommend final checks against each platform's latest listing policy."
-      },
-      "q5": {
-        "q": "Why use Shopix AI instead of outsourcing?",
-        "a": "Speed, batch throughput, and style consistency are the main advantages for teams iterating frequently."
-      },
-      "q6": {
-        "q": "What type of teams is Shopix AI best for?",
-        "a": "Cross-border sellers, e-commerce brands, content operations teams, and SMBs needing stable creative output."
-      }
-    },
-    "supportAria": "Open online support"
+    "footer": {
+      "copyright": "© 2026 Shopix AI. All rights reserved.",
+      "terms": "Terms",
+      "privacy": "Privacy"
+    }
   },
   "studio": {
     "genesis": {
@@ -349,6 +243,35 @@
       "eta": "Estimated {seconds}s per image",
       "allFailed": "All images failed. Please adjust settings and retry."
     },
+    "editor": {
+      "title": "Image Editor",
+      "back": "Back",
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out",
+      "selectTool": "Select",
+      "panTool": "Pan",
+      "addImageTool": "Add Image",
+      "editText": "Edit Text",
+      "crop": "Crop",
+      "download": "Download",
+      "quickEdit": "Quick Edit",
+      "quickEditPrompt": "Describe your desired modifications...",
+      "quickEditModel": "Model",
+      "quickEditResolution": "Resolution",
+      "quickEditRatio": "Aspect Ratio",
+      "quickEditTurbo": "Turbo Mode",
+      "quickEditRun": "Run",
+      "quickEditCancel": "Cancel",
+      "processing": "Editing...",
+      "noTextDetected": "No text detected in this image",
+      "textDetected": "Text detected",
+      "cropFree": "Free Crop",
+      "cropOriginal": "Original Ratio",
+      "cropApply": "Apply",
+      "cropCancel": "Cancel",
+      "batchEdit": "Batch Edit",
+      "editInEditor": "Open in Editor"
+    },
     "common": {
       "results": "Results",
       "download": "Download",
@@ -423,7 +346,10 @@
       "ANALYSIS": "Analysis",
       "IMAGE_GEN": "Image Generation",
       "STYLE_REPLICATE": "Style Replication"
-    }
+    },
+    "select": "Select",
+    "selectedCount": "{count} selected",
+    "openInEditor": "Open in Editor"
   },
   "profile": {
     "title": "Profile",
@@ -445,7 +371,41 @@
     "noSubscriptionDesc": "Subscribe to get monthly credits and bonus rewards.",
     "viewPlans": "View Plans",
     "buyMoreCredits": "Buy More Credits",
-    "portalError": "Could not open billing portal. Please try again."
+    "portalError": "Could not open billing portal. Please try again.",
+    "myInviteCode": "My Invite Code",
+    "copyInviteCode": "Copy",
+    "copied": "Copied",
+    "inviteSummary": "Invite Summary",
+    "inviteCount": "Invited Users",
+    "inviteRewardTotal": "Reward Credits",
+    "bindInviteCode": "Bind Invite Code",
+    "inviteCodePlaceholder": "Enter invite code",
+    "bindNow": "Bind Now",
+    "alreadyBound": "Invite code already bound",
+    "boundBy": "Bound inviter ID: {id}",
+    "bindSuccess": "Invite code bound successfully.",
+    "redeemCode": "Redeem Code",
+    "redeemCodePlaceholder": "Enter redeem code",
+    "redeemNow": "Redeem",
+    "redeemSuccess": "Redeem successful. +{credits} credits",
+    "redeemHistory": "Redeem History",
+    "redeemHistoryEmpty": "No redeem records yet.",
+    "claimedAt": "Claimed at: {date}",
+    "claimedCredits": "+{credits} credits",
+    "errors": {
+      "INVALID_CODE": "Please enter a valid code.",
+      "CODE_NOT_FOUND": "Code not found.",
+      "ALREADY_BOUND": "Invite code already bound.",
+      "SELF_BIND_NOT_ALLOWED": "You cannot bind your own invite code.",
+      "PAID_USER_NOT_ALLOWED": "Paid users cannot bind invite code.",
+      "CODE_INACTIVE": "This redeem code is inactive.",
+      "CODE_EXPIRED": "This redeem code has expired.",
+      "CODE_EXHAUSTED": "This redeem code has reached its usage limit.",
+      "ALREADY_CLAIMED": "You already claimed this redeem code.",
+      "UNAUTHORIZED": "Please sign in again.",
+      "PROFILE_NOT_FOUND": "Profile not found.",
+      "INTERNAL_ERROR": "Operation failed. Please try again."
+    }
   },
   "common": {
     "loading": "Loading...",

@@ -30,5 +30,8 @@ verify_jwt = false
 [functions.stripe-webhook]
 verify_jwt = false
 
+[functions.create-portal-session]
+verify_jwt = false
+
 [functions.process-generation-job]
 verify_jwt = false

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import type { BlueprintImagePlan } from '@/types'
 import { cn } from '@/lib/utils'
@@ -50,11 +51,27 @@ export function ImagePlanCard({ index, plan, onChange, disabled = false }: Image
       {open && (
         <div className="mt-4 border-t border-[#e1e4ea] pt-4">
           <div className="space-y-3">
+            <Input
+              value={plan.title}
+              onChange={(e) => onChange({ ...plan, title: e.target.value })}
+              disabled={disabled}
+              placeholder={`图片 ${index + 1} 标题`}
+              className="h-11 rounded-2xl border-[#d0d4dc] bg-[#f5f6f8] text-[14px] text-[#262a32]"
+            />
+            <Textarea
+              value={plan.description}
+              onChange={(e) => onChange({ ...plan, description: e.target.value })}
+              disabled={disabled}
+              rows={3}
+              placeholder="补充该图片的描述"
+              className="resize-none rounded-2xl border-[#d0d4dc] bg-[#f5f6f8] text-[14px] leading-6 text-[#262a32]"
+            />
             <Textarea
               value={plan.design_content}
               onChange={(e) => onChange({ ...plan, design_content: e.target.value })}
               disabled={disabled}
               rows={12}
+              placeholder="补充该图片的设计内容"
               className="resize-none rounded-2xl border-[#d0d4dc] bg-[#f5f6f8] text-[14px] leading-7 text-[#262a32]"
             />
           </div>

@@ -4,7 +4,8 @@
     "aestheticMirror": "风格复刻",
     "clothingStudio": "服装详情组图",
     "refinementStudio": "图片精修",
-    "pricing": "定价策略",
+    "imageEditor": "图片编辑器",
+    "pricing": "立即购买",
     "history": "历史记录",
     "profile": "个人中心",
     "signIn": "登录",
@@ -35,154 +36,47 @@
     "createAccount": "创建你的账户"
   },
   "landing": {
+    "nav": {
+      "tagline": "服装电商AI图片工具",
+      "cta": "进入我的工作台"
+    },
     "hero": {
-      "title": "Shopix AI: 你的 AI 电商视觉搭档",
-      "subtitle": "从产品图上传到详情页成片，全流程自动化。支持组图生成、风格迁移与精修输出，让视觉交付稳定且高效。",
-      "cta": "免费试用",
-      "ctaSecondary": "查看演示"
+      "badge": "AI 商务视觉引擎",
+      "title": "专业AI视觉解决方案",
+      "subtitle": "组图生成 · 风格复刻 · 详情图制作 · 商业精修，一站式提升电商出片效率",
+      "cta": "进入我的工作台",
+      "platformHint": "已适配国内外30+主流电商风格与尺寸规范",
+      "platforms": "淘宝|天猫|京东|拼多多|抖音电商|快手电商|小红书|微信小店|亚马逊|Shopee|Lazada|速卖通|SHEIN|TikTok Shop"
     },
-    "suites": {
-      "genesis": {
-        "title": "组图生成",
-        "subtitle": "一键生成电商详情图组",
-        "desc": "上传产品原图后，系统自动拆解卖点、规划画面层次与信息顺序，批量生成多张高质量详情图，减少反复沟通与排版时间。",
-        "bullet1": "自动识别产品核心卖点",
-        "bullet2": "输出可复用的页面结构",
-        "bullet3": "支持批量产出不同风格方案",
-        "cta": "开始组图生成"
+    "modules": {
+      "before": "改造前",
+      "after": "改造后",
+      "compareArrow": "Before → After",
+      "smallBefore": "原始输入（平铺/基础拍摄）",
+      "smallAfter": "AI输出（多角度/详情组合）",
+      "smart": {
+        "title": "智能/复刻生成",
+        "desc": "上传单件平铺图，AI智能生成多角度视图 + 精准风格复刻效果，批量产出电商主图/详情图，完美适配天猫/京东/亚马逊比例。"
       },
-      "mirror": {
-        "title": "风格复刻",
-        "subtitle": "让设计风格快速可复制",
-        "desc": "导入参考图后，AI 会抽取构图语言、色彩关系和排版节奏，并将其迁移到你的商品素材，保证输出统一且符合品牌调性。",
-        "bullet1": "解析参考图的视觉规律",
-        "bullet2": "自动匹配配色与版式节奏",
-        "bullet3": "兼顾风格统一与商品识别度",
-        "cta": "开始风格复刻"
+      "batch": {
+        "title": "批量生成",
+        "desc": "支持批量上传，一键生成多件服装的多角度/多背景详情图，大幅提升大规模电商出片速度，适配所有主流平台批量需求。"
+      },
+      "detail": {
+        "title": "服装详情",
+        "desc": "自动生成完整服装详情组合，包括平铺、主模特、局部放大、生活场景，支持拼多多/抖音/小红书/淘宝尺寸与比例，一键出详情页。"
       }
     },
-    "steps": {
-      "title": "三步完成详情图生成",
-      "subtitle": "流程清晰，几分钟即可从素材到可投放成片",
-      "step1": {
-        "label": "Step 1",
-        "title": "上传产品图",
-        "desc": "支持 JPG、PNG 等常见格式，快速导入你的商品素材。"
-      },
-      "step2": {
-        "label": "Step 2",
-        "title": "AI 智能分析",
-        "desc": "自动提炼卖点并规划图文布局，减少人工策划时间。"
-      },
-      "step3": {
-        "label": "Step 3",
-        "title": "一键生成",
-        "desc": "批量输出高质量详情图，并支持继续微调与二次编辑。"
-      }
+    "bottomCta": {
+      "title": "助力品牌商家10倍提升拍摄&修图效率",
+      "button": "你的AI商拍神器",
+      "platforms": "淘宝|天猫|京东|拼多多|抖音电商|快手电商|小红书|微信小店|亚马逊|Shopee|Lazada|速卖通|SHEIN|TikTok Shop"
     },
-    "highlights": {
-      "title": "技术亮点",
-      "subtitle": "围绕电商实战场景设计，兼顾效率、质量与可控性",
-      "items": {
-        "smartExtract": {
-          "title": "智能卖点提取",
-          "desc": "识别产品核心价值并组织为可直接使用的视觉内容。"
-        },
-        "layoutEngine": {
-          "title": "专业排版引擎",
-          "desc": "自动生成符合电商阅读习惯的图文结构与层级。"
-        },
-        "consistency": {
-          "title": "一致性保障",
-          "desc": "系列图片风格统一，降低页面观感断裂风险。"
-        },
-        "batch": {
-          "title": "批量处理",
-          "desc": "一次提交，多图并行生成，显著提升交付效率。"
-        },
-        "relighting": {
-          "title": "光影重建",
-          "desc": "自动重塑光感与材质细节，提升商品表现力。"
-        },
-        "multilingual": {
-          "title": "多语言支持",
-          "desc": "支持中文与英文等语言输出，适配跨境运营场景。"
-        },
-        "preview": {
-          "title": "即时预览",
-          "desc": "生成过程可快速预览，便于及时调整方向。"
-        },
-        "export": {
-          "title": "高清导出",
-          "desc": "提供多种尺寸导出，满足不同平台投放规范。"
-        },
-        "customSize": {
-          "title": "自定义尺寸",
-          "desc": "灵活设置宽高比，适配不同端口和版位要求。"
-        },
-        "refineEdit": {
-          "title": "二次编辑",
-          "desc": "可在已有结果上继续优化局部细节与文案布局。"
-        },
-        "styleTransfer": {
-          "title": "风格迁移",
-          "desc": "在保留商品特征的基础上快速迁移目标视觉风格。"
-        },
-        "speedMode": {
-          "title": "极速模式",
-          "desc": "针对高频迭代场景优化生成速度与稳定性。"
-        }
-      }
-    },
-    "reasons": {
-      "title": "为什么选择 Shopix AI?",
-      "subtitle": "把高成本、慢节奏的视觉流程，变成可标准化的日常产能",
-      "card1": {
-        "title": "设计与外包成本高?",
-        "desc": "将单张到整套详情图的制作成本压缩到更可控区间。"
-      },
-      "card2": {
-        "title": "沟通反复且周期长?",
-        "desc": "从提案到成片流程集中化，减少多轮往返修改。"
-      },
-      "card3": {
-        "title": "排版文案执行难?",
-        "desc": "AI 协助完成结构与内容落版，团队上手门槛更低。"
-      }
-    },
-    "showcase": {
-      "title": "案例展示",
-      "subtitle": "覆盖多品类商品场景，展示不同风格与质感表达能力"
-    },
-    "faq": {
-      "title": "常见问题",
-      "subtitle": "关于产品能力、版权归属与使用门槛的核心解答",
-      "q1": {
-        "q": "通过 Shopix AI 生成的图片，版权归谁？",
-        "a": "在符合平台协议前提下，您对合法上传素材生成的结果享有使用权。涉及品牌素材时请确认授权链路完整。"
-      },
-      "q2": {
-        "q": "AI 生成会改变我产品的关键外观吗？",
-        "a": "系统默认保留产品识别特征与主要结构。若需更强风格化，可在提示词中明确调整范围。"
-      },
-      "q3": {
-        "q": "没有设计经验也能直接上手吗？",
-        "a": "可以。平台提供模板化流程，按步骤上传素材并选择参数即可获得可用结果。"
-      },
-      "q4": {
-        "q": "输出图片能满足 Amazon 或 Shopify 规范吗？",
-        "a": "支持按分辨率与比例导出。建议在投放前按目标平台最新规范做最终校验。"
-      },
-      "q5": {
-        "q": "相比传统外包，Shopix AI 的优势是什么？",
-        "a": "主要优势在于响应速度、批量能力和风格一致性，适合高频运营和快速测试场景。"
-      },
-      "q6": {
-        "q": "Shopix AI 更适合哪些团队？",
-        "a": "适合跨境卖家、品牌电商团队、内容运营团队，以及需要稳定视觉产能的中小企业。"
-      }
-    },
-    "supportAria": "打开在线支持"
+    "footer": {
+      "copyright": "© 2026 Shopix AI. All rights reserved.",
+      "terms": "服务条款",
+      "privacy": "隐私政策"
+    }
   },
   "studio": {
     "genesis": {
@@ -349,6 +243,35 @@
       "eta": "预计 {seconds} 秒/张",
       "allFailed": "全部图片精修失败，请调整参数后重试。"
     },
+    "editor": {
+      "title": "图片编辑器",
+      "back": "返回上一级",
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "selectTool": "选择",
+      "panTool": "拖拽画布",
+      "addImageTool": "添加图片",
+      "editText": "编辑文字",
+      "crop": "裁剪",
+      "download": "下载",
+      "quickEdit": "快捷编辑",
+      "quickEditPrompt": "描述您想要的修改效果...",
+      "quickEditModel": "模型",
+      "quickEditResolution": "清晰度",
+      "quickEditRatio": "尺寸比例",
+      "quickEditTurbo": "Turbo 加速模式",
+      "quickEditRun": "运行",
+      "quickEditCancel": "取消",
+      "processing": "编辑中...",
+      "noTextDetected": "未检测到图片中的文字",
+      "textDetected": "检测到文字",
+      "cropFree": "自由裁剪",
+      "cropOriginal": "原始比例",
+      "cropApply": "应用",
+      "cropCancel": "取消",
+      "batchEdit": "批量编辑",
+      "editInEditor": "在编辑器中打开"
+    },
     "common": {
       "results": "生成结果",
       "download": "下载",
@@ -423,7 +346,10 @@
       "ANALYSIS": "产品分析",
       "IMAGE_GEN": "图片生成",
       "STYLE_REPLICATE": "风格复刻"
-    }
+    },
+    "select": "选择",
+    "selectedCount": "已选择 {count} 项",
+    "openInEditor": "在编辑器中打开"
   },
   "profile": {
     "title": "个人中心",
@@ -445,7 +371,41 @@
     "noSubscriptionDesc": "订阅套餐可获得每月积分和首次订阅奖励。",
     "viewPlans": "查看套餐",
     "buyMoreCredits": "购买更多积分",
-    "portalError": "无法打开账单管理页面，请重试。"
+    "portalError": "无法打开账单管理页面，请重试。",
+    "myInviteCode": "我的邀请码",
+    "copyInviteCode": "复制",
+    "copied": "已复制",
+    "inviteSummary": "邀请收益",
+    "inviteCount": "邀请人数",
+    "inviteRewardTotal": "累计奖励积分",
+    "bindInviteCode": "绑定邀请码",
+    "inviteCodePlaceholder": "请输入邀请码",
+    "bindNow": "立即绑定",
+    "alreadyBound": "邀请码已绑定",
+    "boundBy": "已绑定邀请人 ID：{id}",
+    "bindSuccess": "邀请码绑定成功。",
+    "redeemCode": "兑换码",
+    "redeemCodePlaceholder": "请输入兑换码",
+    "redeemNow": "立即兑换",
+    "redeemSuccess": "兑换成功，+{credits} 积分",
+    "redeemHistory": "我的兑换记录",
+    "redeemHistoryEmpty": "暂无兑换记录。",
+    "claimedAt": "兑换时间：{date}",
+    "claimedCredits": "+{credits} 积分",
+    "errors": {
+      "INVALID_CODE": "请输入有效的兑换码。",
+      "CODE_NOT_FOUND": "未找到该兑换码。",
+      "ALREADY_BOUND": "邀请码已绑定。",
+      "SELF_BIND_NOT_ALLOWED": "不能绑定自己的邀请码。",
+      "PAID_USER_NOT_ALLOWED": "已有付费记录用户不可绑定邀请码。",
+      "CODE_INACTIVE": "该兑换码未启用。",
+      "CODE_EXPIRED": "该兑换码已过期。",
+      "CODE_EXHAUSTED": "该兑换码已达领取上限。",
+      "ALREADY_CLAIMED": "你已兑换过该兑换码。",
+      "UNAUTHORIZED": "登录状态失效，请重新登录。",
+      "PROFILE_NOT_FOUND": "未找到用户资料。",
+      "INTERNAL_ERROR": "操作失败，请稍后重试。"
+    }
   },
   "common": {
     "loading": "加载中...",

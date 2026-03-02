@@ -47,6 +47,9 @@ export interface Profile {
   stripe_customer_id: string | null
   stripe_subscription_id: string | null
   current_period_end: string | null
+  invite_code?: string | null
+  invited_by_user_id?: string | null
+  invite_bound_at?: string | null
   locale: 'en' | 'zh'
   created_at: string
   updated_at: string
@@ -71,6 +74,26 @@ export interface Package {
   stripe_price_id: string
   is_popular: boolean
   sort_order: number
+}
+
+export interface ReferralBinding {
+  id: string
+  inviter_user_id: string
+  invitee_user_id: string
+  invite_code_snapshot: string
+  rewarded_at: string | null
+  reward_credits: number
+  reward_txn_id: string | null
+  created_at: string
+}
+
+export interface RedeemCodeClaim {
+  id: string
+  redeem_code_id: string
+  user_id: string
+  code_snapshot: string
+  credited_amount: number
+  created_at: string
 }
 
 // --- AI generation models ---
@@ -113,6 +136,7 @@ export interface OssStsCredentials {
 
 export interface JobResponse {
   job_id: string
+  job_ids?: string[]
   status?: 'processing'
 }
 

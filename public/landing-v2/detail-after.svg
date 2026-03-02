@@ -1,0 +1,11 @@
+<svg width="1200" height="900" viewBox="0 0 1200 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="900" rx="40" fill="#F8FAFC"/>
+  <rect x="70" y="70" width="1060" height="760" rx="30" fill="white" stroke="#CBD5E1" stroke-width="3"/>
+  <rect x="120" y="120" width="430" height="300" rx="20" fill="#E2E8F0"/>
+  <rect x="570" y="120" width="480" height="300" rx="20" fill="#E2E8F0"/>
+  <rect x="120" y="440" width="300" height="190" rx="18" fill="#E2E8F0"/>
+  <rect x="440" y="440" width="300" height="190" rx="18" fill="#E2E8F0"/>
+  <rect x="760" y="440" width="290" height="190" rx="18" fill="#E2E8F0"/>
+  <rect x="120" y="650" width="930" height="130" rx="18" fill="#E2E8F0"/>
+  <text x="120" y="55" fill="#8A6A31" font-size="34" font-family="Arial, Helvetica, sans-serif">Detail-page composite: flatlay + model + close-up + lifestyle</text>
+</svg>

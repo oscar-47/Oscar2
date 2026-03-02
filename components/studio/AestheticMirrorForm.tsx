@@ -18,7 +18,8 @@ import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationModel, AspectRatio, ImageSize, GenerationJob } from '@/types'
 import { DEFAULT_CREDIT_COSTS } from '@/types'
-import { Loader2, Sparkles, Wand2, X, Plus, Download, Image as ImageIcon, ShieldCheck, Zap } from 'lucide-react'
+import { Loader2, Sparkles, Wand2, X, Plus, Download, Image as ImageIcon, ShieldCheck, Zap, Pencil } from 'lucide-react'
+import { createEditorSession } from '@/lib/utils/editor-session'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
 
@@ -560,7 +561,8 @@ export function AestheticMirrorForm() {
                       style={{ aspectRatio: previewAspectRatio }}
                     >
                       <img src={c.url} alt={`result-${i + 1}`} className="w-full object-cover" />
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
+                      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
+                        <button type="button" onClick={() => { const sid = createEditorSession([c.url!]); router.push(`/${locale}/image-editor?sid=${sid}`) }} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30"><Pencil className="h-4 w-4" /></button>
                         <button type="button" onClick={() => void downloadOne(c.url as string, i)} disabled={downloadingIndex === i || downloadingAll} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30 disabled:opacity-60">{downloadingIndex === i ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}</button>
                       </div>
                     </div>
@@ -568,10 +570,11 @@ export function AestheticMirrorForm() {
                     <div key={i} className="w-[220px] max-w-full rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">{c.error ?? tc('error')}</div>
                   ))}
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
                   <Button variant="outline" onClick={downloadAll} disabled={!cards.some((x) => x.status === 'success') || downloadingAll || downloadingIndex !== null}>{downloadingAll ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}{t('downloadAllSuccess')}</Button>
                   <Button variant="outline" onClick={retryFailed} disabled={!cards.some((x) => x.status === 'failed') || downloadingAll || downloadingIndex !== null}>{t('retryFailed')}</Button>
                   <Button variant="outline" onClick={handleSubmit} disabled={!canGenerate || downloadingAll || downloadingIndex !== null}><Sparkles className="mr-1 h-4 w-4" />{t('regenerateAll')}</Button>
+                  <Button variant="outline" onClick={() => { const urls = cards.filter((c) => c.status === 'success' && c.url).map((c) => c.url!); if (urls.length) { const sid = createEditorSession(urls); router.push(`/${locale}/image-editor?sid=${sid}`) } }} disabled={!cards.some((x) => x.status === 'success')}><Pencil className="mr-1 h-4 w-4" />{isZh ? '批量编辑' : 'Batch Edit'}</Button>
                 </div>
               </div>
             )}

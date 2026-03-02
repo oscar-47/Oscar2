@@ -30,9 +30,19 @@ Deno.serve(async (req) => {
     return err("BAD_REQUEST", "modelImage is required when workflowMode is model");
   }
 
+  // Quick Edit fields (optional)
+  const editMode = Boolean(body.editMode ?? false);
+  const editType = typeof body.editType === "string" ? body.editType : null;
+  const originalImage = typeof body.originalImage === "string" ? body.originalImage : null;
+  const referenceImages = Array.isArray(body.referenceImages) ? body.referenceImages.filter((x: unknown) => typeof x === "string") : [];
+
   const payload = {
     ...body,
     workflowMode,
+    editMode,
+    editType,
+    originalImage,
+    referenceImages,
     modelImage: workflowMode === "model" && typeof body.modelImage === "string"
       ? body.modelImage
       : body.modelImage ?? null,

@@ -7,7 +7,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ImagePlanCard } from './ImagePlanCard'
 import { SectionIcon } from '@/components/shared/SectionIcon'
-import { PreviewTileGrid } from '@/components/generation/PreviewTileGrid'
 import type { BlueprintImagePlan } from '@/types'
 
 interface DesignBlueprintProps {
@@ -25,7 +24,6 @@ export function DesignBlueprint({
   imagePlans,
   onImagePlanChange,
   disabled,
-  aspectRatio = '4:3',
 }: DesignBlueprintProps) {
   const t = useTranslations('studio.genesis')
   const [specsExpanded, setSpecsExpanded] = useState(false)
@@ -42,11 +40,17 @@ export function DesignBlueprint({
             </p>
           </div>
         </div>
-        <PreviewTileGrid
-          count={imagePlans.length}
-          aspectRatio={aspectRatio}
-          labels={imagePlans.map((plan, index) => plan.title || `预览 ${index + 1}`)}
-        />
+        <div className="space-y-3">
+          {imagePlans.map((plan, i) => (
+            <ImagePlanCard
+              key={i}
+              index={i}
+              plan={plan}
+              onChange={(updated) => onImagePlanChange(i, updated)}
+              disabled={disabled}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Design Specifications — collapsible */}
@@ -89,21 +93,6 @@ export function DesignBlueprint({
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
-
-      {/* Image Plan */}
-      <div className="space-y-4">
-        <div className="space-y-3">
-          {imagePlans.map((plan, i) => (
-            <ImagePlanCard
-              key={i}
-              index={i}
-              plan={plan}
-              onChange={(updated) => onImagePlanChange(i, updated)}
-              disabled={disabled}
-            />
-          ))}
-        </div>
       </div>
     </div>
   )

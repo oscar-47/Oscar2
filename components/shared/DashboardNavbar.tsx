@@ -7,13 +7,14 @@ import { usePathname, useRouter } from 'next/navigation'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { UserMenu } from './UserMenu'
 import { cn } from '@/lib/utils'
-import { Layers, Image, Shirt, Paintbrush, Monitor } from 'lucide-react'
+import { Layers, Image, Shirt, Paintbrush, Monitor, Pencil } from 'lucide-react'
 
 const NAV_ITEMS = [
   { key: 'studioGenesis', path: '/studio-genesis', icon: Layers },
   { key: 'aestheticMirror', path: '/aesthetic-mirror', icon: Image },
   { key: 'clothingStudio', path: '/clothing-studio', icon: Shirt },
   { key: 'refinementStudio', path: '/refinement-studio', icon: Paintbrush },
+  { key: 'imageEditor', path: '/image-editor', icon: Pencil },
   { key: 'pricing', path: '/pricing', icon: Monitor },
 ] as const
 
@@ -69,7 +70,10 @@ export function DashboardNavbar({ userId, email }: DashboardNavbarProps) {
                     : 'text-[#6d7280] hover:text-[#272b33] hover:bg-[#eceef2]'
                 )}
               >
-                <Icon className="h-4 w-4" strokeWidth={1.8} />
+                <Icon
+                  className={cn('h-4 w-4', key === 'pricing' ? 'text-[#D4AF37]' : undefined)}
+                  strokeWidth={1.8}
+                />
                 {t(key as keyof ReturnType<typeof t>)}
               </Link>
             )

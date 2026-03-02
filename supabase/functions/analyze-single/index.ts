@@ -122,6 +122,68 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Batch fan-out: create one job per reference image
+  if (mode === "batch" && Array.isArray(body.referenceImages) && body.referenceImages.length > 1) {
+    const jobIds: string[] = [];
+    const perRefCost = unitCost * groupCount;
+
+    for (const refImage of body.referenceImages as string[]) {
+      const refPayload = {
+        ...body,
+        mode: "batch",
+        groupCount,
+        // Fan-out: single reference per job
+        referenceImages: [refImage],
+        metadata: {
+          ...(typeof body.metadata === "object" && body.metadata ? body.metadata as Record<string, unknown> : {}),
+          fan_out: true,
+        },
+      };
+
+      const { data: jobData, error: jobError } = await supabase
+        .from("generation_jobs")
+        .insert({
+          user_id: authResult.user.id,
+          type: "STYLE_REPLICATE",
+          status: "processing",
+          payload: refPayload,
+          cost_amount: perRefCost,
+          trace_id: body.trace_id ?? null,
+          client_job_id: body.client_job_id ?? null,
+          fe_attempt: Number(body.fe_attempt ?? 1),
+        })
+        .select("id")
+        .single();
+
+      if (jobError || !jobData) {
+        return err("STYLE_REPLICATE_JOB_CREATE_FAILED", "failed to create batch fan-out job", 500, jobError);
+      }
+
+      const { error: taskErr } = await supabase
+        .from("generation_job_tasks")
+        .insert({
+          job_id: jobData.id,
+          task_type: "STYLE_REPLICATE",
+          status: "queued",
+          payload: refPayload,
+        });
+
+      if (taskErr) {
+        await supabase.from("generation_jobs").update({
+          status: "failed",
+          error_code: "STYLE_REPLICATE_JOB_CREATE_FAILED",
+          error_message: `Failed to enqueue fan-out task: ${taskErr.message}`,
+        }).eq("id", jobData.id);
+        continue;
+      }
+
+      jobIds.push(jobData.id);
+    }
+
+    return ok({ job_ids: jobIds, status: "processing" });
+  }
+
+  // Single job (single mode, refinement mode, or batch with 1 reference)
   const { data, error } = await supabase
     .from("generation_jobs")
     .insert({

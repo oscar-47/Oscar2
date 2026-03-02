@@ -1,10 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useLocale, useTranslations } from 'next-intl'
 import { motion } from 'framer-motion'
-import { Download, ZoomIn, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Download, ZoomIn, X, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { createEditorSession } from '@/lib/utils/editor-session'
 
 export interface ResultImage {
   url: string
@@ -38,6 +41,9 @@ export function ResultGallery({
   className,
   aspectRatio = '4:3',
 }: ResultGalleryProps) {
+  const t = useTranslations('studio.editor')
+  const locale = useLocale()
+  const router = useRouter()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const cssAspectRatio = toCssAspectRatio(aspectRatio)
 
@@ -49,6 +55,17 @@ export function ResultGallery({
     setLightboxIndex((i) =>
       i !== null ? Math.min(images.length - 1, i + 1) : null
     )
+
+  const openSingleInEditor = (url: string) => {
+    const sid = createEditorSession([url])
+    router.push(`/${locale}/image-editor?sid=${sid}`)
+  }
+
+  const openAllInEditor = () => {
+    const urls = images.map((img) => img.url)
+    const sid = createEditorSession(urls)
+    router.push(`/${locale}/image-editor?sid=${sid}`)
+  }
 
   if (!isLoading && images.length === 0) return null
 
@@ -90,6 +107,14 @@ export function ResultGallery({
               >
                 <ZoomIn className="h-4 w-4 text-white" />
               </button>
+              <button
+                type="button"
+                onClick={() => openSingleInEditor(img.url)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors"
+                title={t('editInEditor')}
+              >
+                <Pencil className="h-4 w-4 text-white" />
+              </button>
               <a
                 href={img.url}
                 download
@@ -103,6 +128,16 @@ export function ResultGallery({
           </motion.div>
         ))}
       </div>
+
+      {/* Batch Edit button */}
+      {images.length > 0 && !isLoading && (
+        <div className="mt-3">
+          <Button variant="outline" size="sm" onClick={openAllInEditor} className="gap-1.5">
+            <Pencil className="h-3.5 w-3.5" />
+            {t('batchEdit')}
+          </Button>
+        </div>
+      )}
 
       {/* Lightbox */}
       {lightboxIndex !== null && (
@@ -160,6 +195,14 @@ export function ResultGallery({
                   Download
                 </Button>
               </a>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => openSingleInEditor(images[lightboxIndex!].url)}
+              >
+                <Pencil className="h-4 w-4 mr-1.5" />
+                {t('editInEditor')}
+              </Button>
             </div>
           </div>
         </div>

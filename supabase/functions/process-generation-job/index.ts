@@ -845,36 +845,65 @@ async function processImageGenJob(
     }
     creditDeducted = true;
 
-    // Collect ALL input images (product + model) so the AI can see the full product
+    // Quick Edit mode: different image assembly + prompt prefix
+    const isQuickEdit = Boolean(payload.editMode) && payload.editType === "quick";
     const workflowMode = typeof payload.workflowMode === "string" ? payload.workflowMode : "product";
     const allImagePaths: string[] = [];
 
-    // For model try-on: model image first, then product images
-    if (workflowMode === "model" && typeof payload.modelImage === "string" && payload.modelImage) {
-      allImagePaths.push(payload.modelImage);
-    }
-    // Add all product images
-    if (Array.isArray(payload.productImages)) {
-      for (const img of payload.productImages) {
-        if (typeof img === "string" && img.trim()) allImagePaths.push(img);
+    if (isQuickEdit) {
+      // Quick Edit: originalImage first, then referenceImages
+      if (typeof payload.originalImage === "string" && payload.originalImage) {
+        allImagePaths.push(payload.originalImage);
       }
-    }
-    // Fallback: single productImage
-    if (allImagePaths.length === 0 && typeof payload.productImage === "string" && payload.productImage) {
-      allImagePaths.push(payload.productImage);
-    }
-    // Final fallback: the source we already resolved
-    if (allImagePaths.length === 0) {
-      allImagePaths.push(source);
+      if (Array.isArray(payload.referenceImages)) {
+        for (const img of payload.referenceImages) {
+          if (typeof img === "string" && img.trim()) allImagePaths.push(img);
+        }
+      }
+      // Fallback to productImage if no originalImage
+      if (allImagePaths.length === 0 && source) {
+        allImagePaths.push(source);
+      }
+    } else {
+      // Standard mode: collect ALL input images (product + model)
+      if (workflowMode === "model" && typeof payload.modelImage === "string" && payload.modelImage) {
+        allImagePaths.push(payload.modelImage);
+      }
+      if (Array.isArray(payload.productImages)) {
+        for (const img of payload.productImages) {
+          if (typeof img === "string" && img.trim()) allImagePaths.push(img);
+        }
+      }
+      if (allImagePaths.length === 0 && typeof payload.productImage === "string" && payload.productImage) {
+        allImagePaths.push(payload.productImage);
+      }
+      if (allImagePaths.length === 0) {
+        allImagePaths.push(source);
+      }
     }
 
     const allDataUrls = await Promise.all(allImagePaths.map(toDataUrl));
 
-    // Wrap user prompt with e-commerce photography system prefix
-    const ecomPrefix = "Professional e-commerce product photography. High-end commercial catalog quality. " +
-      "Studio lighting with soft shadows. Clean, premium aesthetic. Product is the hero — sharp focus, " +
-      "realistic materials and textures. White or contextual lifestyle background. 4K ultra-detailed rendering. ";
-    const finalPrompt = ecomPrefix + String(payload.prompt);
+    // Build prompt
+    let finalPrompt = String(payload.prompt);
+    if (isQuickEdit) {
+      // Idempotent System Hint prefix for Quick Edit
+      if (!finalPrompt.startsWith("[System Hint:")) {
+        const refCount = allImagePaths.length - 1;
+        let hint = "[System Hint: Product is at index 0.";
+        for (let ri = 0; ri < refCount; ri++) {
+          hint += ` Reference ${ri + 1} is at index ${ri + 1}.`;
+        }
+        hint += "] ";
+        finalPrompt = hint + finalPrompt;
+      }
+    } else {
+      // Standard mode: e-commerce photography prefix
+      const ecomPrefix = "Professional e-commerce product photography. High-end commercial catalog quality. " +
+        "Studio lighting with soft shadows. Clean, premium aesthetic. Product is the hero — sharp focus, " +
+        "realistic materials and textures. White or contextual lifestyle background. 4K ultra-detailed rendering. ";
+      finalPrompt = ecomPrefix + finalPrompt;
+    }
     const apiResponse = await callQnImageAPI({
       imageDataUrl: allDataUrls[0],
       imageDataUrls: allDataUrls.length > 1 ? allDataUrls : undefined,
@@ -964,21 +993,15 @@ async function processImageGenJob(
 }
 
 const STYLE_ANALYSIS_SYSTEM_PROMPT =
-  `你是顶级电商视觉总监与AI图像生成专家。你的任务是深度解构"参考图"的视觉基因，生成一段详细的英文图像生成提示词，使"产品图"中的产品主体完美融入参考图的视觉风格。
+  `作为顶级的电子商务视觉总监与 AI 绘画专家，你负责深度解构"参考图"的视觉基因，并将用户提供的"产品图"中的单个或多个主体元素完美融入该风格中。你生成的提示词必须基于以下维度的精细拆解：
 
-请从以下六个维度精细拆解参考图，并结合产品图特征生成提示词：
-
-1. 布局拓扑（Layout Topology）：空间构图方式（对称/对角线/F型等），产品的视觉落点与画面结构。
-2. 视觉流向（Visual Flow）：背景如何引导视线落向产品主体，产品与背景的主次层次关系。
-3. 元素逻辑（Element Logic）：元素排列密度与组合方式，产品与场景/道具之间的物理交互（遮挡、投影、嵌入）。
-4. 色彩机理（Color Mechanism）：配色逻辑与饱和度策略，精确描述主色调与辅助色（尽量提供十六进制色值），确保与参考图高度统一。
-5. 文字容器（Container Typography）——逻辑触发：首先判断参考图是否含有文字。若无文字，提示词中严禁出现任何文字或字体描述。若有文字，必须复刻其语种、字体描述与容器形状，字体描述必须唯一且明确，严禁出现"或类似"等模糊表述。
-6. 光影质感（Light & Texture）：光源方向（单侧硬光/环境柔光等）、材质属性与阴影细节，确保统一照亮所有产品元素。
-
-输出要求：
-- 完整保留产品图中产品主体的形态、材质、颜色、纹理、logo等核心设计特征，仅改变其展示场景与风格。
-- 输出必须是一段高度详细、工程化、无冗余解释的图像生成提示词。
-- 仅输出英文提示词文本，不含Markdown格式，不含任何中文，不含解释说明。`;
+1. 布局拓扑（Layout Topology）：分析参考图的网格系统与空间切割方式。确定所有产品元素在画面中的视觉落点与构架（对称、对角线、F型分布），确保遵循原图物理支撑逻辑。
+2. 视觉流向（Visual Flow）：解构画面的权重层级。明确背景如何引导视线落向产品主体，定义多产品元素间的主次引导顺序，保持原图视觉叙事节奏。
+3. 元素逻辑（Element Logic）：组合关系（排列密度、堆叠/阶梯/散落）+ 语义一致性（材质、装饰物抽象语义）+ 物理交互（遮挡、投影、嵌入）。
+4. 色彩机理（Color Mechanism）：解析配色逻辑与饱和度策略，确保全图色调与参考图高度统一。
+5. 容器排版（Container Typography）：存在性判定（参考图是否含文字，无则严禁包含文本描述）+ 语种一致性（遵循参考图语种）+ 确定性指令（字体描述唯一明确，严禁"或类似"表述）。
+6. 光影质感（Light & Texture）：精准定义光源逻辑与材质属性，统一照亮所有产品元素，形成物理空间感。
+7. 生成要求：保持所有输入产品图主体的核心形态特征与材质细节不失真。最终输出必须是一段高度详细、工程化、无冗余解释的图像生成提示词。仅输出提示词文本，不含 Markdown 格式，不含任何解释说明。`;
 
 async function generateStyleAnalysisPrompt(
   productDataUrl: string,

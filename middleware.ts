@@ -13,6 +13,7 @@ const PROTECTED_PATHS = [
   '/refinement-studio',
   '/history',
   '/profile',
+  '/image-editor',
 ]
 
 function isProtectedPath(pathname: string): boolean {

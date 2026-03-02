@@ -24,6 +24,11 @@
     --input: 0 0% 89.8%;
     --ring: 0 0% 3.9%;
     --radius: 0.5rem;
+
+    --marketing-primary: #0f172a;
+    --marketing-gold: #c9a96e;
+    --marketing-text: #1e293b;
+    --marketing-muted: #64748b;
   }
 
   .dark {
@@ -53,7 +58,16 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-family: 'Noto Sans SC', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  }
+}
+
+@layer components {
+  .marketing-glass {
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(10px);
   }
 }

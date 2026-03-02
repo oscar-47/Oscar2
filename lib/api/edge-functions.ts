@@ -221,6 +221,11 @@ export interface GenerateImageParams {
   trace_id: string
   workflowMode?: 'product' | 'model'
   modelImage?: string
+  // Quick Edit fields
+  editMode?: boolean
+  editType?: 'quick'
+  originalImage?: string
+  referenceImages?: string[]
 }
 
 export async function generateImage(
@@ -331,6 +336,23 @@ export async function createOnetimeCheckout(
     packageId,
     returnTo,
   })
+}
+
+// ── Billing Portal ────────────────────────────────────────────────────────
+
+export async function createPortalSession(returnTo?: string): Promise<{ url: string }> {
+  return invokeFunction<{ url: string }>('create-portal-session', { returnTo })
+}
+
+// ── Text Detection ────────────────────────────────────────────────────────────
+
+export interface TextDetectionResult {
+  hasText: boolean
+  texts: Array<{ content: string; position: string }>
+}
+
+export async function detectImageText(image: string): Promise<TextDetectionResult> {
+  return invokeFunction<TextDetectionResult>('detect-image-text', { image })
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────

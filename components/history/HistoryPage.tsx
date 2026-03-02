@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { AlertCircle, Download, ExternalLink, Image as ImageIcon, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { AlertCircle, Download, ExternalLink, Image as ImageIcon, Loader2, Pencil, CheckSquare, Square, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { createEditorSession } from '@/lib/utils/editor-session'
 import type { GenerationJob, JobStatus, JobType } from '@/types'
 
 const PAGE_SIZE = 12
@@ -122,7 +124,9 @@ function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
 
 export function HistoryPage() {
   const t = useTranslations('history')
+  const tEditor = useTranslations('studio.editor')
   const locale = useLocale()
+  const router = useRouter()
   const [items, setItems] = useState<HistoryAsset[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -130,6 +134,10 @@ export function HistoryPage() {
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  // Selection mode
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const formatter = useMemo(() => new Intl.DateTimeFormat(locale, {
     year: 'numeric',
@@ -213,12 +221,62 @@ export function HistoryPage() {
     }
   }, [t])
 
+  const toggleSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const openSelectedInEditor = () => {
+    const urls = items
+      .filter((item) => selectedIds.has(item.id) && item.url)
+      .map((item) => item.url!)
+    if (urls.length === 0) return
+    const sid = createEditorSession(urls)
+    router.push(`/${locale}/image-editor?sid=${sid}`)
+  }
+
+  const openSingleInEditor = (url: string) => {
+    const sid = createEditorSession([url])
+    router.push(`/${locale}/image-editor?sid=${sid}`)
+  }
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+  }
+
   const statusLabel = (status: JobStatus) => t(`status.${status}` as Parameters<typeof t>[0])
   const typeLabel = (type: JobType) => t(`type.${type}` as Parameters<typeof t>[0])
 
   return (
     <div className="mx-auto max-w-7xl">
-      <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">{t('title')}</h1>
+        {items.length > 0 && !loading && (
+          <Button
+            variant={selectionMode ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => selectionMode ? exitSelectionMode() : setSelectionMode(true)}
+            className="gap-1.5"
+          >
+            {selectionMode ? (
+              <>
+                <X className="h-3.5 w-3.5" />
+                {tEditor('quickEditCancel')}
+              </>
+            ) : (
+              <>
+                <CheckSquare className="h-3.5 w-3.5" />
+                {t('select')}
+              </>
+            )}
+          </Button>
+        )}
+      </div>
 
       {loading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -246,7 +304,11 @@ export function HistoryPage() {
       {items.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {items.map((item) => (
-            <div key={item.id} className="overflow-hidden rounded-2xl border border-[#d0d4dc] bg-white">
+            <div
+              key={item.id}
+              className="overflow-hidden rounded-2xl border border-[#d0d4dc] bg-white"
+              onClick={() => selectionMode && item.url && toggleSelection(item.id)}
+            >
               <div className="relative aspect-[3/4] overflow-hidden bg-[#f1f3f6]">
                 {item.url ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -260,6 +322,28 @@ export function HistoryPage() {
                     <ImageIcon className="h-7 w-7" />
                     <p className="mt-2 text-xs">{t('noImage')}</p>
                   </div>
+                )}
+
+                {/* Selection checkbox */}
+                {selectionMode && item.url && (
+                  <div className="absolute top-2 left-2">
+                    {selectedIds.has(item.id) ? (
+                      <CheckSquare className="h-6 w-6 text-[#3b82f6] drop-shadow" />
+                    ) : (
+                      <Square className="h-6 w-6 text-white drop-shadow" />
+                    )}
+                  </div>
+                )}
+
+                {/* Edit icon on hover (non-selection mode) */}
+                {!selectionMode && item.url && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); openSingleInEditor(item.url!) }}
+                    className="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
                 )}
               </div>
 
@@ -280,19 +364,29 @@ export function HistoryPage() {
                 )}
 
                 <div className="flex items-center gap-2 pt-1">
-                  {item.url && (
-                    <a href={item.url} target="_blank" rel="noopener noreferrer">
-                      <Button variant="outline" size="sm" className="h-8 gap-1.5 px-2.5 text-xs">
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        {t('open')}
+                  {item.url && !selectionMode && (
+                    <>
+                      <a href={item.url} target="_blank" rel="noopener noreferrer">
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5 px-2.5 text-xs">
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          {t('open')}
+                        </Button>
+                      </a>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1.5 px-2.5 text-xs"
+                        onClick={(e) => { e.stopPropagation(); openSingleInEditor(item.url!) }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                    </a>
+                    </>
                   )}
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-8 gap-1.5 px-2.5 text-xs"
-                    onClick={() => void handleDownload(item)}
+                    onClick={(e) => { e.stopPropagation(); void handleDownload(item) }}
                     disabled={!item.url || downloadingId === item.id}
                   >
                     {downloadingId === item.id ? (
@@ -306,6 +400,22 @@ export function HistoryPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Selection bar */}
+      {selectionMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-[#e5e7eb] bg-white px-5 py-3 shadow-2xl">
+          <span className="text-sm font-medium text-[#374151]">
+            {t('selectedCount', { count: selectedIds.size })}
+          </span>
+          <Button size="sm" onClick={openSelectedInEditor} className="gap-1.5">
+            <Pencil className="h-3.5 w-3.5" />
+            {t('openInEditor')}
+          </Button>
+          <Button variant="outline" size="sm" onClick={exitSelectionMode}>
+            {tEditor('quickEditCancel')}
+          </Button>
         </div>
       )}
 
