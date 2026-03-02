@@ -904,6 +904,9 @@ async function processImageGenJob(
         "realistic materials and textures. White or contextual lifestyle background. 4K ultra-detailed rendering. ";
       finalPrompt = ecomPrefix + finalPrompt;
     }
+    const imageGenTimeoutMs = isQuickEdit
+      ? Number(Deno.env.get("QUICK_EDIT_IMAGE_TIMEOUT_MS") ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "120000")
+      : Number(Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "60000");
     const apiResponse = await callQnImageAPI({
       imageDataUrl: allDataUrls[0],
       imageDataUrls: allDataUrls.length > 1 ? allDataUrls : undefined,
@@ -911,6 +914,7 @@ async function processImageGenJob(
       n: 1,
       model: resolveModel(model),
       size: aspectRatioToSize(aspectRatio),
+      timeoutMsOverride: imageGenTimeoutMs,
     });
 
     // Handle both URL and b64 responses (Volcengine returns URL, others may return b64)
