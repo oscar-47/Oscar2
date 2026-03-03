@@ -65,6 +65,15 @@ function isOpenAINativeEdits(url: string): boolean {
   return url.includes("api.openai.com/v1/images/edits");
 }
 
+/** Detect OpenRouter chat/completions endpoint */
+function isOpenRouter(url: string): boolean {
+  try {
+    return new URL(url).hostname === "openrouter.ai";
+  } catch {
+    return false;
+  }
+}
+
 function normalizeArkSize(size: string | undefined): string {
   if (!size) return "2048x2048";
   // Pass through pixel dimensions (e.g. "2048x3072")
@@ -186,6 +195,7 @@ export async function callQnImageAPI(params: {
   n?: number;
   model?: string;
   size?: string;
+  aspectRatio?: string;
   endpointOverride?: string;
   apiKeyOverride?: string;
   timeoutMsOverride?: number;
@@ -213,7 +223,82 @@ export async function callQnImageAPI(params: {
   try {
     let res: Response;
 
-    if (isAzureAIFoundryGenerations(endpoint)) {
+    if (isOpenRouter(endpoint)) {
+      // OpenRouter Chat Completions with image generation
+      const contentParts: Record<string, unknown>[] = [
+        { type: "text", text: params.prompt },
+      ];
+      const images = params.imageDataUrls && params.imageDataUrls.length > 0
+        ? params.imageDataUrls
+        : params.imageDataUrl ? [params.imageDataUrl] : [];
+      for (const img of images) {
+        if (img) {
+          contentParts.push({
+            type: "image_url",
+            image_url: { url: img },
+          });
+        }
+      }
+
+      const orBody: Record<string, unknown> = {
+        model,
+        messages: [{ role: "user", content: contentParts }],
+        modalities: ["image", "text"],
+      };
+      if (params.aspectRatio) {
+        orBody.image_config = { aspect_ratio: params.aspectRatio };
+      }
+
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(orBody),
+        signal: controller.signal,
+      });
+
+      const text = await res.text();
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = text ? JSON.parse(text) : {};
+      } catch {
+        parsed = { raw: text };
+      }
+
+      if (!res.ok) {
+        throw new Error(`OPENROUTER_IMAGE_API_ERROR ${res.status}: ${JSON.stringify(parsed)}`);
+      }
+
+      // Normalize to { data: [{ b64_json }] } or { data: [{ url }] }
+      // deno-lint-ignore no-explicit-any
+      const choices = (parsed as any)?.choices;
+      if (Array.isArray(choices) && choices.length > 0) {
+        const msg = choices[0]?.message;
+        if (Array.isArray(msg?.images) && msg.images.length > 0) {
+          const imgUrl = msg.images[0]?.image_url?.url ?? "";
+          if (imgUrl.startsWith("data:")) {
+            const b64 = imgUrl.split(",")[1] ?? "";
+            return { data: [{ b64_json: b64 }] };
+          }
+          if (imgUrl) return { data: [{ url: imgUrl }] };
+        }
+        if (Array.isArray(msg?.content)) {
+          for (const part of msg.content) {
+            if (part?.type === "image_url" && part?.image_url?.url) {
+              const imgUrl = part.image_url.url;
+              if (imgUrl.startsWith("data:")) {
+                const b64 = imgUrl.split(",")[1] ?? "";
+                return { data: [{ b64_json: b64 }] };
+              }
+              return { data: [{ url: imgUrl }] };
+            }
+          }
+        }
+      }
+      throw new Error("OPENROUTER_IMAGE_INVALID_RESPONSE: no image found: " + JSON.stringify(parsed).substring(0, 500));
+    } else if (isAzureAIFoundryGenerations(endpoint)) {
       // Azure AI Foundry /images/generations (e.g. FLUX Kontext Pro): JSON body
       const images = params.imageDataUrls && params.imageDataUrls.length > 0
         ? params.imageDataUrls

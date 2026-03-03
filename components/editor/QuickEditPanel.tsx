@@ -18,6 +18,8 @@ const MODEL_OPTIONS: Array<{ value: GenerationModel; label: string }> = [
   { value: 'qiniu-gemini-flash', label: 'Qiniu Gemini Flash' },
   { value: 'volc-seedream-4.5', label: 'Volc Seedream 4.5' },
   { value: 'volc-seedream-5.0-lite', label: 'Volc Seedream 5.0 Lite' },
+  { value: 'or-gemini-3.1-flash', label: 'Gemini 3.1 Flash' },
+  { value: 'or-gemini-3-pro', label: 'Gemini 3 Pro' },
 ]
 
 const RESOLUTION_OPTIONS: Array<{ value: ImageSize; label: string; labelZh: string }> = [

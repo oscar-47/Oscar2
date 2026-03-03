@@ -105,6 +105,8 @@ export type GenerationModel =
   | 'qiniu-gemini-flash'
   | 'volc-seedream-4.5'
   | 'volc-seedream-5.0-lite'
+  | 'or-gemini-3.1-flash'
+  | 'or-gemini-3-pro'
   // Legacy aliases kept for compatibility with existing data.
   | 'flux-kontext-pro'
   | 'gemini-pro-image'
@@ -123,6 +125,8 @@ export const DEFAULT_CREDIT_COSTS: Record<string, number> = {
   'qiniu-gemini-flash': 5,
   'volc-seedream-4.5': 5,
   'volc-seedream-5.0-lite': 5,
+  'or-gemini-3.1-flash': 5,
+  'or-gemini-3-pro': 5,
   'flux-kontext-pro': 5,
   'gemini-pro-image': 5,
   'gemini-flash-image': 5,

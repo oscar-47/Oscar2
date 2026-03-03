@@ -84,6 +84,8 @@ export function ClothingSettingsSection({
               <SelectItem value="qiniu-gemini-flash">Qiniu Gemini Flash</SelectItem>
               <SelectItem value="volc-seedream-4.5">Volc Seedream 4.5</SelectItem>
               <SelectItem value="volc-seedream-5.0-lite">Volc Seedream 5.0 Lite</SelectItem>
+              <SelectItem value="or-gemini-3.1-flash">Gemini 3.1 Flash</SelectItem>
+              <SelectItem value="or-gemini-3-pro">Gemini 3 Pro</SelectItem>
             </SelectContent>
           </Select>
         </div>

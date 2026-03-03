@@ -220,7 +220,7 @@ function imageGenErrorCodeFromError(error: unknown): string {
 }
 
 type ImageRoute = {
-  provider: "azure" | "openai" | "qiniu" | "volcengine" | "default";
+  provider: "azure" | "openai" | "qiniu" | "volcengine" | "openrouter" | "default";
   model?: string;
   endpoint?: string;
   apiKey?: string;
@@ -284,6 +284,24 @@ function resolveImageRoute(modelFromRequest: string): ImageRoute {
       endpoint: Deno.env.get("DOUBAO_IMAGE_API_ENDPOINT") ?? "https://ark.cn-beijing.volces.com/api/v3/images/generations",
       apiKey: Deno.env.get("DOUBAO_IMAGE_API_KEY") ?? "",
       model: Deno.env.get("DOUBAO_MODEL_50_LITE") ?? "doubao-seedream-5.0-lite",
+    };
+  }
+
+  if (model === "or-gemini-3.1-flash") {
+    return {
+      provider: "openrouter",
+      endpoint: "https://openrouter.ai/api/v1/chat/completions",
+      apiKey: Deno.env.get("OPENROUTER_API_KEY") ?? "",
+      model: "google/gemini-3.1-flash-image-preview",
+    };
+  }
+
+  if (model === "or-gemini-3-pro") {
+    return {
+      provider: "openrouter",
+      endpoint: "https://openrouter.ai/api/v1/chat/completions",
+      apiKey: Deno.env.get("OPENROUTER_API_KEY") ?? "",
+      model: "google/gemini-3-pro-image-preview",
     };
   }
 
@@ -1068,6 +1086,7 @@ async function processImageGenJob(
       endpointOverride: imageRoute.endpoint,
       apiKeyOverride: imageRoute.apiKey,
       size: aspectRatioToSize(aspectRatio),
+      aspectRatio,
       timeoutMsOverride: imageGenTimeoutMs,
     });
 
@@ -1554,6 +1573,7 @@ async function processStyleReplicateJob(
           endpointOverride: imageRoute.endpoint,
           apiKeyOverride: imageRoute.apiKey,
           ...(requestSize ? { size: requestSize } : {}),
+          aspectRatio,
           timeoutMsOverride: styleTimeoutMs,
         });
 
