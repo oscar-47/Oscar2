@@ -17,6 +17,7 @@ import { uploadFile } from '@/lib/api/upload'
 import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationModel, AspectRatio, ImageSize, GenerationJob, ClothingPhase } from '@/types'
+import { isValidModel } from '@/types'
 
 function uid() {
   return crypto.randomUUID()
@@ -92,7 +93,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     (s) => {
       if (typeof s.requirements === 'string') setRequirements(s.requirements)
       if (typeof s.language === 'string') setLanguage(s.language)
-      if (typeof s.model === 'string') setModel(s.model as GenerationModel)
+      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.resolution === 'string') setResolution(s.resolution as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)

@@ -42,7 +42,7 @@ import type {
   PromptSseChunk,
   GeneratedPrompt,
 } from '@/types'
-import { DEFAULT_CREDIT_COSTS } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1159,12 +1159,9 @@ export function StudioGenesisForm() {
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="azure-flux">Azure FLUX</SelectItem>
-                      <SelectItem value="gpt-image">GPT-Image</SelectItem>
-                      <SelectItem value="qiniu-gemini-pro">Qiniu Gemini Pro</SelectItem>
-                      <SelectItem value="qiniu-gemini-flash">Qiniu Gemini Flash</SelectItem>
-                      <SelectItem value="volc-seedream-4.5">Volc Seedream 4.5</SelectItem>
-                      <SelectItem value="volc-seedream-5.0-lite">Volc Seedream 5.0 Lite</SelectItem>
+                      {AVAILABLE_MODELS.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

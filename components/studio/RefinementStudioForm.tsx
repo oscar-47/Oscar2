@@ -23,7 +23,7 @@ import { uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import type { AspectRatio, BackgroundMode, GenerationJob, GenerationModel, ImageSize } from '@/types'
-import { DEFAULT_CREDIT_COSTS } from '@/types'
+import { DEFAULT_CREDIT_COSTS, isValidModel } from '@/types'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
 
@@ -202,7 +202,7 @@ export function RefinementStudioForm() {
     (s) => {
       if (typeof s.userPrompt === 'string') setUserPrompt(s.userPrompt)
       if (typeof s.backgroundMode === 'string') setBackgroundMode(s.backgroundMode as BackgroundMode)
-      if (typeof s.model === 'string') setModel(s.model as GenerationModel)
+      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)

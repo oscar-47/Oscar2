@@ -18,7 +18,7 @@ import { uploadFile, uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationModel, AspectRatio, ImageSize, GenerationJob } from '@/types'
-import { DEFAULT_CREDIT_COSTS } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel } from '@/types'
 import { Loader2, Sparkles, Wand2, X, Plus, Download, Image as ImageIcon, ShieldCheck, Zap, Pencil } from 'lucide-react'
 import { createEditorSession } from '@/lib/utils/editor-session'
 import { SectionIcon } from '@/components/shared/SectionIcon'
@@ -120,7 +120,7 @@ export function AestheticMirrorForm() {
     (s) => {
       if (s.mode === 'single' || s.mode === 'batch') setMode(s.mode)
       if (typeof s.userPrompt === 'string') setUserPrompt(s.userPrompt)
-      if (typeof s.model === 'string') setModel(s.model as GenerationModel)
+      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
       if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
@@ -464,12 +464,9 @@ export function AestheticMirrorForm() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="or-gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
-                      <SelectItem value="or-gemini-3.1-flash">Gemini 3.1 Flash</SelectItem>
-                      <SelectItem value="or-gemini-3-pro">Gemini 3 Pro</SelectItem>
-                      <SelectItem value="ta-gemini-3.1-flash">TA Gemini 3.1 Flash</SelectItem>
-                      <SelectItem value="ta-gemini-2.5-flash">TA Gemini 2.5 Flash</SelectItem>
-                      <SelectItem value="ta-gemini-3-pro">TA Gemini 3 Pro</SelectItem>
+                      {AVAILABLE_MODELS.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

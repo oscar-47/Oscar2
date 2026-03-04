@@ -43,6 +43,7 @@ import {
   type AspectRatio,
   type ImageSize,
   type GenerationJob,
+  isValidModel,
 } from '@/types'
 
 function uid() {
@@ -218,7 +219,7 @@ export function EcomStudioForm() {
     (s) => {
       if (typeof s.description === 'string') setDescription(s.description)
       if (typeof s.platformStyle === 'string') setPlatformStyle(s.platformStyle as EcommercePlatformStyle)
-      if (typeof s.model === 'string') setModel(s.model as GenerationModel)
+      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)

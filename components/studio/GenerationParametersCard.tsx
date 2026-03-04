@@ -9,13 +9,11 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  SelectGroup,
-  SelectLabel,
 } from '@/components/ui/select'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { SlidersHorizontal, Zap } from 'lucide-react'
 import type { GenerationModel, AspectRatio, ImageSize, OutputLanguage } from '@/types'
-import { DEFAULT_CREDIT_COSTS } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS } from '@/types'
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -155,45 +153,11 @@ export function GenerationParametersCard({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectGroup>
-              <SelectLabel className="text-[12px] text-[#8b909b]">OpenRouter</SelectLabel>
-              <SelectItem value="or-gemini-2.5-flash">
-                Gemini 2.5 Flash {creditLabel('or-gemini-2.5-flash')}
+            {AVAILABLE_MODELS.map((m) => (
+              <SelectItem key={m.value} value={m.value}>
+                {m.label} {creditLabel(m.value)}
               </SelectItem>
-              <SelectItem value="or-gemini-3.1-flash">
-                Gemini 3.1 Flash {creditLabel('or-gemini-3.1-flash')}
-              </SelectItem>
-              <SelectItem value="or-gemini-3-pro">
-                Gemini 3 Pro {creditLabel('or-gemini-3-pro')}
-              </SelectItem>
-            </SelectGroup>
-            <SelectGroup>
-              <SelectLabel className="text-[12px] text-[#8b909b]">ToAPIs</SelectLabel>
-              <SelectItem value="ta-gemini-3.1-flash">
-                TA Gemini 3.1 Flash {creditLabel('ta-gemini-3.1-flash')}
-              </SelectItem>
-              <SelectItem value="ta-gemini-2.5-flash">
-                TA Gemini 2.5 Flash {creditLabel('ta-gemini-2.5-flash')}
-              </SelectItem>
-              <SelectItem value="ta-gemini-3-pro">
-                TA Gemini 3 Pro {creditLabel('ta-gemini-3-pro')}
-              </SelectItem>
-            </SelectGroup>
-            <SelectGroup>
-              <SelectLabel className="text-[12px] text-[#8b909b]">Premium</SelectLabel>
-              <SelectItem value="midjourney">
-                Midjourney {creditLabel('midjourney')}
-              </SelectItem>
-              <SelectItem value="dall-e-4">
-                DALL·E 4 {creditLabel('dall-e-4')}
-              </SelectItem>
-              <SelectItem value="ideogram-3">
-                Ideogram 3 {creditLabel('ideogram-3')}
-              </SelectItem>
-              <SelectItem value="sd-3.5-ultra">
-                SD 3.5 Ultra {creditLabel('sd-3.5-ultra')}
-              </SelectItem>
-            </SelectGroup>
+            ))}
           </SelectContent>
         </Select>
       </div>

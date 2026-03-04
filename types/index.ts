@@ -117,6 +117,22 @@ export type GenerationModel =
   | 'ta-gemini-2.5-flash'
   | 'ta-gemini-3.1-flash'
   | 'ta-gemini-3-pro'
+
+export const AVAILABLE_MODELS: ReadonlyArray<{ value: GenerationModel; label: string }> = [
+  { value: 'or-gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { value: 'or-gemini-3.1-flash', label: 'Gemini 3.1 Flash' },
+  { value: 'or-gemini-3-pro', label: 'Gemini 3 Pro' },
+  { value: 'ta-gemini-3.1-flash', label: 'TA Gemini 3.1 Flash' },
+  { value: 'ta-gemini-2.5-flash', label: 'TA Gemini 2.5 Flash' },
+  { value: 'ta-gemini-3-pro', label: 'TA Gemini 3 Pro' },
+]
+
+export const DEFAULT_MODEL: GenerationModel = 'or-gemini-3.1-flash'
+
+export function isValidModel(m: string): boolean {
+  return AVAILABLE_MODELS.some((x) => x.value === m)
+}
+
 export type AspectRatio =
   | '1:1' | '2:3' | '3:2' | '3:4' | '4:3'
   | '4:5' | '5:4' | '9:16' | '16:9' | '21:9'
