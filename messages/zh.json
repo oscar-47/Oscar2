@@ -3,8 +3,8 @@
     "studioGenesis": "组图生成",
     "aestheticMirror": "风格复刻",
     "clothingStudio": "服装详情组图",
+    "ecomStudio": "一键生图",
     "refinementStudio": "图片精修",
-    "imageEditor": "图片编辑器",
     "pricing": "立即购买",
     "history": "历史记录",
     "profile": "个人中心",
@@ -192,6 +192,25 @@
         "title": "一键生成导出",
         "desc": "快速生成高清大图，支持多种尺寸导出"
       }
+    },
+    "ecomStudio": {
+      "title": "一键生图工作室",
+      "description": "上传产品图，AI 先优化卖点和提示词，再一键生成主图与详情图。",
+      "badge": "平台优化",
+      "productImage": "产品图片",
+      "platformStyle": "平台风格",
+      "descriptionLabel": "产品描述",
+      "descriptionPlaceholder": "输入产品信息、目标人群、核心卖点或促销重点...",
+      "analyzeButton": "AI 优化描述",
+      "settings": "生成参数",
+      "optimizedDesc": "优化后的产品描述",
+      "sellingPoints": "核心卖点",
+      "detailFocusAreas": "详情图焦点",
+      "mainImagePrompt": "主图提示词",
+      "detailPrompts": "详情图提示词",
+      "confirmGenerate": "确认生成 {count} 张图片 — {cost} 积分",
+      "complianceWarning": "亚马逊主图合规提醒：以下规则可能未完全满足，请确认后再上架。",
+      "emptyState": "上传产品图并点击\"AI 优化描述\"，即可预览主图与详情图策略。"
     },
     "clothingStudio": {
       "title": "服装工作室",
