@@ -46,6 +46,7 @@ export function FloatingToolbar({ objectId, x, y, width, zoom }: FloatingToolbar
         top: toolbarY,
         transform: 'translateX(-50%)',
       }}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       <button
         type="button"

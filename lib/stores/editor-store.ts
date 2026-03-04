@@ -14,7 +14,7 @@ export interface CanvasObject {
   zIndex: number
 }
 
-export type EditorTool = 'select' | 'pan' | 'add-image'
+export type EditorTool = 'select' | 'pan'
 
 export interface CropState {
   active: boolean

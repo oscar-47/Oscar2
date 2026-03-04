@@ -31,6 +31,7 @@ export function QuickEditButton({ objectId, x, y, width, height, zoom }: QuickEd
     <button
       type="button"
       onClick={() => openQuickEdit(objectId)}
+      onMouseDown={(e) => e.stopPropagation()}
       className="pointer-events-auto absolute z-50 flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] px-4 py-2 text-xs font-medium text-white shadow-lg hover:shadow-xl transition-shadow"
       style={{
         left: btnX,
