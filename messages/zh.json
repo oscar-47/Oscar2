@@ -110,6 +110,10 @@
       "analyzingStep2": "模拟真实光照中...",
       "analyzingStep3": "渲染高保真像素中...",
       "analyzingStep4": "优化纹理与细节中...",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "noCardsSelected": "请至少选择一张图片方案",
+      "selectedCount": "已选 {selected} / 共 {total} 张",
       "steps": {
         "upload": "上传图片中",
         "analyze": "分析产品中",

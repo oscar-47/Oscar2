@@ -110,6 +110,10 @@
       "analyzingStep2": "Simulating physical lighting...",
       "analyzingStep3": "Rendering high-fidelity pixels...",
       "analyzingStep4": "Optimizing textures and details...",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "noCardsSelected": "Please select at least one image plan",
+      "selectedCount": "Selected {selected} / {total}",
       "steps": {
         "upload": "Uploading images",
         "analyze": "Analyzing product",
