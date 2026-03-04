@@ -492,9 +492,14 @@ export function EcomStudioForm() {
   }
 
   const removeSellingPoint = (index: number) => {
-    if (!analysisResult || analysisResult.selling_points.length <= 3) return
+    if (!analysisResult) return
     const sp = analysisResult.selling_points.filter((_, i) => i !== index)
     setAnalysisResult({ ...analysisResult, selling_points: sp })
+  }
+
+  const clearAllSellingPoints = () => {
+    if (!analysisResult) return
+    setAnalysisResult({ ...analysisResult, selling_points: [] })
   }
 
   const updateDetailFocus = (index: number, value: string) => {
@@ -517,12 +522,17 @@ export function EcomStudioForm() {
   }
 
   const removeDetailFocus = (index: number) => {
-    if (!analysisResult || analysisResult.detail_focus_areas.length <= 4) return
+    if (!analysisResult) return
     setAnalysisResult({
       ...analysisResult,
       detail_focus_areas: analysisResult.detail_focus_areas.filter((_, i) => i !== index),
       detail_prompts: analysisResult.detail_prompts.filter((_, i) => i !== index),
     })
+  }
+
+  const clearAllDetailFocus = () => {
+    if (!analysisResult) return
+    setAnalysisResult({ ...analysisResult, detail_focus_areas: [], detail_prompts: [] })
   }
 
   const updateDetailPrompt = (index: number, value: string) => {
@@ -841,9 +851,20 @@ export function EcomStudioForm() {
 
               {/* Selling Points — Tag chips */}
               <div>
-                <h3 className="mb-2 text-[14px] font-semibold text-[#1a1d24]">
-                  {t('sellingPoints')} ({analysisResult.selling_points.length})
-                </h3>
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-[14px] font-semibold text-[#1a1d24]">
+                    {t('sellingPoints')} ({analysisResult.selling_points.length})
+                  </h3>
+                  {analysisResult.selling_points.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearAllSellingPoints}
+                      className="text-[12px] text-[#7d818d] hover:text-red-500 transition-colors"
+                    >
+                      {isZh ? '清空全部' : 'Clear all'}
+                    </button>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {analysisResult.selling_points.map((sp, i) => (
                     <div key={i} className="group flex items-center rounded-full bg-[#f1f3f6] border border-[#d0d4dc] px-3 py-1.5">
@@ -874,15 +895,13 @@ export function EcomStudioForm() {
                           {sp || (isZh ? '(空)' : '(empty)')}
                         </span>
                       )}
-                      {analysisResult.selling_points.length > 3 && (
-                        <button
-                          type="button"
-                          onClick={() => removeSellingPoint(i)}
-                          className="ml-1.5 text-[#7d818d] hover:text-red-500 transition-colors"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeSellingPoint(i)}
+                        className="ml-1.5 text-[#7d818d] hover:text-red-500 transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   ))}
                   {analysisResult.selling_points.length < 5 && (
@@ -912,15 +931,26 @@ export function EcomStudioForm() {
                   <h3 className="text-[14px] font-semibold text-[#1a1d24]">
                     {t('detailFocusAreas')} ({analysisResult.detail_focus_areas.length})
                   </h3>
-                  {analysisResult.detail_focus_areas.length < 8 && (
-                    <button
-                      type="button"
-                      onClick={addDetailFocus}
-                      className="flex items-center gap-1 text-[12px] text-[#17191f] hover:underline"
-                    >
-                      <Plus className="h-3 w-3" /> {isZh ? '添加' : 'Add'}
-                    </button>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {analysisResult.detail_focus_areas.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearAllDetailFocus}
+                        className="text-[12px] text-[#7d818d] hover:text-red-500 transition-colors"
+                      >
+                        {isZh ? '清空全部' : 'Clear all'}
+                      </button>
+                    )}
+                    {analysisResult.detail_focus_areas.length < 8 && (
+                      <button
+                        type="button"
+                        onClick={addDetailFocus}
+                        className="flex items-center gap-1 text-[12px] text-[#17191f] hover:underline"
+                      >
+                        <Plus className="h-3 w-3" /> {isZh ? '添加' : 'Add'}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   {analysisResult.detail_focus_areas.map((df, i) => (
@@ -934,15 +964,13 @@ export function EcomStudioForm() {
                         onChange={(e) => updateDetailFocus(i, e.target.value)}
                         className="flex-1 rounded-lg border border-[#e0e2e8] bg-[#f8f9fb] px-3 py-2 text-[13px] focus:border-[#17191f] focus:outline-none"
                       />
-                      {analysisResult.detail_focus_areas.length > 4 && (
-                        <button
-                          type="button"
-                          onClick={() => removeDetailFocus(i)}
-                          className="text-[#b0b3bc] hover:text-red-500"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeDetailFocus(i)}
+                        className="text-[#b0b3bc] hover:text-red-500"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
