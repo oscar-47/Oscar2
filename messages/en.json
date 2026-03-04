@@ -129,6 +129,8 @@
       "platformMinWarning": "Please select at least {min} images for this platform",
       "reanalyzeWarning": "Key parameters changed since last analysis. Please re-analyze.",
       "reanalyze": "Re-Analyze",
+      "templateStructured": "Use template",
+      "templateFree": "Clear",
       "steps": {
         "upload": "Uploading images",
         "analyze": "Analyzing product",

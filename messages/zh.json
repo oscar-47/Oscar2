@@ -129,6 +129,8 @@
       "platformMinWarning": "请至少选择 {min} 张图片以满足该平台要求",
       "reanalyzeWarning": "关键参数已变更，请重新分析以更新设计方案。",
       "reanalyze": "重新分析",
+      "templateStructured": "使用模板",
+      "templateFree": "清空",
       "steps": {
         "upload": "上传图片中",
         "analyze": "分析产品中",

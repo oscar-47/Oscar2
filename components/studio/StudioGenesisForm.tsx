@@ -1424,11 +1424,33 @@ export function StudioGenesisForm() {
                 </div>
               </div>
 
+              {phase === 'input' && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setRequirements(isZh
+                      ? '我的商品是____，主要卖点是____，目标客群是____'
+                      : 'My product is ____, key features are ____, target audience is ____'
+                    )}
+                    className="rounded-full border border-[#d0d4dc] bg-white px-3 py-1 text-xs text-[#5a5e6b] hover:bg-[#f1f3f6] transition-colors"
+                  >
+                    {t('templateStructured')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRequirements('')}
+                    className="rounded-full border border-[#d0d4dc] bg-white px-3 py-1 text-xs text-[#5a5e6b] hover:bg-[#f1f3f6] transition-colors"
+                  >
+                    {t('templateFree')}
+                  </button>
+                </div>
+              )}
+
               <Textarea
                 id="sg-req"
                 placeholder={isZh
-                  ? '建议输入：产品名称、卖点、目标人群、详情图风格等\n\n例如：这是一款日式抹茶沐浴露，主打天然成分和舒缓放松功效，目标人群为25-40岁女性白领，希望详情图风格简约高级...'
-                  : tc('requirementsPlaceholder')}
+                  ? '支持三种输入方式：\n1. 固定句式：我的商品是____，卖点是____\n2. 自由描述：任意文字描述产品和需求\n3. 留空：仅通过产品图进行AI分析'
+                  : 'Three input styles supported:\n1. Template: My product is ____, features are ____\n2. Free text: Describe your product freely\n3. Empty: Let AI analyze from images alone'}
                 value={requirements}
                 onChange={(e) => setRequirements(e.target.value)}
                 rows={5}
