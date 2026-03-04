@@ -237,14 +237,14 @@ type ImageRoute = {
 
 // Map or-*/ta-* frontend model names to actual provider model IDs
 const OR_MODEL_MAP: Record<string, string> = {
-  "or-gemini-2.5-flash": "google/gemini-2.5-flash-preview-image-generation",
-  "or-gemini-3.1-flash": "google/gemini-3.1-flash-preview-image-generation",
-  "or-gemini-3-pro": "google/gemini-3.0-pro-preview-image-generation",
+  "or-gemini-2.5-flash": "google/gemini-2.5-flash-image-preview",
+  "or-gemini-3.1-flash": "google/gemini-3.1-flash-image-preview",
+  "or-gemini-3-pro": "google/gemini-3-pro-image-preview",
 };
 const TA_MODEL_MAP: Record<string, string> = {
-  "ta-gemini-2.5-flash": "gemini-2.5-flash-preview-image-generation",
-  "ta-gemini-3.1-flash": "gemini-3.1-flash-preview-image-generation",
-  "ta-gemini-3-pro": "gemini-3.0-pro-preview-image-generation",
+  "ta-gemini-2.5-flash": "gemini-2.5-flash-image-preview",
+  "ta-gemini-3.1-flash": "gemini-3.1-flash-image-preview",
+  "ta-gemini-3-pro": "gemini-3-pro-image-preview",
 };
 
 function resolveImageRoute(modelFromRequest: string): ImageRoute {
