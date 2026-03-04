@@ -229,6 +229,10 @@ export interface PromptSseChunk {
 
 export interface GeneratedPrompt {
   prompt: string
+  title: string           // default ""
+  negative_prompt: string // default ""
+  marketing_hook: string  // default ""
+  priority: number        // default 0, clamped 0-10
 }
 
 // --- Studio Genesis phases ---

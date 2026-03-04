@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
 - 声明面料类型（棉质/涤纶/牛仔布/丝绸等）与视觉特征（哑光/光泽/粗糙纹理等）。
 - 完整保留产品的形状、颜色、图案、logo、文字印花和所有关键设计细节。
 - 每段 prompt 结尾统一追加：8K分辨率，超清画质，极致锐度，商业摄影级品质，无视觉噪点。
-- 严格输出 JSON 数组，每个元素仅含 prompt 字段，不含 Markdown，不含任何解释。`;
+- 严格输出 JSON 数组，每个元素包含 prompt, title, negative_prompt, marketing_hook, priority 字段，不含 Markdown，不含任何解释。`;
 
   const systemPromptClothingEn = `You are a top-tier e-commerce visual prompt engineer specializing in apparel product photography. Your task is to generate highly precise, technical image generation prompts for each plan in the analysis blueprint.
 
@@ -97,7 +97,7 @@ Universal requirements:
 - State fabric type (cotton, polyester, denim, silk, etc.) and visual properties (matte, glossy, textured, etc.).
 - Preserve all product identity: shape, color, pattern, logo, print, and every key design detail.
 - End every prompt with: 8K resolution, ultra-clear, maximum sharpness, commercial photography quality, zero visual artifacts.
-- Output a strict JSON array only; each element has only a prompt field; no Markdown; no explanations.`;
+- Output a strict JSON array only; each element must contain prompt, title, negative_prompt, marketing_hook, priority fields; no Markdown; no explanations.`;
 
   const systemPromptModelTryOn =
     `你是顶级电商模特试穿图提示词工程专家。根据拍摄策略蓝图，为每个镜头生成一段极具指导性的图像生成提示词。
@@ -117,7 +117,7 @@ Universal requirements:
 11.画质：[分辨率标准，固定写"4K分辨率，超清画质，极致锐度，商业摄影级品质"]
 强制约束：[模特身份的3个核心不可偏离特征] + [服装的3个核心不可偏离特征]
 
-输出要求：严格 JSON 数组，每个元素仅含 prompt 字段，不含 Markdown，不含解释。`;
+输出要求：严格 JSON 数组，每个元素包含 prompt, title, negative_prompt, marketing_hook, priority 字段，不含 Markdown，不含解释。`;
 
   const systemPrompt = isModelTryOn
     ? systemPromptModelTryOn
@@ -126,26 +126,44 @@ Universal requirements:
       ? systemPromptClothingZh
       : `你是顶级电商视觉提示词工程专家。根据产品分析蓝图，为每张图片生成一段结构化、高精度的图像生成提示词。
 
-每段提示词必须按以下顺序覆盖全部维度（自然段落式英文）：
-Subject（主体：产品描述，必须与参考图完全一致）→ Composition（构图：占比/布局/倾斜角度）→ Background（背景：多层景深描述）→ Lighting（光影：光源类型/方向/补光/氛围效果）→ Color scheme（配色：含精确十六进制色值）→ Material details（材质：面料/表面质感/物理特性）→ Text layout（文字排布：位置/内容，若无文字则写"No typography"）→ Inset images（嵌入图：若有则说明位置与尺寸，否则省略此段）→ Atmosphere（氛围：关键词）→ Style（风格：摄影风格/焦段）→ Quality（画质：固定写 "8K resolution, hyper-realistic, commercial photography grade"）。
+每段提示词必须从以下6个核心维度展开：
+1. 主体（Subject）：产品精确描述，保持与参考图完全一致
+2. 风格（Style）：摄影风格、焦段、后期调性
+3. 场景（Scene）：背景环境、多层景深描述、构图布局
+4. 光影（Lighting）：光源类型、方向、补光、阴影氛围
+5. 材质（Material）：表面质感、物理特性、色值
+6. 角度（Angle）：拍摄视角、倾斜度、产品占比
 
-输出要求：严格 JSON 数组，每个元素仅含 prompt 字段，不含 Markdown，不含解释。`
+同时按以下顺序覆盖全部补充维度（自然段落式英文）：
+Composition（构图：占比/布局/倾斜角度）→ Color scheme（配色：含精确十六进制色值）→ Text layout（文字排布：位置/内容，若无文字则写"No typography"）→ Inset images（嵌入图：若有则说明位置与尺寸，否则省略此段）→ Atmosphere（氛围：关键词）→ Quality（画质：固定写 "8K resolution, hyper-realistic, commercial photography grade"）。
+
+输出要求：严格 JSON 数组，每个元素包含 prompt, title, negative_prompt, marketing_hook, priority 字段，不含 Markdown，不含解释。`
     : isClothing
       ? systemPromptClothingEn
       : `You are a top-tier e-commerce visual prompt engineer. Based on the product analysis blueprint, generate one structured, high-precision image generation prompt per image plan.
 
-Each prompt must cover all of the following dimensions in order (written as natural English paragraphs):
-Subject (product description matching reference image exactly) → Composition (framing %, layout, tilt angle) → Background (multi-layer depth description) → Lighting (source type, direction, fill light, shadow atmosphere) → Color scheme (exact hex values from blueprint) → Material details (surface texture, physical properties, finish) → Text layout (position and copy; write "No typography" if no text) → Inset images (position and size if any, otherwise omit) → Atmosphere (mood keywords) → Style (photography style, focal length) → Quality (always end with: "8K resolution, hyper-realistic, commercial photography grade, zero artifacts").
+Each prompt must be built around these 6 core dimensions:
+1. Subject: Precise product description, must match the reference image exactly
+2. Style: Photography style, focal length, post-processing tone
+3. Scene: Background environment, multi-layer depth description, composition layout
+4. Lighting: Light source type, direction, fill light, shadow atmosphere
+5. Material: Surface texture, physical properties, hex color values
+6. Angle: Camera angle, tilt, product-to-frame ratio
 
-Output a strict JSON array only; each element has only a prompt field; no Markdown; no explanations.`;
+Additionally, cover these supplementary dimensions (written as natural English paragraphs):
+Color scheme (exact hex values from blueprint) → Text layout (position and copy; write "No typography" if no text) → Inset images (position and size if any, otherwise omit) → Atmosphere (mood keywords) → Quality (always end with: "8K resolution, hyper-realistic, commercial photography grade, zero artifacts").
+
+Output a strict JSON array only; each element must contain prompt, title, negative_prompt, marketing_hook, priority fields; no Markdown; no explanations.`;
 
   const userPrompt = `
 Generate exactly ${imageCount} prompt objects.
 
 For each image plan in the blueprint, identify its shot type (white background, 3D ghost mannequin, detail close-up, selling point, or scene/lifestyle) from the title and design_content, then apply the corresponding shot-type rules from your instructions.
 
-Output schema:
-[{"prompt": "<full detailed prompt text>"}]
+Output schema (v2):
+[{"prompt": "<full detailed prompt text>", "title": "<short purpose title>", "negative_prompt": "<things to avoid, or empty string>", "marketing_hook": "<one-line marketing angle, or empty string>", "priority": <integer 0-10, 0=default>}]
+
+All fields required. "prompt" is the main generation text. Other fields may be empty string / 0 if not applicable.
 
 Rules:
 - One prompt object per image plan, in the same order as the blueprint.
@@ -190,7 +208,7 @@ ${designSpecs ?? "(none)"}
               { role: "system", content: systemPrompt },
               { role: "user", content: userPrompt },
             ],
-            max_tokens: 2048,
+            max_tokens: Math.min(4096, 256 * imageCount + 512),
           };
           if (!isAzure) {
             body.model = config.model;

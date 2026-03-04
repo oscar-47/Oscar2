@@ -219,13 +219,24 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       const { publicUrl: uploadedModelUrl } = await uploadFile(modelImage!.file)
 
       const promptText = steps.find((s) => s.id === 'preview')?.streamedText ?? ''
+      // Extract prompt from v2 JSON if possible
+      let imagePrompt = promptText
+      try {
+        const jsonMatch = promptText.match(/\[[\s\S]*\]/)
+        if (jsonMatch) {
+          const arr = JSON.parse(jsonMatch[0])
+          if (Array.isArray(arr) && arr[0]?.prompt) {
+            imagePrompt = arr.map((item: Record<string, unknown>) => String(item.prompt ?? '')).join('\n\n')
+          }
+        }
+      } catch { /* use raw text */ }
 
       set('generate', { status: 'active' })
       const { job_id: imageJobId } = await generateImage({
         productImage: uploadedProductUrls[0],
         productImages: uploadedProductUrls,
         modelImage: uploadedModelUrl,
-        prompt: promptText,
+        prompt: imagePrompt,
         model,
         aspectRatio,
         imageSize: resolution,

@@ -301,7 +301,26 @@ function StepIndicator({ currentPhase, locale }: { currentPhase: GenesisPhase; l
 
 // ─── Prompt parsing ─────────────────────────────────────────────────────────
 
-function parsePromptArray(rawText: string, expectedCount: number): string[] {
+function normalizePrompt(item: unknown): GeneratedPrompt | null {
+  // Accept bare strings (v1 compat) and objects (v2)
+  if (typeof item === 'string') {
+    const s = item.trim()
+    return s ? { prompt: s, title: '', negative_prompt: '', marketing_hook: '', priority: 0 } : null
+  }
+  if (!item || typeof item !== 'object') return null
+  const obj = item as Record<string, unknown>
+  const prompt = typeof obj.prompt === 'string' ? obj.prompt.trim() : ''
+  if (!prompt) return null
+  return {
+    prompt,
+    title: typeof obj.title === 'string' ? obj.title : '',
+    negative_prompt: typeof obj.negative_prompt === 'string' ? obj.negative_prompt : '',
+    marketing_hook: typeof obj.marketing_hook === 'string' ? obj.marketing_hook : '',
+    priority: Math.round(Math.max(0, Math.min(10, Number(obj.priority) || 0))),
+  }
+}
+
+function parsePromptArray(rawText: string, expectedCount: number): GeneratedPrompt[] {
   const text = rawText.trim()
   const candidates: string[] = [text]
 
@@ -311,13 +330,17 @@ function parsePromptArray(rawText: string, expectedCount: number): string[] {
   const jsonArrayMatch = text.match(/\[[\s\S]*\]/)
   if (jsonArrayMatch?.[0]) candidates.push(jsonArrayMatch[0].trim())
 
+  // Try truncation salvage: find last complete object
+  const truncatedMatch = text.match(/\[[\s\S]*\}/)
+  if (truncatedMatch?.[0]) {
+    candidates.push(truncatedMatch[0] + ']')
+  }
+
   for (const candidate of candidates) {
     try {
       const arr = JSON.parse(candidate)
       if (Array.isArray(arr)) {
-        const prompts = arr
-          .map((item) => (item && typeof item === 'object' ? (item as GeneratedPrompt).prompt : null))
-          .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+        const prompts = arr.map(normalizePrompt).filter((v): v is GeneratedPrompt => v !== null)
         if (prompts.length > 0) return prompts
       }
     } catch {
@@ -325,13 +348,11 @@ function parsePromptArray(rawText: string, expectedCount: number): string[] {
     }
   }
 
-  const fallback = text
-    .split(/\n{2,}|\n(?=\d+[\.\)、])/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 20)
+  // Paragraph fallback
+  const fallback = text.split(/\n{2,}|\n(?=\d+[\.\)、])/).map(s => s.trim()).filter(s => s.length > 20)
+  if (fallback.length > 0) return fallback.map(s => ({ prompt: s, title: '', negative_prompt: '', marketing_hook: '', priority: 0 }))
 
-  if (fallback.length > 0) return fallback
-  return Array.from({ length: Math.max(1, expectedCount) }, () => text)
+  return Array.from({ length: Math.max(1, expectedCount) }, () => ({ prompt: text, title: '', negative_prompt: '', marketing_hook: '', priority: 0 }))
 }
 
 function isBlueprintImagePlan(value: unknown): value is BlueprintImagePlan {
@@ -673,8 +694,8 @@ export function StudioGenesisForm() {
       // 2. Parse structured prompt JSON
       const parsedPrompts = parsePromptArray(promptText, selectedPlans.length)
       const prompts = Array.from({ length: selectedPlans.length }, (_, i) => {
-        const value = parsedPrompts[i] ?? parsedPrompts[i % parsedPrompts.length]
-        return value ?? promptText
+        const gp = parsedPrompts[i] ?? parsedPrompts[i % parsedPrompts.length]
+        return gp?.prompt ?? promptText
       })
       if (prompts.length === 0) {
         throw new Error('No prompts generated from SSE response')
