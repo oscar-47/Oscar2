@@ -66,6 +66,12 @@ export interface TextEditState {
   jobId: string | null     // job_id from generate-image (apply)
 }
 
+export interface ComparisonState {
+  visible: boolean
+  fromId: string | null
+  toId: string | null
+}
+
 interface EditorState {
   objects: CanvasObject[]
   selectedId: string | null
@@ -77,6 +83,7 @@ interface EditorState {
   quickEdit: QuickEditState
   textDetection: TextDetectionState
   textEdit: TextEditState
+  comparison: ComparisonState
 
   // Actions
   initFromUrls: (urls: string[]) => void
@@ -110,6 +117,12 @@ interface EditorState {
   setTextEditItems: (items: TextEditItem[], requestId: string) => void
   setEditedText: (id: string, value: string) => void
   setTextEditField: <K extends keyof TextEditState>(key: K, value: TextEditState[K]) => void
+
+  // Comparison
+  setComparison: (patch: Partial<ComparisonState>) => void
+
+  // Text edit result
+  applyTextEditResult: (objectId: string, resultUrl: string) => void
 }
 
 const DEFAULT_DISPLAY_WIDTH = 300
@@ -158,6 +171,12 @@ const defaultTextEdit: TextEditState = {
   jobId: null,
 }
 
+const defaultComparison: ComparisonState = {
+  visible: false,
+  fromId: null,
+  toId: null,
+}
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   objects: [],
   selectedId: null,
@@ -169,6 +188,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   quickEdit: defaultQuickEdit,
   textDetection: defaultTextDetection,
   textEdit: defaultTextEdit,
+  comparison: defaultComparison,
 
   initFromUrls: (urls) => {
     let currentY = 40
@@ -372,5 +392,34 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setTextEditField: (key, value) => {
     set({ textEdit: { ...get().textEdit, [key]: value } })
+  },
+
+  // Comparison
+  setComparison: (patch) => {
+    set({ comparison: { ...get().comparison, ...patch } })
+  },
+
+  // Text edit result — add edited image next to original and show comparison arrow
+  applyTextEditResult: (objectId, resultUrl) => {
+    const obj = get().objects.find((o) => o.id === objectId)
+    if (!obj) return
+    const newId = crypto.randomUUID()
+    const newObj: CanvasObject = {
+      id: newId,
+      url: resultUrl,
+      originalUrl: resultUrl,
+      x: obj.x + obj.width + 40,
+      y: obj.y,
+      width: obj.width,
+      height: obj.height,
+      naturalWidth: obj.naturalWidth,
+      naturalHeight: obj.naturalHeight,
+      zIndex: Math.max(...get().objects.map((o) => o.zIndex), 0) + 1,
+    }
+    set({
+      objects: [...get().objects, newObj],
+      comparison: { visible: true, fromId: objectId, toId: newId },
+      selectedId: newId,
+    })
   },
 }))
