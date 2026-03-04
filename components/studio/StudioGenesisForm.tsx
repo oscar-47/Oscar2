@@ -22,6 +22,7 @@ import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
+import { usePlatformConfig } from '@/lib/hooks/usePlatformConfig'
 import { uploadFiles } from '@/lib/api/upload'
 import {
   analyzeProductV2,
@@ -44,7 +45,7 @@ import type {
   GeneratedPrompt,
   EcommercePlatform,
 } from '@/types'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, PLATFORM_RULES, getPlatformMinImages, isValidModel } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, PLATFORM_RULES, isValidModel } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -558,6 +559,7 @@ export function StudioGenesisForm() {
   )
 
   const { total } = useCredits()
+  const { getMinImages: getPlatformMinImages } = usePlatformConfig()
   const selectedCount = selectedPlanIds.size
   const totalCost = computeCost(model, turboEnabled, imageSize, phase === 'preview' ? selectedCount : imageCount)
   const insufficientCredits = total !== null && total < totalCost

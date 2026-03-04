@@ -302,4 +302,8 @@ export interface PublicConfig {
     en: string
     zh: string
   }
+  platform_rules?: {
+    version: string
+    rules: PlatformRule[]
+  }
 }
