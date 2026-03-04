@@ -41,8 +41,9 @@ import type {
   BlueprintImagePlan,
   PromptSseChunk,
   GeneratedPrompt,
+  EcommercePlatform,
 } from '@/types'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, PLATFORM_RULES, getPlatformMinImages } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -453,6 +454,7 @@ export function StudioGenesisForm() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [imageSize, setImageSize] = useState<ImageSize>('1K')
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>('none')
+  const [platform, setPlatform] = useState<EcommercePlatform>('none')
 
   // Locale-aware constants
   const ASPECT_RATIOS = locale === 'zh' ? ASPECT_RATIOS_ZH : ASPECT_RATIOS_EN
@@ -544,6 +546,12 @@ export function StudioGenesisForm() {
     })
   }, [])
 
+  const handlePlatformChange = useCallback((newPlatform: EcommercePlatform) => {
+    setPlatform(newPlatform)
+    const min = getPlatformMinImages(newPlatform)
+    setImageCount(prev => Math.max(prev, min))
+  }, [])
+
   const handleStop = useCallback(() => {
     abortRef.current?.abort()
     setPhase('input')
@@ -609,6 +617,25 @@ export function StudioGenesisForm() {
       setAnalysisBlueprint(blueprint)
       setEditableDesignSpecs(blueprint.design_specs ?? '')
       const plansWithIds = (blueprint.images ?? []).map(p => ({ ...p, id: crypto.randomUUID() }))
+
+      // Fail-fast on zero plans
+      if (plansWithIds.length === 0) {
+        throw new Error('Analysis returned no image plans')
+      }
+      // Defensive padding for platform minimum
+      const minCount = getPlatformMinImages(platform)
+      if (plansWithIds.length < minCount && platform !== 'none') {
+        const deficit = minCount - plansWithIds.length
+        for (let i = 0; i < deficit; i++) {
+          const source = plansWithIds[i % plansWithIds.length]
+          plansWithIds.push({
+            ...source,
+            id: crypto.randomUUID(),
+            title: `${source.title} ${isZh ? '(补充)' : '(Supplementary)'}`,
+          })
+        }
+      }
+
       setEditableImagePlans(plansWithIds)
       setSelectedPlanIds(new Set(plansWithIds.map(p => p.id!)))
       setPhase('preview')
@@ -618,10 +645,15 @@ export function StudioGenesisForm() {
       setPhase('input')
       setSelectedPlanIds(new Set())
     }
-  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, t, tc])
+  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, platform, t, tc])
 
   // ── Phase 2: Confirm & Generate ──
   const handleGenerate = useCallback(async () => {
+    const platformMin = getPlatformMinImages(platform)
+    if (platform !== 'none' && selectedPlanIds.size < platformMin) {
+      setErrorMessage(t('platformMinWarning', { min: platformMin }))
+      return
+    }
     if (!analysisBlueprint) return
     const trace_id = uid()
     const client_job_id = uid()
@@ -800,7 +832,7 @@ export function StudioGenesisForm() {
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
     }
-  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, t, tc])
+  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, platform, t, tc])
 
   const handleBackToInput = useCallback(() => {
     setPhase('input')
@@ -808,6 +840,7 @@ export function StudioGenesisForm() {
     setProgress(0)
     setErrorMessage(null)
     setSelectedPlanIds(new Set())
+    setPlatform('none')
   }, [])
 
   const handleBackToPreview = useCallback(() => {
@@ -830,6 +863,7 @@ export function StudioGenesisForm() {
     setEditableImagePlans([])
     setSelectedPlanIds(new Set())
     setUploadedUrls([])
+    setPlatform('none')
   }, [])
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -886,7 +920,7 @@ export function StudioGenesisForm() {
           <Button
             size="lg"
             onClick={handleGenerate}
-            disabled={insufficientCredits || selectedCount === 0}
+            disabled={insufficientCredits || selectedCount === 0 || (platform !== 'none' && selectedCount < getPlatformMinImages(platform))}
             className="h-14 w-full rounded-3xl bg-[#171a22] text-[17px] font-semibold text-white hover:bg-[#11131a] disabled:bg-[#9ca1ad]"
           >
             <ArrowRight className="mr-2 h-5 w-5" />
@@ -901,6 +935,10 @@ export function StudioGenesisForm() {
 
           {selectedCount === 0 && (
             <p className="text-center text-sm text-destructive">{t('noCardsSelected')}</p>
+          )}
+
+          {platform !== 'none' && selectedCount > 0 && selectedCount < getPlatformMinImages(platform) && (
+            <p className="text-center text-sm text-destructive">{t('platformMinWarning', { min: getPlatformMinImages(platform) })}</p>
           )}
 
           {insufficientCredits && (
@@ -1259,6 +1297,30 @@ export function StudioGenesisForm() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
+                  <Label className="text-[13px] font-medium text-[#5a5e6b]">{t('platform')}</Label>
+                  <Select
+                    value={platform}
+                    onValueChange={(v) => handlePlatformChange(v as EcommercePlatform)}
+                    disabled={leftParamsDisabled}
+                  >
+                    <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t('platformNone')}</SelectItem>
+                      <SelectItem value="taobao">{t('platformTaobao')}</SelectItem>
+                      <SelectItem value="tmall">{t('platformTmall')}</SelectItem>
+                      <SelectItem value="jd">{t('platformJd')}</SelectItem>
+                      <SelectItem value="pdd">{t('platformPdd')}</SelectItem>
+                      <SelectItem value="amazon">{t('platformAmazon')}</SelectItem>
+                      <SelectItem value="shopee">{t('platformShopee')}</SelectItem>
+                      <SelectItem value="ebay">{t('platformEbay')}</SelectItem>
+                      <SelectItem value="tiktok">{t('platformTiktok')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {platform !== 'none' && (
+                    <p className="text-[12px] text-[#7d818d]">{t('platformHint', { min: getPlatformMinImages(platform) })}</p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
                   <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('imageCount')}</Label>
                   <Select
                     value={String(imageCount)}
@@ -1267,7 +1329,7 @@ export function StudioGenesisForm() {
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {IMAGE_COUNTS.map((n) => (
+                      {IMAGE_COUNTS.filter(n => n >= getPlatformMinImages(platform)).map((n) => (
                         <SelectItem key={n} value={String(n)}>
                           {n} {locale === 'zh' ? ' 张' : (n === 1 ? ' Image' : ' Images')}
                         </SelectItem>

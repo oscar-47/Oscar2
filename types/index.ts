@@ -221,6 +221,31 @@ export type OutputLanguage =
   | 'none' | 'en' | 'zh' | 'ja' | 'ko'
   | 'es' | 'fr' | 'de' | 'pt' | 'ar' | 'ru'
 
+// --- E-commerce Platform Rules ---
+
+export type EcommercePlatform = 'none' | 'taobao' | 'tmall' | 'jd' | 'pdd' | 'amazon' | 'shopee' | 'ebay' | 'tiktok'
+
+export interface PlatformRule {
+  value: EcommercePlatform
+  minImages: number
+}
+
+export const PLATFORM_RULES: readonly PlatformRule[] = [
+  { value: 'none', minImages: 1 },
+  { value: 'taobao', minImages: 5 },
+  { value: 'tmall', minImages: 5 },
+  { value: 'jd', minImages: 5 },
+  { value: 'pdd', minImages: 5 },
+  { value: 'amazon', minImages: 7 },
+  { value: 'shopee', minImages: 8 },
+  { value: 'ebay', minImages: 5 },
+  { value: 'tiktok', minImages: 5 },
+] as const
+
+export function getPlatformMinImages(platform: EcommercePlatform): number {
+  return PLATFORM_RULES.find(r => r.value === platform)?.minImages ?? 1
+}
+
 // --- SSE types ---
 
 export interface PromptSseChunk {
