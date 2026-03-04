@@ -21,6 +21,7 @@ import { ResultGallery, type ResultImage } from '@/components/generation/ResultG
 import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
+import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { uploadFiles } from '@/lib/api/upload'
 import {
   analyzeProductV2,
@@ -43,7 +44,7 @@ import type {
   GeneratedPrompt,
   EcommercePlatform,
 } from '@/types'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, PLATFORM_RULES, getPlatformMinImages } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, PLATFORM_RULES, getPlatformMinImages, isValidModel } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -537,6 +538,24 @@ export function StudioGenesisForm() {
   const [retryContext, setRetryContext] = useState<RetryContext | null>(null)
   const [generatedPrompts, setGeneratedPrompts] = useState<GeneratedPrompt[]>([])
   const abortRef = useRef<AbortController | null>(null)
+
+  // ── Session persistence ──
+  useSessionPersistence(
+    'studio-genesis',
+    () => ({
+      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, platform, turboEnabled,
+    }),
+    (s) => {
+      if (typeof s.requirements === 'string') setRequirements(s.requirements)
+      if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
+      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
+      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
+      if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
+      if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
+      if (typeof s.platform === 'string') setPlatform(s.platform as EcommercePlatform)
+      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+    }
+  )
 
   const { total } = useCredits()
   const selectedCount = selectedPlanIds.size
