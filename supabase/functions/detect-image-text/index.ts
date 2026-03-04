@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
     .insert({
       user_id: authResult.user.id,
       type: "ANALYSIS",
-      status: "pending",
+      status: "processing",
       payload: { task: "ocr", image },
       cost_amount: 0, // OCR is free
       fe_attempt: 1,

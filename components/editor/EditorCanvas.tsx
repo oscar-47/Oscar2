@@ -17,6 +17,7 @@ export function EditorCanvas() {
   const activeTool = useEditorStore((s) => s.activeTool)
   const quickEdit = useEditorStore((s) => s.quickEdit)
   const crop = useEditorStore((s) => s.crop)
+  const comparison = useEditorStore((s) => s.comparison)
   const selectObject = useEditorStore((s) => s.selectObject)
   const moveObject = useEditorStore((s) => s.moveObject)
   const setZoom = useEditorStore((s) => s.setZoom)
@@ -134,6 +135,8 @@ export function EditorCanvas() {
   )
 
   const selectedObj = selectedId ? objects.find((o) => o.id === selectedId) : null
+  const fromObj = comparison.fromId ? objects.find((o) => o.id === comparison.fromId) : null
+  const toObj = comparison.toId ? objects.find((o) => o.id === comparison.toId) : null
 
   return (
     <div
@@ -155,6 +158,35 @@ export function EditorCanvas() {
         {objects.map((obj) => (
           <CanvasObject key={obj.id} obj={obj} isSelected={obj.id === selectedId} />
         ))}
+
+        {/* Text-edit comparison hint: source -> preview */}
+        {comparison.visible && fromObj && toObj && (() => {
+          const y = fromObj.y + fromObj.height / 2
+          const startX = fromObj.x + fromObj.width + 12
+          const endX = toObj.x - 12
+          const lineWidth = Math.max(24, endX - startX)
+          return (
+            <>
+              <div
+                className="pointer-events-none absolute rounded-full bg-[#6366f1]/85"
+                style={{ left: startX, top: y - 1, width: lineWidth, height: 2, zIndex: 9997 }}
+              />
+              <div
+                className="pointer-events-none absolute"
+                style={{
+                  left: startX + lineWidth - 8,
+                  top: y - 5,
+                  width: 0,
+                  height: 0,
+                  borderTop: '5px solid transparent',
+                  borderBottom: '5px solid transparent',
+                  borderLeft: '8px solid #6366f1',
+                  zIndex: 9997,
+                }}
+              />
+            </>
+          )
+        })()}
 
         {/* Crop overlay (inside transform so it scales with canvas) */}
         {crop.active && <CropOverlay />}

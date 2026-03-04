@@ -78,14 +78,12 @@ export function ClothingSettingsSection({
           <Select value={model} onValueChange={(v) => onModelChange(v as GenerationModel)} disabled={disabled}>
             <SelectTrigger className={inputClass}><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="azure-flux">Azure FLUX</SelectItem>
-              <SelectItem value="gpt-image">GPT-Image</SelectItem>
-              <SelectItem value="qiniu-gemini-pro">Qiniu Gemini Pro</SelectItem>
-              <SelectItem value="qiniu-gemini-flash">Qiniu Gemini Flash</SelectItem>
-              <SelectItem value="volc-seedream-4.5">Volc Seedream 4.5</SelectItem>
-              <SelectItem value="volc-seedream-5.0-lite">Volc Seedream 5.0 Lite</SelectItem>
+              <SelectItem value="or-gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
               <SelectItem value="or-gemini-3.1-flash">Gemini 3.1 Flash</SelectItem>
               <SelectItem value="or-gemini-3-pro">Gemini 3 Pro</SelectItem>
+              <SelectItem value="ta-gemini-3.1-flash">TA Gemini 3.1 Flash</SelectItem>
+              <SelectItem value="ta-gemini-2.5-flash">TA Gemini 2.5 Flash</SelectItem>
+              <SelectItem value="ta-gemini-3-pro">TA Gemini 3 Pro</SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -12,14 +12,12 @@ import type { GenerationModel, AspectRatio, ImageSize } from '@/types'
 import { cn } from '@/lib/utils'
 
 const MODEL_OPTIONS: Array<{ value: GenerationModel; label: string }> = [
-  { value: 'azure-flux', label: 'Azure FLUX' },
-  { value: 'gpt-image', label: 'GPT-Image' },
-  { value: 'qiniu-gemini-pro', label: 'Qiniu Gemini Pro' },
-  { value: 'qiniu-gemini-flash', label: 'Qiniu Gemini Flash' },
-  { value: 'volc-seedream-4.5', label: 'Volc Seedream 4.5' },
-  { value: 'volc-seedream-5.0-lite', label: 'Volc Seedream 5.0 Lite' },
+  { value: 'or-gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   { value: 'or-gemini-3.1-flash', label: 'Gemini 3.1 Flash' },
   { value: 'or-gemini-3-pro', label: 'Gemini 3 Pro' },
+  { value: 'ta-gemini-3.1-flash', label: 'TA Gemini 3.1 Flash' },
+  { value: 'ta-gemini-2.5-flash', label: 'TA Gemini 2.5 Flash' },
+  { value: 'ta-gemini-3-pro', label: 'TA Gemini 3 Pro' },
 ]
 
 const RESOLUTION_OPTIONS: Array<{ value: ImageSize; label: string; labelZh: string }> = [
@@ -68,9 +66,10 @@ export function QuickEditPanel() {
   })
 
   const computeCost = useCallback(() => {
-    if (!quickEdit.turboEnabled) return DEFAULT_CREDIT_COSTS[quickEdit.model] ?? 5
-    const key = `turbo-${quickEdit.imageSize.toLowerCase()}`
-    return DEFAULT_CREDIT_COSTS[key] ?? 12
+    const base = DEFAULT_CREDIT_COSTS[quickEdit.model] ?? 5
+    if (!quickEdit.turboEnabled) return base
+    const surcharge = quickEdit.imageSize === '1K' ? 3 : quickEdit.imageSize === '2K' ? 7 : 12
+    return base + surcharge
   }, [quickEdit.turboEnabled, quickEdit.imageSize, quickEdit.model])
 
   const handleRefUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

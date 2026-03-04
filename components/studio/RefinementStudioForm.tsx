@@ -181,7 +181,7 @@ export function RefinementStudioForm() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [userPrompt, setUserPrompt] = useState('')
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>('white')
-  const [model, setModel] = useState<GenerationModel>('azure-flux')
+  const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [imageSize, setImageSize] = useState<ImageSize>('2K')
   const [turboEnabled, setTurboEnabled] = useState(false)
@@ -530,14 +530,12 @@ export function RefinementStudioForm() {
                 <Select value={model} onValueChange={(v) => setModel(v as GenerationModel)} disabled={isRunning}>
                   <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="azure-flux">Azure FLUX</SelectItem>
-                    <SelectItem value="gpt-image">GPT-Image</SelectItem>
-                    <SelectItem value="qiniu-gemini-pro">Qiniu Gemini Pro</SelectItem>
-                    <SelectItem value="qiniu-gemini-flash">Qiniu Gemini Flash</SelectItem>
-                    <SelectItem value="volc-seedream-4.5">Volc Seedream 4.5</SelectItem>
-                    <SelectItem value="volc-seedream-5.0-lite">Volc Seedream 5.0 Lite</SelectItem>
+                    <SelectItem value="or-gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
                     <SelectItem value="or-gemini-3.1-flash">Gemini 3.1 Flash</SelectItem>
                     <SelectItem value="or-gemini-3-pro">Gemini 3 Pro</SelectItem>
+                    <SelectItem value="ta-gemini-3.1-flash">TA Gemini 3.1 Flash</SelectItem>
+                    <SelectItem value="ta-gemini-2.5-flash">TA Gemini 2.5 Flash</SelectItem>
+                    <SelectItem value="ta-gemini-3-pro">TA Gemini 3 Pro</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

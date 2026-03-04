@@ -220,7 +220,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   })
   const [requirements, setRequirements] = useState('')
   const [language, setLanguage] = useState('none')
-  const [model, setModel] = useState<GenerationModel>('azure-flux')
+  const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4')
   const [resolution, setResolution] = useState<ImageSize>('2K')
   const [turboEnabled, setTurboEnabled] = useState(false)

@@ -1,5 +1,6 @@
 import { useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { processGenerationJob } from '@/lib/api/edge-functions'
 import type { GenerationJob } from '@/types'
 
 function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> {
@@ -7,9 +8,11 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
     const supabase = createClient()
     let settled = false
     let pollTimer: ReturnType<typeof setInterval> | null = null
+    let nudgeTimer: ReturnType<typeof setInterval> | null = null
 
     function cleanup() {
       if (pollTimer) clearInterval(pollTimer)
+      if (nudgeTimer) clearInterval(nudgeTimer)
       supabase.removeChannel(channel)
     }
     function done(job: GenerationJob) {
@@ -38,8 +41,10 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
         if (job.status === 'success') done(job)
         else if (job.status === 'failed') fail(new Error(job.error_message ?? 'Job failed'))
       }).subscribe()
+    void processGenerationJob(jobId)
     void checkOnce()
     pollTimer = setInterval(() => { void checkOnce() }, 2000)
+    nudgeTimer = setInterval(() => { void processGenerationJob(jobId) }, 8000)
   })
 }
 

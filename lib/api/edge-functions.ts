@@ -273,6 +273,31 @@ export async function generateModelImage(
   return res
 }
 
+// ── Ecommerce Studio ─────────────────────────────────────────────────────────
+
+export interface AnalyzeEcommerceParams {
+  productImage: string
+  userDescription: string
+  platformStyle: 'domestic' | 'international'
+  studioType: 'ecommerce'
+  detailCount?: number
+  trace_id: string
+  client_job_id?: string
+  fe_attempt?: number
+}
+
+export async function analyzeEcommerceProduct(
+  params: AnalyzeEcommerceParams
+): Promise<JobResponse> {
+  const res = await invokeFunction<JobResponse>('analyze-product-v2', {
+    ...params,
+    detailCount: params.detailCount
+      ?? (params.platformStyle === 'domestic' ? 6 : 4),
+  })
+  void processGenerationJob(res.job_id)
+  return res
+}
+
 // ── Worker nudge ─────────────────────────────────────────────────────────────
 
 /**

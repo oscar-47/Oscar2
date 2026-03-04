@@ -66,6 +66,12 @@ export interface TextEditState {
   jobId: string | null     // job_id from generate-image (apply)
 }
 
+export interface ComparisonState {
+  visible: boolean
+  fromId: string | null
+  toId: string | null
+}
+
 interface EditorState {
   objects: CanvasObject[]
   selectedId: string | null
@@ -77,6 +83,7 @@ interface EditorState {
   quickEdit: QuickEditState
   textDetection: TextDetectionState
   textEdit: TextEditState
+  comparison: ComparisonState
 
   // Actions
   initFromUrls: (urls: string[]) => void
@@ -85,6 +92,7 @@ interface EditorState {
   selectObject: (id: string | null) => void
   moveObject: (id: string, deltaX: number, deltaY: number) => void
   replaceObjectUrl: (id: string, newUrl: string) => void
+  applyTextEditResult: (id: string, newUrl: string) => void
   updateObjectDimensions: (id: string, naturalWidth: number, naturalHeight: number) => void
   setZoom: (zoom: number) => void
   setPan: (x: number, y: number) => void
@@ -158,6 +166,12 @@ const defaultTextEdit: TextEditState = {
   jobId: null,
 }
 
+const defaultComparison: ComparisonState = {
+  visible: false,
+  fromId: null,
+  toId: null,
+}
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   objects: [],
   selectedId: null,
@@ -169,6 +183,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   quickEdit: defaultQuickEdit,
   textDetection: defaultTextDetection,
   textEdit: defaultTextEdit,
+  comparison: defaultComparison,
 
   initFromUrls: (urls) => {
     let currentY = 40
@@ -244,6 +259,44 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       objects: get().objects.map((o) =>
         o.id === id ? { ...o, url: newUrl } : o
       ),
+    })
+  },
+
+  applyTextEditResult: (id, newUrl) => {
+    const state = get()
+    const source = state.objects.find((o) => o.id === id)
+    if (!source) return
+
+    // Replace previous preview for the same source object to avoid stacking duplicates.
+    let objects = [...state.objects]
+    if (state.comparison.visible && state.comparison.fromId === id && state.comparison.toId) {
+      objects = objects.filter((o) => o.id !== state.comparison.toId)
+    }
+
+    const maxZ = objects.reduce((max, o) => Math.max(max, o.zIndex), 0)
+    const gap = 80
+    const previewId = crypto.randomUUID()
+    const previewObj: CanvasObject = {
+      id: previewId,
+      url: newUrl,
+      originalUrl: source.originalUrl,
+      x: source.x + source.width + gap,
+      y: source.y,
+      width: source.width,
+      height: source.height,
+      naturalWidth: source.naturalWidth,
+      naturalHeight: source.naturalHeight,
+      zIndex: maxZ + 1,
+    }
+
+    set({
+      objects: [...objects, previewObj],
+      selectedId: previewId,
+      comparison: {
+        visible: true,
+        fromId: source.id,
+        toId: previewId,
+      },
     })
   },
 

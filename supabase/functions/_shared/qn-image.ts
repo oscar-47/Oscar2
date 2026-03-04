@@ -74,6 +74,15 @@ function isOpenRouter(url: string): boolean {
   }
 }
 
+/** Detect ToAPIs async image generation endpoint */
+function isToAPIs(url: string): boolean {
+  try {
+    return new URL(url).hostname === "toapis.com";
+  } catch {
+    return false;
+  }
+}
+
 function normalizeArkSize(size: string | undefined): string {
   if (!size) return "2048x2048";
   // Pass through pixel dimensions (e.g. "2048x3072")
@@ -191,6 +200,7 @@ export function aspectRatioToSize(ratio: string): string {
 export async function callQnImageAPI(params: {
   imageDataUrl: string;
   imageDataUrls?: string[];
+  imageUrls?: string[];
   prompt: string;
   n?: number;
   model?: string;
@@ -223,7 +233,81 @@ export async function callQnImageAPI(params: {
   try {
     let res: Response;
 
-    if (isOpenRouter(endpoint)) {
+    if (isToAPIs(endpoint)) {
+      // ToAPIs async task-based image generation
+      const taBody: Record<string, unknown> = {
+        model,
+        prompt: params.prompt,
+        size: params.aspectRatio || "1:1",
+        n: params.n ?? 1,
+      };
+      const urls = params.imageUrls?.filter(Boolean);
+      if (urls && urls.length > 0) {
+        taBody.image_urls = urls;
+      }
+
+      const createRes = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(taBody),
+        signal: controller.signal,
+      });
+
+      const createText = await createRes.text();
+      let createParsed: Record<string, unknown> = {};
+      try {
+        createParsed = createText ? JSON.parse(createText) : {};
+      } catch {
+        createParsed = { raw: createText };
+      }
+
+      if (!createRes.ok) {
+        throw new Error(`TOAPIS_CREATE_ERROR ${createRes.status}: ${JSON.stringify(createParsed)}`);
+      }
+
+      const taskId = String(createParsed.id ?? "");
+      if (!taskId) throw new Error("TOAPIS_MISSING_TASK_ID");
+
+      // Poll for completion
+      const pollUrl = `${endpoint}/${taskId}`;
+      const pollInterval = 3000;
+      const maxPolls = Math.ceil(timeoutMs / pollInterval);
+
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((r) => setTimeout(r, pollInterval));
+
+        const pollRes = await fetch(pollUrl, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal: controller.signal,
+        });
+        const pollText = await pollRes.text();
+        // deno-lint-ignore no-explicit-any
+        let pollData: any = {};
+        try {
+          pollData = pollText ? JSON.parse(pollText) : {};
+        } catch {
+          pollData = { raw: pollText };
+        }
+
+        const status = String(pollData.status ?? "");
+        if (status === "completed") {
+          const result = pollData.result;
+          const data = result?.data;
+          if (Array.isArray(data) && data.length > 0) {
+            return { data };
+          }
+          throw new Error("TOAPIS_COMPLETED_NO_IMAGE");
+        }
+        if (status === "failed") {
+          throw new Error(`TOAPIS_TASK_FAILED: ${JSON.stringify(pollData)}`);
+        }
+      }
+
+      throw new Error("TOAPIS_POLL_TIMEOUT");
+    } else if (isOpenRouter(endpoint)) {
       // OpenRouter Chat Completions with image generation
       const contentParts: Record<string, unknown>[] = [
         { type: "text", text: params.prompt },

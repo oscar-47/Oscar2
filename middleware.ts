@@ -10,6 +10,7 @@ const PROTECTED_PATHS = [
   '/studio-genesis',
   '/aesthetic-mirror',
   '/clothing-studio',
+  '/ecom-studio',
   '/refinement-studio',
   '/history',
   '/profile',

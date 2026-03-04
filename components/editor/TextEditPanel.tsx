@@ -17,7 +17,7 @@ export function TextEditPanel() {
   const setTextEditItems = useEditorStore((s) => s.setTextEditItems)
   const setEditedText = useEditorStore((s) => s.setEditedText)
   const setTextEditField = useEditorStore((s) => s.setTextEditField)
-  const replaceObjectUrl = useEditorStore((s) => s.replaceObjectUrl)
+  const applyTextEditResult = useEditorStore((s) => s.applyTextEditResult)
   const openQuickEdit = useEditorStore((s) => s.openQuickEdit)
   const objects = useEditorStore((s) => s.objects)
 
@@ -30,7 +30,7 @@ export function TextEditPanel() {
       const resultUrl = job.result_url
         ?? (resultData?.outputs as Array<{ url: string }> | undefined)?.[0]?.url
       if (resultUrl && textEdit.objectId) {
-        replaceObjectUrl(textEdit.objectId, resultUrl)
+        applyTextEditResult(textEdit.objectId, resultUrl)
       }
       closeTextEdit()
     },
@@ -121,7 +121,7 @@ export function TextEditPanel() {
       const res = await generateImage({
         productImage: obj.url,
         prompt,
-        model: 'azure-flux',
+        model: 'gpt-image',
         aspectRatio: '1:1',
         imageSize: '2K',
         turboEnabled: textEdit.turboEnabled,
