@@ -103,6 +103,7 @@
       "allImagesFailed": "所有图片生成失败，请检查设置后重试。",
       "partialFailed": "{count} 张图片生成失败",
       "retryFailed": "重试失败项",
+      "retryingFailed": "正在重试失败图片...",
       "resolution1K": "1K 标准",
       "resolution2K": "2K 高清（Pro）",
       "resolution4K": "4K 超清（Pro）",

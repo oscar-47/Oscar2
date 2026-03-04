@@ -115,7 +115,42 @@ const OUTPUT_LANGUAGES_ZH: { value: OutputLanguage; label: string }[] = [
   { value: 'ru', label: 'Русский' },
 ]
 
+// ─── Concurrency Pool ────────────────────────────────────────────────────────
+
+async function runWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number,
+): Promise<PromiseSettledResult<T>[]> {
+  if (tasks.length === 0) return []
+  const effectiveConcurrency = Math.max(1, Math.min(concurrency, tasks.length))
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length)
+  let nextIndex = 0
+
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const i = nextIndex++
+      try {
+        results[i] = { status: 'fulfilled', value: await tasks[i]() }
+      } catch (reason) {
+        results[i] = { status: 'rejected', reason }
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: effectiveConcurrency }, () => worker())
+  )
+  return results
+}
+
+const BATCH_CONCURRENCY = 4
+
 // ─── Types ──────────────────────────────────────────────────────────────────
+
+interface RetryContext {
+  prompts: string[]
+  trace_id: string
+}
 
 interface ImageSlot {
   jobId: string
@@ -499,6 +534,7 @@ export function StudioGenesisForm() {
   const [failedSlotIndices, setFailedSlotIndices] = useState<number[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [analyzingMessageIndex, setAnalyzingMessageIndex] = useState(0)
+  const [retryContext, setRetryContext] = useState<RetryContext | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const { total } = useCredits()
@@ -771,8 +807,8 @@ export function StudioGenesisForm() {
       }))
       setImageSlots(initialSlots)
 
-      const imageJobIds = await Promise.all(
-        prompts.map((prompt, i) =>
+      const submissionResults = await runWithConcurrency(
+        prompts.map((prompt, i) => () =>
           generateImage({
             productImage: uploadedUrls[0],
             productImages: uploadedUrls,
@@ -792,23 +828,36 @@ export function StudioGenesisForm() {
               product_images: uploadedUrls,
             },
           }).then((r) => r.job_id)
-        )
+        ),
+        BATCH_CONCURRENCY,
       )
 
-      // Update slots with job IDs
-      setImageSlots(imageJobIds.map((jobId) => ({ jobId, status: 'pending' })))
+      // Extract job IDs + batch-update slots in ONE call
+      const imageJobIds: (string | null)[] = submissionResults.map((r) =>
+        r.status === 'fulfilled' ? r.value : null
+      )
+      setImageSlots((prev) =>
+        prev.map((s, i) => {
+          if (imageJobIds[i]) return { ...s, jobId: imageJobIds[i]! }
+          if (submissionResults[i].status === 'rejected') return { ...s, status: 'failed', error: 'Submission failed' }
+          return s
+        })
+      )
 
       // Nudge worker for each image job with staggered delay to avoid API rate limits
       imageJobIds.forEach((id, i) => {
-        setTimeout(() => {
-          processGenerationJob(id).catch(() => {})
-        }, i * 3000) // 3s interval between nudges
+        if (id) {
+          setTimeout(() => {
+            processGenerationJob(id).catch(() => {})
+          }, i * 3000) // 3s interval between nudges
+        }
       })
 
       // Wait for each job independently, updating slots as they complete
       const settledJobs = await Promise.allSettled(
-        imageJobIds.map((id, i) =>
-          waitForJob(id, abort.signal).then((job) => {
+        imageJobIds.map((id, i) => {
+          if (!id) return Promise.reject(new Error('Submission failed'))
+          return waitForJob(id, abort.signal).then((job) => {
             const result = extractResultFromJob(job, i)
             setImageSlots((prev) =>
               prev.map((s, idx) =>
@@ -826,7 +875,7 @@ export function StudioGenesisForm() {
             )
             throw err
           })
-        )
+        })
       )
 
       // Collect results
@@ -850,6 +899,7 @@ export function StudioGenesisForm() {
         setErrorMessage(t('allImagesFailed'))
       }
 
+      setRetryContext({ prompts, trace_id })
       setPhase('complete')
       refreshCredits()
     } catch (err: unknown) {
@@ -869,6 +919,7 @@ export function StudioGenesisForm() {
     setSelectedPlanIds(new Set())
     setPlatform('none')
     setAnalysisParams(null)
+    setRetryContext(null)
   }, [])
 
   const handleBackToPreview = useCallback(() => {
@@ -893,7 +944,118 @@ export function StudioGenesisForm() {
     setUploadedUrls([])
     setPlatform('none')
     setAnalysisParams(null)
+    setRetryContext(null)
   }, [])
+
+  // ─── handleRetryFailed ────────────────────────────────────────────────────
+
+  const handleRetryFailed = useCallback(async () => {
+    if (!retryContext || failedSlotIndices.length === 0) return
+
+    // Capture indices BEFORE any state changes
+    const indicesToRetry = [...failedSlotIndices]
+
+    // Switch to generating phase — enables Stop button and blocks navigation
+    setPhase('generating')
+    const abort = new AbortController()
+    abortRef.current = abort
+    setErrorMessage(null)
+
+    // Reset steps/progress for retry visibility
+    setSteps([
+      { id: 'retry', label: t('retryingFailed'), status: 'active' },
+    ])
+    setProgress(0)
+
+    const { prompts, trace_id } = retryContext
+
+    // Reset failed slots to pending
+    setImageSlots((prev) =>
+      prev.map((s, i) => indicesToRetry.includes(i) ? { ...s, status: 'pending', error: undefined } : s)
+    )
+    setFailedSlotIndices([])
+
+    try {
+      const retryTasks = indicesToRetry.map((slotIdx) => () =>
+        generateImage({
+          productImage: uploadedUrls[0],
+          productImages: uploadedUrls,
+          prompt: prompts[slotIdx],
+          model, aspectRatio, imageSize, turboEnabled,
+          imageCount: 1,
+          client_job_id: `${uid()}_retry_${slotIdx}`,
+          fe_attempt: 2, trace_id,
+          metadata: { is_batch: true, batch_index: slotIdx, image_size: imageSize, product_images: uploadedUrls },
+        }).then((r) => r.job_id)
+      )
+
+      const submissionResults = await runWithConcurrency(retryTasks, BATCH_CONCURRENCY)
+
+      const retryJobMap = indicesToRetry.map((slotIdx, ri) => {
+        const r = submissionResults[ri]
+        return { slotIdx, jobId: r.status === 'fulfilled' ? r.value : null }
+      })
+
+      // Batch-update slots
+      setImageSlots((prev) =>
+        prev.map((s, i) => {
+          const entry = retryJobMap.find((e) => e.slotIdx === i)
+          if (!entry) return s
+          if (entry.jobId) return { ...s, jobId: entry.jobId }
+          return { ...s, status: 'failed', error: 'Retry submission failed' }
+        })
+      )
+
+      // Nudge workers
+      retryJobMap.forEach(({ jobId }, ri) => {
+        if (jobId) setTimeout(() => processGenerationJob(jobId).catch(() => {}), ri * 3000)
+      })
+
+      const retrySettled = await Promise.allSettled(
+        retryJobMap.map(({ slotIdx, jobId }) => {
+          if (!jobId) return Promise.reject(new Error('Submission failed'))
+          return waitForJob(jobId, abort.signal).then((job) => {
+            const result = extractResultFromJob(job, slotIdx)
+            setImageSlots((prev) =>
+              prev.map((s, i) => i === slotIdx ? { ...s, status: 'done', result: result ?? undefined } : s)
+            )
+            return { slotIdx, result }
+          }).catch((err) => {
+            setImageSlots((prev) =>
+              prev.map((s, i) => i === slotIdx ? { ...s, status: 'failed', error: err instanceof Error ? err.message : 'Failed' } : s)
+            )
+            throw err
+          })
+        })
+      )
+
+      // Append successful retry results (failed slots had no entry in results before)
+      const retryResults: ResultImage[] = []
+      const newFailedIndices: number[] = []
+      retrySettled.forEach((settled, ri) => {
+        if (settled.status === 'fulfilled' && settled.value?.result) {
+          retryResults.push(settled.value.result)
+        } else {
+          // Rejected OR fulfilled-but-no-result → still failed
+          newFailedIndices.push(retryJobMap[ri].slotIdx)
+        }
+      })
+      setResults((prev) => [...prev, ...retryResults])
+      setFailedSlotIndices(newFailedIndices)
+      refreshCredits()
+
+      // Only set complete if not aborted (handleStop sets 'input')
+      if (!abort.signal.aborted) {
+        setPhase('complete')
+      }
+    } catch (err: unknown) {
+      if ((err as Error).name === 'AbortError') return // handleStop already set phase='input'
+      setErrorMessage(err instanceof Error ? err.message : 'Retry failed')
+      if (!abort.signal.aborted) {
+        setPhase('complete')
+      }
+    }
+  }, [retryContext, failedSlotIndices, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, t])
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -1176,7 +1338,7 @@ export function StudioGenesisForm() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleBackToPreview}
+              onClick={handleRetryFailed}
             >
               <RefreshCw className="h-4 w-4 mr-1" />
               {t('retryFailed')}
@@ -1188,7 +1350,7 @@ export function StudioGenesisForm() {
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <AlertTriangle className="h-10 w-10 text-destructive mb-3" />
             <p className="text-sm text-destructive font-medium">{t('allImagesFailed')}</p>
-            <Button variant="outline" size="sm" onClick={handleBackToPreview} className="mt-4">
+            <Button variant="outline" size="sm" onClick={handleRetryFailed} className="mt-4">
               <RefreshCw className="h-4 w-4 mr-1" />
               {tc('tryAgain')}
             </Button>

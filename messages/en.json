@@ -103,6 +103,7 @@
       "allImagesFailed": "All images failed to generate. Please check your settings and try again.",
       "partialFailed": "{count} image(s) failed to generate",
       "retryFailed": "Retry Failed Images",
+      "retryingFailed": "Retrying failed images...",
       "resolution1K": "1K Standard",
       "resolution2K": "2K HD (Pro)",
       "resolution4K": "4K UHD (Pro)",
