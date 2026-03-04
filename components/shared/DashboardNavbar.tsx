@@ -7,14 +7,14 @@ import { usePathname, useRouter } from 'next/navigation'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { UserMenu } from './UserMenu'
 import { cn } from '@/lib/utils'
-import { Layers, Image, Shirt, Paintbrush, Monitor, Pencil } from 'lucide-react'
+import { Layers, Image, Shirt, Paintbrush, Monitor, ShoppingBag } from 'lucide-react'
 
 const NAV_ITEMS = [
   { key: 'studioGenesis', path: '/studio-genesis', icon: Layers },
   { key: 'aestheticMirror', path: '/aesthetic-mirror', icon: Image },
   { key: 'clothingStudio', path: '/clothing-studio', icon: Shirt },
+  { key: 'ecomStudio', path: '/ecom-studio', icon: ShoppingBag },
   { key: 'refinementStudio', path: '/refinement-studio', icon: Paintbrush },
-  { key: 'imageEditor', path: '/image-editor', icon: Pencil },
   { key: 'pricing', path: '/pricing', icon: Monitor },
 ] as const
 
@@ -37,7 +37,7 @@ export function DashboardNavbar({ userId, email }: DashboardNavbarProps) {
   }, [locale, router])
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-[#f4f5f7]/92 backdrop-blur supports-[backdrop-filter]:bg-[#f4f5f7]/82">
+    <header className="sticky top-0 z-50 w-full bg-white">
       <div className="mx-auto flex h-[82px] w-full max-w-6xl items-center justify-between px-5 sm:px-6">
         {/* Logo */}
         <Link

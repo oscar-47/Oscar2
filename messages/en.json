@@ -3,8 +3,8 @@
     "studioGenesis": "Image Suite",
     "aestheticMirror": "Aesthetic Mirror",
     "clothingStudio": "Clothing Details Suite",
+    "ecomStudio": "One-Click Generate",
     "refinementStudio": "Refinement Studio",
-    "imageEditor": "Image Editor",
     "pricing": "Buy Now",
     "history": "History",
     "profile": "Profile",
@@ -192,6 +192,25 @@
         "title": "One-Click Generate & Export",
         "desc": "Generate high-resolution visuals quickly and export in multiple sizes."
       }
+    },
+    "ecomStudio": {
+      "title": "One-Click Generate Studio",
+      "description": "Upload a product image, let AI optimize copy and prompts, then generate a full main-image + detail-image set.",
+      "badge": "Platform Ready",
+      "productImage": "Product Image",
+      "platformStyle": "Platform Style",
+      "descriptionLabel": "Product Description",
+      "descriptionPlaceholder": "Describe product specs, target audience, key benefits, or campaign goals...",
+      "analyzeButton": "AI Optimize Description",
+      "settings": "Generation Settings",
+      "optimizedDesc": "Optimized Description",
+      "sellingPoints": "Selling Points",
+      "detailFocusAreas": "Detail Focus Areas",
+      "mainImagePrompt": "Main Image Prompt",
+      "detailPrompts": "Detail Prompts",
+      "confirmGenerate": "Confirm Generate {count} images — {cost} credits",
+      "complianceWarning": "Amazon compliance warning: some strict main-image rules may still be violated.",
+      "emptyState": "Upload a product image and click \"AI Optimize Description\" to preview your strategy."
     },
     "clothingStudio": {
       "title": "Clothing Studio",
