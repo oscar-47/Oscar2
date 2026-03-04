@@ -117,6 +117,11 @@ export type GenerationModel =
   | 'ta-gemini-2.5-flash'
   | 'ta-gemini-3.1-flash'
   | 'ta-gemini-3-pro'
+  // New models (routing stubs — not in AVAILABLE_MODELS until API keys are configured)
+  | 'midjourney'
+  | 'sd-3.5-ultra'
+  | 'dall-e-4'
+  | 'ideogram-3'
 
 export const AVAILABLE_MODELS: ReadonlyArray<{ value: GenerationModel; label: string }> = [
   { value: 'or-gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
@@ -156,6 +161,10 @@ export const DEFAULT_CREDIT_COSTS: Record<string, number> = {
   'ta-gemini-2.5-flash': 3,
   'ta-gemini-3.1-flash': 3,
   'ta-gemini-3-pro': 5,
+  'midjourney': 15,
+  'sd-3.5-ultra': 8,
+  'dall-e-4': 12,
+  'ideogram-3': 10,
   'turbo-1k': 8,
   'turbo-2k': 12,
   'turbo-4k': 17,

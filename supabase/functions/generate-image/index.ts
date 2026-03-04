@@ -2,11 +2,20 @@ import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
 
-function computeCost(_model: string, turboEnabled: boolean, imageSize: string): number {
-  if (!turboEnabled) return 5;
-  if (imageSize === "1K") return 8;
-  if (imageSize === "2K") return 12;
-  return 17;
+function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
+  const MODEL_BASE: Record<string, number> = {
+    "or-gemini-2.5-flash": 3, "or-gemini-3.1-flash": 5, "or-gemini-3-pro": 10,
+    "ta-gemini-2.5-flash": 3, "ta-gemini-3.1-flash": 3, "ta-gemini-3-pro": 5,
+    "midjourney": 15, "sd-3.5-ultra": 8, "dall-e-4": 12, "ideogram-3": 10,
+    "azure-flux": 5, "gpt-image": 5, "qiniu-gemini-pro": 5, "qiniu-gemini-flash": 5,
+    "volc-seedream-4.5": 5, "volc-seedream-5.0-lite": 5,
+    "flux-kontext-pro": 5, "gemini-pro-image": 5, "gemini-flash-image": 5,
+  };
+  const base = MODEL_BASE[model] ?? 5;
+  if (!turboEnabled) return base;
+  if (imageSize === "1K") return base + 3;
+  if (imageSize === "2K") return base + 7;
+  return base + 12;
 }
 
 Deno.serve(async (req) => {

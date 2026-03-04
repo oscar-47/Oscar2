@@ -229,7 +229,7 @@ function imageGenErrorCodeFromError(error: unknown): string {
 }
 
 type ImageRoute = {
-  provider: "azure" | "openai" | "qiniu" | "volcengine" | "openrouter" | "toapis" | "default";
+  provider: "azure" | "openai" | "qiniu" | "volcengine" | "openrouter" | "toapis" | "goapi" | "stability" | "ideogram" | "default";
   model?: string;
   endpoint?: string;
   apiKey?: string;
@@ -305,6 +305,43 @@ function resolveImageRoute(modelFromRequest: string): ImageRoute {
       endpoint: Deno.env.get("DOUBAO_IMAGE_API_ENDPOINT") ?? "https://ark.cn-beijing.volces.com/api/v3/images/generations",
       apiKey: Deno.env.get("DOUBAO_IMAGE_API_KEY") ?? "",
       model: Deno.env.get("DOUBAO_MODEL_50_LITE") ?? "doubao-seedream-5.0-lite",
+    };
+  }
+
+  // New model providers
+  if (model === "midjourney") {
+    return {
+      provider: "goapi",
+      endpoint: Deno.env.get("GOAPI_API_ENDPOINT") ?? "https://api.goapi.ai/v1/images/generations",
+      apiKey: Deno.env.get("GOAPI_API_KEY") ?? "",
+      model: "midjourney",
+    };
+  }
+
+  if (model === "sd-3.5-ultra") {
+    return {
+      provider: "stability",
+      endpoint: Deno.env.get("STABILITY_API_ENDPOINT") ?? "https://api.stability.ai/v2beta/stable-image/generate/ultra",
+      apiKey: Deno.env.get("STABILITY_API_KEY") ?? "",
+      model: "sd3.5-ultra",
+    };
+  }
+
+  if (model === "dall-e-4") {
+    return {
+      provider: "openai",
+      endpoint: Deno.env.get("DALLE4_API_ENDPOINT") ?? "https://api.openai.com/v1/images/generations",
+      apiKey: Deno.env.get("DALLE4_API_KEY") ?? Deno.env.get("OPENAI_API_KEY") ?? "",
+      model: "dall-e-4",
+    };
+  }
+
+  if (model === "ideogram-3") {
+    return {
+      provider: "ideogram",
+      endpoint: Deno.env.get("IDEOGRAM_API_ENDPOINT") ?? "https://api.ideogram.ai/generate",
+      apiKey: Deno.env.get("IDEOGRAM_API_KEY") ?? "",
+      model: "V_3",
     };
   }
 
