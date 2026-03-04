@@ -131,6 +131,7 @@
       "reanalyze": "重新分析",
       "templateStructured": "使用模板",
       "templateFree": "清空",
+      "addPlan": "新增图片方案",
       "steps": {
         "upload": "上传图片中",
         "analyze": "分析产品中",

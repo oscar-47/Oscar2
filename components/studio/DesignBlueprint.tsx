@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { ChevronDown, ChevronUp, Pencil, Palette, ImageIcon } from 'lucide-react'
+import { ChevronDown, ChevronUp, Pencil, Palette, ImageIcon, Plus } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ImagePlanCard } from './ImagePlanCard'
@@ -19,8 +19,11 @@ interface DesignBlueprintProps {
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
   onDeletePlan?: (id: string) => void
+  onAddPlan?: () => void
+  onDuplicatePlan?: (id: string) => void
   onSelectAll?: () => void
   onDeselectAll?: () => void
+  platformMinImages?: number
 }
 
 export function DesignBlueprint({
@@ -32,8 +35,11 @@ export function DesignBlueprint({
   selectedIds,
   onToggleSelect,
   onDeletePlan,
+  onAddPlan,
+  onDuplicatePlan,
   onSelectAll,
   onDeselectAll,
+  platformMinImages,
 }: DesignBlueprintProps) {
   const t = useTranslations('studio.genesis')
   const [specsExpanded, setSpecsExpanded] = useState(false)
@@ -86,8 +92,24 @@ export function DesignBlueprint({
               selected={selectedIds && plan.id ? selectedIds.has(plan.id) : undefined}
               onToggleSelect={onToggleSelect && plan.id ? () => onToggleSelect(plan.id!) : undefined}
               onDelete={onDeletePlan && plan.id ? () => onDeletePlan(plan.id!) : undefined}
+              onDuplicate={onDuplicatePlan && plan.id ? () => onDuplicatePlan(plan.id!) : undefined}
             />
           ))}
+          {onAddPlan && !disabled && (
+            <button
+              type="button"
+              onClick={onAddPlan}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#d0d4dc] bg-[#f9fafb] px-4 py-3 text-[13px] font-medium text-[#7d818d] hover:bg-[#f1f3f6] hover:text-[#5a5e6b] transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              {t('addPlan')}
+            </button>
+          )}
+          {platformMinImages != null && platformMinImages > 1 && imagePlans.length < platformMinImages && (
+            <p className="mt-2 text-[13px] text-amber-600">
+              {t('platformMinWarning', { min: platformMinImages })}
+            </p>
+          )}
         </div>
       </div>
 

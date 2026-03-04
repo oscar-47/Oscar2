@@ -131,6 +131,7 @@
       "reanalyze": "Re-Analyze",
       "templateStructured": "Use template",
       "templateFree": "Clear",
+      "addPlan": "Add Image Plan",
       "steps": {
         "upload": "Uploading images",
         "analyze": "Analyzing product",

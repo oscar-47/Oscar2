@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, Trash2, Check } from 'lucide-react'
+import { ChevronDown, Trash2, Check, Copy } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import type { BlueprintImagePlan } from '@/types'
@@ -15,9 +15,10 @@ interface ImagePlanCardProps {
   selected?: boolean
   onToggleSelect?: () => void
   onDelete?: () => void
+  onDuplicate?: () => void
 }
 
-export function ImagePlanCard({ index, plan, onChange, disabled = false, selected, onToggleSelect, onDelete }: ImagePlanCardProps) {
+export function ImagePlanCard({ index, plan, onChange, disabled = false, selected, onToggleSelect, onDelete, onDuplicate }: ImagePlanCardProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -60,6 +61,16 @@ export function ImagePlanCard({ index, plan, onChange, disabled = false, selecte
           )}
         </div>
         <div className="flex items-center gap-1">
+          {onDuplicate && (
+            <button
+              type="button"
+              onClick={onDuplicate}
+              className="rounded-md p-2 text-[#7a7f8b] hover:bg-[#eceff4] hover:text-[#31343c]"
+              disabled={disabled}
+            >
+              <Copy className="h-4 w-4" />
+            </button>
+          )}
           {onDelete && (
             <button
               type="button"

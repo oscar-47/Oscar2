@@ -947,6 +947,38 @@ export function StudioGenesisForm() {
     setRetryContext(null)
   }, [])
 
+  // ─── handleAddPlan / handleDuplicatePlan ──────────────────────────────────
+
+  const handleAddPlan = useCallback(() => {
+    const newId = `user-${Date.now()}`
+    const newPlan: BlueprintImagePlan = {
+      id: newId,
+      title: isZh ? `自定义方案 ${editableImagePlans.length + 1}` : `Custom Plan ${editableImagePlans.length + 1}`,
+      description: '',
+      design_content: '',
+    }
+    setEditableImagePlans((prev) => [...prev, newPlan])
+    setSelectedPlanIds((prev) => { const next = new Set(prev); next.add(newId); return next })
+  }, [editableImagePlans.length, isZh])
+
+  const handleDuplicatePlan = useCallback((id: string) => {
+    const source = editableImagePlans.find((p) => p.id === id)
+    if (!source) return
+    const newId = `dup-${Date.now()}`
+    const newPlan: BlueprintImagePlan = {
+      ...source,
+      id: newId,
+      title: `${source.title} (copy)`,
+    }
+    setEditableImagePlans((prev) => {
+      const idx = prev.findIndex((p) => p.id === id)
+      const next = [...prev]
+      next.splice(idx + 1, 0, newPlan)
+      return next
+    })
+    setSelectedPlanIds((prev) => { const next = new Set(prev); next.add(newId); return next })
+  }, [editableImagePlans])
+
   // ─── handleRetryFailed ────────────────────────────────────────────────────
 
   const handleRetryFailed = useCallback(async () => {
@@ -1276,6 +1308,9 @@ export function StudioGenesisForm() {
               return next
             })
           }}
+          onAddPlan={handleAddPlan}
+          onDuplicatePlan={handleDuplicatePlan}
+          platformMinImages={getPlatformMinImages(platform)}
           onSelectAll={() => {
             setSelectedPlanIds(new Set(editableImagePlans.map((p) => p.id!)))
           }}
