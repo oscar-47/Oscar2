@@ -203,13 +203,15 @@ function normalizeBlueprint(
 }
 
 function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
-  const MODEL_BASE_COSTS: Record<string, number> = {
-    "or-gemini-3-pro": 10,
-    "ta-gemini-3.1-flash": 3,
-    "ta-gemini-2.5-flash": 3,
-    "ta-gemini-3-pro": 5,
+  const MODEL_BASE: Record<string, number> = {
+    "or-gemini-2.5-flash": 3, "or-gemini-3.1-flash": 5, "or-gemini-3-pro": 10,
+    "ta-gemini-2.5-flash": 3, "ta-gemini-3.1-flash": 3, "ta-gemini-3-pro": 5,
+    "midjourney": 15, "sd-3.5-ultra": 8, "dall-e-4": 12, "ideogram-3": 10,
+    "azure-flux": 5, "gpt-image": 5, "qiniu-gemini-pro": 5, "qiniu-gemini-flash": 5,
+    "volc-seedream-4.5": 5, "volc-seedream-5.0-lite": 5,
+    "flux-kontext-pro": 5, "gemini-pro-image": 5, "gemini-flash-image": 5,
   };
-  const base = MODEL_BASE_COSTS[model] ?? 5;
+  const base = MODEL_BASE[model] ?? 5;
   if (!turboEnabled) return base;
   if (imageSize === "1K") return base + 3;
   if (imageSize === "2K") return base + 7;
@@ -221,7 +223,6 @@ function imageGenErrorCodeFromError(error: unknown): string {
   if (message.includes("IMAGE_INPUT_SOURCE_MISSING")) return "IMAGE_INPUT_SOURCE_MISSING";
   if (message.includes("IMAGE_INPUT_PROMPT_MISSING")) return "IMAGE_INPUT_PROMPT_MISSING";
   if (message.includes("STORAGE_UPLOAD_FAILED")) return "STORAGE_UPLOAD_FAILED";
-  if (message.includes("AMAZON_COMPLIANCE_FAILED")) return "AMAZON_COMPLIANCE_FAILED";
   if (message.includes("IMAGE_RESULT_MISSING")) return "IMAGE_RESULT_MISSING";
   if (message.includes("INSUFFICIENT_CREDITS")) return "INSUFFICIENT_CREDITS";
   return "UPSTREAM_ERROR";
@@ -234,11 +235,17 @@ type ImageRoute = {
   apiKey?: string;
 };
 
-const ECOM_PRODUCT_CONSISTENCY_HARD_PROMPT =
-  "HARD CONSTRAINT - PRODUCT IDENTITY LOCK: The product must remain exactly the same as the reference image. " +
-  "Do NOT change product category, silhouette, shape, cut, proportions, neckline/collar, sleeves, seams, " +
-  "print/logo position, pattern, color palette, material, texture, or any brand-defining details. " +
-  "Only adjust background, scene, camera angle, lighting, composition, and text overlays when requested.";
+// Map or-*/ta-* frontend model names to actual provider model IDs
+const OR_MODEL_MAP: Record<string, string> = {
+  "or-gemini-2.5-flash": "google/gemini-2.5-flash-preview-image-generation",
+  "or-gemini-3.1-flash": "google/gemini-3.1-flash-preview-image-generation",
+  "or-gemini-3-pro": "google/gemini-3.0-pro-preview-image-generation",
+};
+const TA_MODEL_MAP: Record<string, string> = {
+  "ta-gemini-2.5-flash": "gemini-2.5-flash-preview-image-generation",
+  "ta-gemini-3.1-flash": "gemini-3.1-flash-preview-image-generation",
+  "ta-gemini-3-pro": "gemini-3.0-pro-preview-image-generation",
+};
 
 function resolveImageRoute(modelFromRequest: string): ImageRoute {
   const model = modelFromRequest.trim();
@@ -248,14 +255,9 @@ function resolveImageRoute(modelFromRequest: string): ImageRoute {
   if (model === "azure-flux" || model === "flux-kontext-pro") {
     return {
       provider: "azure",
-      endpoint: Deno.env.get("AZURE_FLUX_API_ENDPOINT")
-        ?? Deno.env.get("FLUX_API_ENDPOINT")
-        ?? qnEndpoint,
-      apiKey: Deno.env.get("AZURE_FLUX_API_KEY")
-        ?? Deno.env.get("FLUX_API_KEY")
-        ?? qnApiKey,
+      endpoint: Deno.env.get("AZURE_FLUX_API_ENDPOINT") ?? qnEndpoint,
+      apiKey: Deno.env.get("AZURE_FLUX_API_KEY") ?? qnApiKey,
       model: Deno.env.get("AZURE_FLUX_MODEL")
-        ?? Deno.env.get("FLUX_MODEL")
         ?? Deno.env.get("QN_IMAGE_MODEL")
         ?? "black-forest-labs/FLUX.1-Kontext-pro",
     };
@@ -306,57 +308,23 @@ function resolveImageRoute(modelFromRequest: string): ImageRoute {
     };
   }
 
-  if (model === "or-gemini-2.5-flash") {
+  // OpenRouter models (or-*)
+  if (OR_MODEL_MAP[model]) {
     return {
       provider: "openrouter",
-      endpoint: "https://openrouter.ai/api/v1/chat/completions",
+      endpoint: Deno.env.get("OPENROUTER_API_ENDPOINT") ?? "https://openrouter.ai/api/v1/chat/completions",
       apiKey: Deno.env.get("OPENROUTER_API_KEY") ?? "",
-      model: "google/gemini-2.5-flash-preview-image",
+      model: OR_MODEL_MAP[model],
     };
   }
 
-  if (model === "or-gemini-3.1-flash") {
-    return {
-      provider: "openrouter",
-      endpoint: "https://openrouter.ai/api/v1/chat/completions",
-      apiKey: Deno.env.get("OPENROUTER_API_KEY") ?? "",
-      model: "google/gemini-3.1-flash-image-preview",
-    };
-  }
-
-  if (model === "or-gemini-3-pro") {
-    return {
-      provider: "openrouter",
-      endpoint: "https://openrouter.ai/api/v1/chat/completions",
-      apiKey: Deno.env.get("OPENROUTER_API_KEY") ?? "",
-      model: "google/gemini-3-pro-image-preview",
-    };
-  }
-
-  if (model === "ta-gemini-3.1-flash") {
+  // ToAPIs models (ta-*)
+  if (TA_MODEL_MAP[model]) {
     return {
       provider: "toapis",
-      endpoint: "https://toapis.com/v1/images/generations",
+      endpoint: Deno.env.get("TOAPIS_API_ENDPOINT") ?? "",
       apiKey: Deno.env.get("TOAPIS_API_KEY") ?? "",
-      model: "gemini-3.1-flash-image-preview",
-    };
-  }
-
-  if (model === "ta-gemini-2.5-flash") {
-    return {
-      provider: "toapis",
-      endpoint: "https://toapis.com/v1/images/generations",
-      apiKey: Deno.env.get("TOAPIS_API_KEY") ?? "",
-      model: "gemini-2.5-flash-image-preview",
-    };
-  }
-
-  if (model === "ta-gemini-3-pro") {
-    return {
-      provider: "toapis",
-      endpoint: "https://toapis.com/v1/images/generations",
-      apiKey: Deno.env.get("TOAPIS_API_KEY") ?? "",
-      model: "gemini-3-pro-image-preview",
+      model: TA_MODEL_MAP[model],
     };
   }
 
@@ -633,271 +601,6 @@ Return valid JSON only (no markdown, no explanation):
     .eq("id", job.id);
 }
 
-// ── Ecommerce Analysis ──────────────────────────────────────────────────────
-
-const ECOM_DOMESTIC_SYSTEM_PROMPT = (detailCount: number) => `你是一位专业的国内电商（淘宝/京东/拼多多）视觉策略专家。
-根据用户提供的产品图片和描述，生成完整的电商主图和详情图方案。
-
-国内主图规则：
-- 超高饱和度、鲜艳色调、强视觉冲击
-- 产品居中占画面60-70%，背景渐变或生活场景
-- 醒目中文卖点标签（黄色/红色/白色描边粗体字）
-- 允许促销角标如"新品""爆款""限时特惠"
-- 专业但有促销感的商业摄影风格
-
-国内详情图规则：
-- 每张详情图聚焦一个卖点/特征
-- 特写+标注文字+箭头/高亮圈
-- 可包含对比图、使用场景、材质放大
-- 排版信息密集但不杂乱
-
-返回严格JSON（不要markdown标记）：
-{
-  "optimized_description": "优化后的产品描述",
-  "selling_points": ["卖点1", "卖点2", ...],
-  "detail_focus_areas": ["焦点1", "焦点2", ...],
-  "main_image_prompt": "完整的主图生成提示词...",
-  "detail_prompts": ["详情图1提示词...", "详情图2提示词...", ...]
-}
-
-每条prompt必须以"8K resolution, commercial photography quality, ultra-sharp"结尾。
-卖点数量：3-5个。详情图焦点数量：正好${detailCount}个。`;
-
-const ECOM_INTERNATIONAL_SYSTEM_PROMPT = (detailCount: number) => `You are an expert e-commerce visual strategist for Amazon/eBay platforms.
-
-MAIN IMAGE RULES (STRICT AMAZON COMPLIANCE):
-- Pure white background RGB(255,255,255), no gradients, no shadows on background
-- ABSOLUTELY NO text, watermarks, logos, badges, decorative elements
-- NO props, hands, models, lifestyle elements
-- Product completely isolated, studio lighting, professional photography
-- Product occupies 85%+ of frame, centered
-- Soft diffused lighting, color-accurate, true-to-life
-
-DETAIL IMAGE RULES:
-- Clean lifestyle scenes showing product in use context
-- Minimal or no text overlay
-- Natural lighting, muted color palette (earth tones, Morandi palette)
-- Product contextual (on desk, in room, being used)
-- High-quality close-ups for texture/material detail
-
-Return strict JSON (no markdown):
-{
-  "optimized_description": "...",
-  "selling_points": ["...", ...],
-  "detail_focus_areas": ["...", ...],
-  "main_image_prompt": "...",
-  "detail_prompts": ["...", ...]
-}
-
-Every prompt MUST end with: "8K resolution, commercial photography quality, ultra-sharp, no visual noise."
-Selling points: 3-5 items. Detail focus areas: exactly ${detailCount} items.`;
-
-type EcommerceAnalysisResult = {
-  optimized_description: string;
-  selling_points: string[];
-  detail_focus_areas: string[];
-  main_image_prompt: string;
-  detail_prompts: string[];
-  platform_style: "domestic" | "international";
-};
-
-function normalizeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((x): x is string => typeof x === "string")
-    .map((x) => x.trim())
-    .filter((x) => x.length > 0);
-}
-
-function extractFallbackItems(text: string, limit: number): string[] {
-  return text
-    .split(/[\n,，。；;、|]/)
-    .map((x) => x.trim())
-    .filter((x) => x.length > 1)
-    .slice(0, limit);
-}
-
-function ensurePromptSuffix(prompt: string, suffix: string): string {
-  const normalized = prompt.trim();
-  if (!normalized) return suffix;
-  if (normalized.endsWith(suffix)) return normalized;
-  return `${normalized.replace(/[.。!！?？\s]+$/g, "")}. ${suffix}`;
-}
-
-function normalizeEcommerceResult(
-  parsed: Record<string, unknown>,
-  platformStyle: "domestic" | "international",
-  detailCount: number,
-  fallbackDescription: string,
-): EcommerceAnalysisResult {
-  const promptSuffix = platformStyle === "domestic"
-    ? "8K resolution, commercial photography quality, ultra-sharp"
-    : "8K resolution, commercial photography quality, ultra-sharp, no visual noise.";
-  const optimizedDescription = sanitizeString(parsed.optimized_description, fallbackDescription);
-
-  // selling_points: clamp to 3-5
-  let sellingPoints = normalizeStringArray(parsed.selling_points);
-  if (sellingPoints.length < 3) {
-    const fallback = platformStyle === "domestic" ? "产品核心优势" : "Core product advantage";
-    const inferred = extractFallbackItems(optimizedDescription || fallbackDescription, 5);
-    for (const item of inferred) {
-      if (sellingPoints.length >= 3) break;
-      sellingPoints.push(item);
-    }
-    while (sellingPoints.length < 3) sellingPoints.push(fallback);
-  }
-  if (sellingPoints.length > 5) sellingPoints = sellingPoints.slice(0, 5);
-
-  // detail_focus_areas: clamp to detailCount, range 4-8
-  const clampedDetailCount = Math.max(4, Math.min(8, detailCount));
-  let detailFocusAreas = normalizeStringArray(parsed.detail_focus_areas);
-  if (detailFocusAreas.length < clampedDetailCount) {
-    const fallback = platformStyle === "domestic" ? "产品细节展示" : "Product detail showcase";
-    const inferred = extractFallbackItems(optimizedDescription || fallbackDescription, clampedDetailCount);
-    for (const item of inferred) {
-      if (detailFocusAreas.length >= clampedDetailCount) break;
-      detailFocusAreas.push(item);
-    }
-    while (detailFocusAreas.length < clampedDetailCount) detailFocusAreas.push(fallback);
-  }
-  if (detailFocusAreas.length > clampedDetailCount) detailFocusAreas = detailFocusAreas.slice(0, clampedDetailCount);
-
-  // main_image_prompt: exactly 1 string
-  const mainPromptRaw = typeof parsed.main_image_prompt === "string" && parsed.main_image_prompt.trim()
-    ? parsed.main_image_prompt
-    : Array.isArray(parsed.main_image_prompt)
-    ? String((parsed.main_image_prompt as unknown[])[0] ?? "")
-    : platformStyle === "domestic"
-    ? "超高饱和度电商主图，产品居中，中文卖点标签"
-    : "Pure white background product photo, isolated, studio lighting";
-  const mainPrompt = ensurePromptSuffix(mainPromptRaw, promptSuffix);
-
-  // detail_prompts: must match detail_focus_areas.length exactly
-  const targetDetailCount = detailFocusAreas.length;
-  let detailPrompts = normalizeStringArray(parsed.detail_prompts);
-  if (detailPrompts.length < targetDetailCount) {
-    const fallback = platformStyle === "domestic"
-      ? "产品细节特写，高清商业摄影"
-      : "Product detail close-up, lifestyle context";
-    while (detailPrompts.length < targetDetailCount) detailPrompts.push(fallback);
-  }
-  if (detailPrompts.length > targetDetailCount) detailPrompts = detailPrompts.slice(0, targetDetailCount);
-  detailPrompts = detailPrompts.map((x) => ensurePromptSuffix(x, promptSuffix));
-
-  return {
-    optimized_description: optimizedDescription,
-    selling_points: sellingPoints,
-    detail_focus_areas: detailFocusAreas,
-    main_image_prompt: mainPrompt,
-    detail_prompts: detailPrompts,
-    platform_style: platformStyle,
-  };
-}
-
-async function processEcommerceAnalysisJob(
-  supabase: ReturnType<typeof createServiceClient>,
-  job: GenerationJobRow,
-): Promise<void> {
-  const startedAt = Date.now();
-  const payload = job.payload ?? {};
-  const platformStyle = payload.platformStyle === "international" ? "international" : "domestic";
-  const defaultDetailCount = platformStyle === "domestic" ? 6 : 4;
-  const detailCount = Math.max(4, Math.min(8, Number(payload.detailCount ?? defaultDetailCount)));
-  const userDescription = sanitizeString(payload.userDescription, "");
-
-  const productImage = typeof payload.productImage === "string" ? payload.productImage : "";
-  if (!productImage) throw new Error("ECOMMERCE_PRODUCT_IMAGE_MISSING");
-
-  const imageDataUrl = await toDataUrl(productImage);
-
-  const systemPrompt = platformStyle === "domestic"
-    ? ECOM_DOMESTIC_SYSTEM_PROMPT(detailCount)
-    : ECOM_INTERNATIONAL_SYSTEM_PROMPT(detailCount);
-
-  const chatConfig = getQnChatConfig();
-  const chatResponse = await callQnChatAPI({
-    model: chatConfig.model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      {
-        role: "user",
-        content: [
-          { type: "image_url", image_url: { url: imageDataUrl } },
-          {
-            type: "text",
-            text: userDescription
-              ? `Product description: ${userDescription}`
-              : "Please analyze this product image and generate the e-commerce image strategy.",
-          },
-        ],
-      },
-    ],
-    maxTokens: 2048,
-  });
-
-  const content = String(
-    (chatResponse as Record<string, unknown>)?.choices?.[0]?.message?.content ?? "",
-  );
-  const parsed = parseJsonFromContent(content);
-  const result = normalizeEcommerceResult(parsed, platformStyle, detailCount, userDescription);
-
-  await supabase
-    .from("generation_jobs")
-    .update({
-      status: "success",
-      result_data: result,
-      result_url: null,
-      error_code: null,
-      error_message: null,
-      duration_ms: Date.now() - startedAt,
-    })
-    .eq("id", job.id);
-}
-
-async function checkAmazonCompliance(
-  generatedImageUrl: string,
-): Promise<{ compliant: boolean; violations: string[] }> {
-  try {
-    const dataUrl = await toDataUrl(generatedImageUrl);
-    const chatResponse = await callQnChatAPI({
-      messages: [
-        {
-          role: "system",
-          content: `You are an Amazon product image compliance checker. Analyze the image against these rules:
-1. Pure white background (RGB 255,255,255)?
-2. No text, watermarks, logos, badges?
-3. No props, hands, models, lifestyle elements?
-4. Product isolated and centered?
-5. Product occupies ≥80% of frame?
-Return strict JSON only: { "compliant": true/false, "violations": ["violation 1", ...] }`,
-        },
-        {
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: dataUrl } },
-            { type: "text", text: "Check this product image for Amazon main image compliance." },
-          ],
-        },
-      ],
-      maxTokens: 512,
-    });
-
-    const content = String(
-      (chatResponse as Record<string, unknown>)?.choices?.[0]?.message?.content ?? "",
-    );
-    const parsed = parseJsonFromContent(content);
-    return {
-      compliant: Boolean(parsed.compliant),
-      violations: Array.isArray(parsed.violations)
-        ? (parsed.violations as unknown[]).filter((x): x is string => typeof x === "string")
-        : [],
-    };
-  } catch {
-    // If compliance check fails, skip it
-    return { compliant: true, violations: [] };
-  }
-}
-
 async function processAnalysisJob(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
@@ -905,11 +608,6 @@ async function processAnalysisJob(
   // Route OCR tasks to dedicated handler
   if (job.payload?.task === "ocr") {
     return processOcrJob(supabase, job);
-  }
-
-  // Route ecommerce analysis to dedicated handler
-  if (job.payload?.studioType === "ecommerce") {
-    return processEcommerceAnalysisJob(supabase, job);
   }
 
   const startedAt = Date.now();
@@ -1288,18 +986,12 @@ async function processImageGenJob(
 ): Promise<void> {
   const startedAt = Date.now();
   const payload = job.payload ?? {};
-  const model = String(payload.model ?? "azure-flux");
+  const model = String(payload.model ?? "or-gemini-3.1-flash");
   const imageRoute = resolveImageRoute(model);
   const imageSize = String(payload.imageSize ?? "2K");
   const turboEnabled = Boolean(payload.turboEnabled ?? false);
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
   const cost = Number(job.cost_amount ?? computeCost(model, turboEnabled, imageSize));
-  const metadata = typeof payload.metadata === "object" && payload.metadata !== null
-    ? payload.metadata as Record<string, unknown>
-    : {};
-  const isEcommerceGen = payload.studioType === "ecommerce" || typeof metadata.ecommerce_platform === "string";
-  const isInternationalMainImage = metadata.ecommerce_platform === "international" &&
-    metadata.ecommerce_image_type === "main";
 
   const source = getSourceImageFromPayload(payload);
   if (!source) throw new Error("IMAGE_INPUT_SOURCE_MISSING");
@@ -1405,29 +1097,24 @@ async function processImageGenJob(
         "realistic materials and textures. White or contextual lifestyle background. 4K ultra-detailed rendering. ";
       finalPrompt = ecomPrefix + finalPrompt;
     }
-    if (isEcommerceGen && !finalPrompt.includes("HARD CONSTRAINT - PRODUCT IDENTITY LOCK")) {
-      finalPrompt = `${ECOM_PRODUCT_CONSISTENCY_HARD_PROMPT} ${finalPrompt}`;
-    }
     const imageGenTimeoutMs = (isQuickEdit || isTextEdit)
       ? Number(Deno.env.get("QUICK_EDIT_IMAGE_TIMEOUT_MS") ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "120000")
       : Number(Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "60000");
     const apiResponse = await callQnImageAPI({
       imageDataUrl: allDataUrls[0],
       imageDataUrls: allDataUrls.length > 1 ? allDataUrls : undefined,
-      imageUrls: allImagePaths.map((p) => toPublicUrl(p)),
       prompt: finalPrompt,
       n: 1,
       model: imageRoute.model,
       endpointOverride: imageRoute.endpoint,
       apiKeyOverride: imageRoute.apiKey,
       size: aspectRatioToSize(aspectRatio),
-      aspectRatio,
       timeoutMsOverride: imageGenTimeoutMs,
     });
 
     // Handle both URL and b64 responses (Volcengine returns URL, others may return b64)
     const generated = extractGeneratedImageResult(apiResponse);
-    let generatedBase64 = generated.b64 ?? null;
+    const generatedBase64 = generated.b64 ?? null;
     let resultUrl = generated.url ?? null;
 
     const outputBucket = Deno.env.get("GENERATIONS_BUCKET") ?? "generations";
@@ -1465,146 +1152,8 @@ async function processImageGenJob(
       resultUrl = publicData.publicUrl;
     }
 
-    if (!resultUrl && isInternationalMainImage) {
-      // International main image: up to 3 attempts total to get any usable output.
-      const MAX_EMPTY_IMAGE_RETRIES = 2;
-      for (let attempt = 0; attempt < MAX_EMPTY_IMAGE_RETRIES && !resultUrl; attempt++) {
-        const rescuePrompt =
-          `${finalPrompt} STRICT AMAZON MAIN IMAGE REQUIREMENT: pure white RGB(255,255,255), product isolated and centered, no text/watermarks/logos/props/models.`;
-        const retryResponse = await callQnImageAPI({
-          imageDataUrl: allDataUrls[0],
-          imageDataUrls: allDataUrls.length > 1 ? allDataUrls : undefined,
-          imageUrls: allImagePaths.map((p) => toPublicUrl(p)),
-          prompt: rescuePrompt,
-          n: 1,
-          model: imageRoute.model,
-          endpointOverride: imageRoute.endpoint,
-          apiKeyOverride: imageRoute.apiKey,
-          size: aspectRatioToSize(aspectRatio),
-          aspectRatio,
-          timeoutMsOverride: imageGenTimeoutMs,
-        });
-        const retryGenerated = extractGeneratedImageResult(retryResponse);
-        const retryB64 = retryGenerated.b64 ?? null;
-        let retryUrl = retryGenerated.url ?? null;
-
-        if (retryB64) {
-          const retryBytes = base64ToBytes(retryB64);
-          const retryPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
-          const { error: retryUploadError } = await supabase.storage
-            .from(outputBucket)
-            .upload(retryPath, retryBytes, { contentType: "image/png", upsert: false });
-          if (!retryUploadError) {
-            const { data: retryPublicData } = supabase.storage.from(outputBucket).getPublicUrl(retryPath);
-            generatedBase64 = retryB64;
-            resultUrl = retryPublicData.publicUrl;
-            objectPath = retryPath;
-            actualMime = "image/png";
-          }
-        } else if (retryUrl) {
-          const retryImgRes = await fetch(retryUrl);
-          if (retryImgRes.ok) {
-            const retryImgBytes = new Uint8Array(await retryImgRes.arrayBuffer());
-            const retryMime = retryImgRes.headers.get("content-type") || "image/png";
-            const retryExt = retryMime.includes("jpeg") || retryMime.includes("jpg")
-              ? "jpg"
-              : retryMime.includes("webp")
-              ? "webp"
-              : "png";
-            const retryPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${retryExt}`;
-            const { error: retryUploadError } = await supabase.storage
-              .from(outputBucket)
-              .upload(retryPath, retryImgBytes, { contentType: retryMime, upsert: false });
-            if (!retryUploadError) {
-              const { data: retryPublicData } = supabase.storage.from(outputBucket).getPublicUrl(retryPath);
-              retryUrl = retryPublicData.publicUrl;
-              resultUrl = retryUrl;
-              objectPath = retryPath;
-              actualMime = retryMime;
-              generatedBase64 = null;
-            }
-          }
-        }
-      }
-    }
-
     if (!resultUrl) {
-      if (isInternationalMainImage) {
-        throw new Error("AMAZON_COMPLIANCE_FAILED");
-      }
       throw new Error("IMAGE_RESULT_MISSING");
-    }
-
-    // Amazon compliance check for international ecommerce main images
-    let complianceWarning = false;
-    let complianceViolations: string[] = [];
-    if (isInternationalMainImage && resultUrl) {
-      try {
-        const MAX_COMPLIANCE_RETRIES = 2;
-        for (let ci = 0; ci <= MAX_COMPLIANCE_RETRIES; ci++) {
-          const check = await checkAmazonCompliance(resultUrl);
-          if (check.compliant) break;
-          if (ci < MAX_COMPLIANCE_RETRIES) {
-            // Regenerate with strengthened prompt
-            const violationFixes = check.violations.join("; ");
-            const strengthened =
-              `${finalPrompt} CRITICAL FIXES: ${violationFixes}. Ensure PURE WHITE background RGB(255,255,255), NO text/watermarks/logos, NO props/hands/models, product ISOLATED and CENTERED occupying 85%+ of frame.`;
-            const retryResponse = await callQnImageAPI({
-              imageDataUrl: allDataUrls[0],
-              imageDataUrls: allDataUrls.length > 1 ? allDataUrls : undefined,
-              imageUrls: allImagePaths.map((p) => toPublicUrl(p)),
-              prompt: strengthened,
-              n: 1,
-              model: imageRoute.model,
-              endpointOverride: imageRoute.endpoint,
-              apiKeyOverride: imageRoute.apiKey,
-              size: aspectRatioToSize(aspectRatio),
-              aspectRatio,
-              timeoutMsOverride: imageGenTimeoutMs,
-            });
-            const retryGenerated = extractGeneratedImageResult(retryResponse);
-            const retryB64 = retryGenerated.b64 ?? null;
-            let retryUrl = retryGenerated.url ?? null;
-            if (retryB64) {
-              const retryBytes = base64ToBytes(retryB64);
-              const retryPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
-              const { error: retryUploadError } = await supabase.storage
-                .from(outputBucket)
-                .upload(retryPath, retryBytes, { contentType: "image/png", upsert: false });
-              if (!retryUploadError) {
-                const { data: retryPublicData } = supabase.storage.from(outputBucket).getPublicUrl(retryPath);
-                retryUrl = retryPublicData.publicUrl;
-                objectPath = retryPath;
-                generatedBase64 = retryB64;
-              }
-            } else if (retryUrl) {
-              const imgRes2 = await fetch(retryUrl);
-              if (imgRes2.ok) {
-                const imgBytes2 = new Uint8Array(await imgRes2.arrayBuffer());
-                const mime2 = imgRes2.headers.get("content-type") || "image/png";
-                const ext2 = mime2.includes("jpeg") || mime2.includes("jpg") ? "jpg" : mime2.includes("webp") ? "webp" : "png";
-                const retryPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext2}`;
-                const { error: retryUploadError } = await supabase.storage
-                  .from(outputBucket)
-                  .upload(retryPath, imgBytes2, { contentType: mime2, upsert: false });
-                if (!retryUploadError) {
-                  const { data: retryPublicData } = supabase.storage.from(outputBucket).getPublicUrl(retryPath);
-                  retryUrl = retryPublicData.publicUrl;
-                  objectPath = retryPath;
-                  actualMime = mime2;
-                }
-              }
-            }
-            if (retryUrl) resultUrl = retryUrl;
-          } else {
-            // Final attempt still non-compliant: attach warning
-            complianceWarning = true;
-            complianceViolations = check.violations;
-          }
-        }
-      } catch {
-        // Compliance check/generation failures should not fail the image job.
-      }
     }
 
     await supabase
@@ -1619,7 +1168,6 @@ async function processImageGenJob(
           mime_type: actualMime,
           object_path: objectPath ? `${outputBucket}/${objectPath}` : null,
           b64_json: generatedBase64,
-          ...(complianceWarning ? { compliance_warning: true, compliance_violations: complianceViolations } : {}),
         },
         error_code: null,
         error_message: null,
@@ -1726,7 +1274,7 @@ async function processStyleReplicateJob(
 ): Promise<void> {
   const startedAt = Date.now();
   const payload = job.payload ?? {};
-  const modelName = String(payload.model ?? "azure-flux");
+  const modelName = String(payload.model ?? "or-gemini-3.1-flash");
   const imageRoute = resolveImageRoute(modelName);
   // Clamp minimum to 2K — many providers require at least ~3.7M pixels (1920×1920)
   const rawImageSize = String(payload.imageSize ?? "2K");
@@ -2038,21 +1586,15 @@ async function processStyleReplicateJob(
       let lastProviderSize: string | null = null;
 
       for (let attempt = 0; attempt < maxRatioRetries; attempt++) {
-        const styleImageUrls = [
-          ...(unit.reference_image ? [toPublicUrl(unit.reference_image)] : []),
-          toPublicUrl(unit.product_image),
-        ];
         const apiResponse = await callQnImageAPI({
           imageDataUrl: referenceDataUrl ?? productDataUrl,
           ...(referenceDataUrl ? { imageDataUrls: [referenceDataUrl, productDataUrl] } : {}),
-          imageUrls: styleImageUrls,
           prompt,
           n: 1,
           model: imageRoute.model,
           endpointOverride: imageRoute.endpoint,
           apiKeyOverride: imageRoute.apiKey,
           ...(requestSize ? { size: requestSize } : {}),
-          aspectRatio,
           timeoutMsOverride: styleTimeoutMs,
         });
 

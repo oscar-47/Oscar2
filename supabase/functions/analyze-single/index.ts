@@ -2,11 +2,20 @@ import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
 
-function computeCost(_model: string, turboEnabled: boolean, imageSize: string): number {
-  if (!turboEnabled) return 5;
-  if (imageSize === "1K") return 8;
-  if (imageSize === "2K") return 12;
-  return 17;
+function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
+  const MODEL_BASE: Record<string, number> = {
+    "or-gemini-2.5-flash": 3, "or-gemini-3.1-flash": 5, "or-gemini-3-pro": 10,
+    "ta-gemini-2.5-flash": 3, "ta-gemini-3.1-flash": 3, "ta-gemini-3-pro": 5,
+    "midjourney": 15, "sd-3.5-ultra": 8, "dall-e-4": 12, "ideogram-3": 10,
+    "azure-flux": 5, "gpt-image": 5, "qiniu-gemini-pro": 5, "qiniu-gemini-flash": 5,
+    "volc-seedream-4.5": 5, "volc-seedream-5.0-lite": 5,
+    "flux-kontext-pro": 5, "gemini-pro-image": 5, "gemini-flash-image": 5,
+  };
+  const base = MODEL_BASE[model] ?? 5;
+  if (!turboEnabled) return base;
+  if (imageSize === "1K") return base + 3;
+  if (imageSize === "2K") return base + 7;
+  return base + 12;
 }
 
 function hasAllowedRefinementImageExtension(value: string): boolean {
@@ -76,8 +85,10 @@ Deno.serve(async (req) => {
     body.backgroundMode = backgroundMode;
   }
 
-  const modelName = String(body.model ?? "azure-flux");
+  const modelName = String(body.model ?? "or-gemini-3.1-flash");
   const imageSize = String(body.imageSize ?? "2K");
+  // Clamp 1K to 2K — providers require at least ~3.7M pixels
+  const effectiveImageSize = imageSize === "1K" ? "2K" : imageSize;
   const imageCount = Math.max(1, Math.min(9, Number(body.imageCount ?? 1)));
   const groupCount = Math.max(1, Math.min(9, Number(body.groupCount ?? 1)));
   const productCount = mode === "single" || mode === "refinement"
@@ -92,7 +103,7 @@ Deno.serve(async (req) => {
     ? productCount
     : productCount * imageCount;
   const turboEnabled = Boolean(body.turboEnabled ?? false);
-  const unitCost = computeCost(modelName, turboEnabled, imageSize);
+  const unitCost = computeCost(modelName, turboEnabled, effectiveImageSize);
   const cost = unitCost * requestedCount;
 
   const payload = {

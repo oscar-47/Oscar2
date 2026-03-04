@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -212,10 +211,10 @@ function patchStep(
 }
 
 function computeCost(model: GenerationModel, turboEnabled: boolean, imageSize: ImageSize, imageCount: number): number {
-  const base = Math.max(DEFAULT_CREDIT_COSTS[model] ?? 5, 5)
+  const base = DEFAULT_CREDIT_COSTS[model] ?? 5
   let perImage: number
   if (turboEnabled) {
-    perImage = base + (imageSize === '1K' ? 8 : imageSize === '2K' ? 12 : 16)
+    perImage = base + (imageSize === '1K' ? 3 : imageSize === '2K' ? 7 : 12)
   } else {
     perImage = base
   }
@@ -455,29 +454,6 @@ export function StudioGenesisForm() {
   const [failedSlotIndices, setFailedSlotIndices] = useState<number[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [analyzingMessageIndex, setAnalyzingMessageIndex] = useState(0)
-
-  useSessionPersistence(
-    'studio-genesis',
-    () => ({
-      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, turboEnabled,
-      results: phase === 'complete' ? results : [],
-      phase: phase === 'complete' ? 'complete' : 'input',
-    }),
-    (s) => {
-      if (typeof s.requirements === 'string') setRequirements(s.requirements)
-      if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
-      if (typeof s.model === 'string') setModel(s.model as GenerationModel)
-      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
-      if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
-      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (Array.isArray(s.results) && s.results.length > 0) {
-        setResults(s.results)
-        setPhase('complete')
-      }
-    }
-  )
-
   const abortRef = useRef<AbortController | null>(null)
 
   const { total } = useCredits()
@@ -1183,12 +1159,12 @@ export function StudioGenesisForm() {
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="or-gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
-                      <SelectItem value="or-gemini-3.1-flash">Gemini 3.1 Flash</SelectItem>
-                      <SelectItem value="or-gemini-3-pro">Gemini 3 Pro</SelectItem>
-                      <SelectItem value="ta-gemini-3.1-flash">TA Gemini 3.1 Flash</SelectItem>
-                      <SelectItem value="ta-gemini-2.5-flash">TA Gemini 2.5 Flash</SelectItem>
-                      <SelectItem value="ta-gemini-3-pro">TA Gemini 3 Pro</SelectItem>
+                      <SelectItem value="azure-flux">Azure FLUX</SelectItem>
+                      <SelectItem value="gpt-image">GPT-Image</SelectItem>
+                      <SelectItem value="qiniu-gemini-pro">Qiniu Gemini Pro</SelectItem>
+                      <SelectItem value="qiniu-gemini-flash">Qiniu Gemini Flash</SelectItem>
+                      <SelectItem value="volc-seedream-4.5">Volc Seedream 4.5</SelectItem>
+                      <SelectItem value="volc-seedream-5.0-lite">Volc Seedream 5.0 Lite</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

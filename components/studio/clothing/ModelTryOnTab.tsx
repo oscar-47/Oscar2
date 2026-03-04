@@ -88,8 +88,6 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     'clothing-model-tryon',
     () => ({
       requirements, language, model, aspectRatio, resolution, turboEnabled,
-      results: phase === 'complete' ? results : [],
-      phase: phase === 'complete' ? 'complete' : 'input',
     }),
     (s) => {
       if (typeof s.requirements === 'string') setRequirements(s.requirements)
@@ -98,10 +96,6 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.resolution === 'string') setResolution(s.resolution as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (Array.isArray(s.results) && s.results.length > 0) {
-        setResults(s.results)
-        setPhase('complete')
-      }
     }
   )
 
@@ -139,12 +133,19 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       setProgress(30)
 
       set('analyze', { status: 'active' })
+      // Task #11: Default prompt + smart category detection
+      // When user hasn't entered a prompt, use a default with category detection instructions
+      const effectiveRequirements = requirements.trim() || (
+        language === 'zh' || language === 'zh-CN'
+          ? '将这件衣服穿到这个模特身上。请分析产品图中的服装品类：如果是上衣类（衬衫、T恤、外套等），请生成半身图；如果是下装类（长裤、短裤、半裙等），请生成全身图；如果是连衣裙或套装，请生成全身图。'
+          : 'Put this garment on this model. Analyze the clothing category: for upper-body items (shirts, t-shirts, jackets), generate a half-body shot; for lower-body items (pants, shorts, skirts), generate a full-body shot; for dresses or full outfits, generate a full-body shot.'
+      )
       const { job_id: analysisJobId } = await analyzeProductV2({
         productImage: uploadedProductUrls[0],
         productImages: uploadedProductUrls,
         modelImage: uploadedModelUrl,
         clothingMode: 'model_strategy',
-        requirements,
+        requirements: effectiveRequirements,
         uiLanguage: language,
         targetLanguage: language,
         trace_id: traceId,

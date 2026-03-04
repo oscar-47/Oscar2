@@ -143,17 +143,29 @@ function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[]
     })
   }
   if (typeState.threeDEffect.enabled) {
-    plans.push({
-      title: '3D立体效果图',
-      description: '突出服装立体感与上身层次',
-      design_content: '通过动态姿态和光影表现服装体积感，保留材质纹理。',
-    })
+    plans.push(
+      {
+        title: '3D立体效果图（正面）',
+        description: '模特正面穿着展示，突出服装正面版型与立体感',
+        design_content: '模特正面站姿穿着展示，通过光影表现服装正面体积感与版型轮廓，保留材质纹理，统一背景与风格。',
+      },
+      {
+        title: '3D立体效果图（背面）',
+        description: '模特背面穿着展示，呈现背部剪裁与结构',
+        design_content: '模特背面站姿穿着展示，清晰呈现后背剪裁、缝线与结构细节，保留材质纹理，与正面图保持统一模特、风格与背景。',
+      },
+      {
+        title: '3D立体效果图（侧面）',
+        description: '模特侧面穿着展示，展现服装侧面层次',
+        design_content: '模特侧面站姿穿着展示，通过侧面角度表现服装层次感与廓形，保留材质纹理，与正面图保持统一模特、风格与背景。',
+      }
+    )
   }
   if (typeState.mannequin.enabled) {
     plans.push({
-      title: '模特上身图',
-      description: '展示真实穿着效果与搭配氛围',
-      design_content: '以自然站姿展示服装版型，强调上身效果与细节协调。',
+      title: '人台展示图',
+      description: '人台/模特架展示，严格保留衣服原始材质与外观',
+      design_content: '人台或模特架展示服装，严格保留衣服的原始材质和外观：颜色、款式、剪裁、纹理、面料质感不做任何改变。模拟摄影棚或自然光下的真实光影效果，包括高光、阴影和面料反光。本质是换场景/换人台展示，不是重新设计衣服。',
     })
   }
   for (let i = 0; i < typeState.detailCloseup.count; i += 1) {
@@ -239,8 +251,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     'clothing-basic-photo',
     () => ({
       requirements, language, model, aspectRatio, resolution, turboEnabled,
-      results: phase === 'complete' ? results : [],
-      phase: phase === 'complete' ? 'complete' : 'input',
     }),
     (s) => {
       if (typeof s.requirements === 'string') setRequirements(s.requirements)
@@ -249,10 +259,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.resolution === 'string') setResolution(s.resolution as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (Array.isArray(s.results) && s.results.length > 0) {
-        setResults(s.results)
-        setPhase('complete')
-      }
     }
   )
 

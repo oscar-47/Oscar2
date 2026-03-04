@@ -20,6 +20,7 @@ interface ResultGalleryProps {
   loadingCount?: number
   className?: string
   aspectRatio?: string
+  onImageClick?: (image: ResultImage, index: number) => void
 }
 
 function toCssAspectRatio(aspectRatio: string): string {
@@ -40,6 +41,7 @@ export function ResultGallery({
   loadingCount = 1,
   className,
   aspectRatio = '4:3',
+  onImageClick,
 }: ResultGalleryProps) {
   const t = useTranslations('studio.editor')
   const locale = useLocale()
@@ -83,8 +85,12 @@ export function ResultGallery({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: i * 0.08 }}
-            className="group relative w-[220px] max-w-full overflow-hidden rounded-xl border border-border bg-muted"
+            className={cn(
+              "group relative w-[220px] max-w-full overflow-hidden rounded-xl border border-border bg-muted",
+              onImageClick && "cursor-pointer"
+            )}
             style={{ aspectRatio: cssAspectRatio }}
+            onClick={onImageClick ? () => onImageClick(img, i) : undefined}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -102,14 +108,14 @@ export function ResultGallery({
             <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 type="button"
-                onClick={() => openLightbox(i)}
+                onClick={(e) => { e.stopPropagation(); openLightbox(i) }}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors"
               >
                 <ZoomIn className="h-4 w-4 text-white" />
               </button>
               <button
                 type="button"
-                onClick={() => openSingleInEditor(img.url)}
+                onClick={(e) => { e.stopPropagation(); openSingleInEditor(img.url) }}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors"
                 title={t('editInEditor')}
               >
@@ -120,6 +126,7 @@ export function ResultGallery({
                 download
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors"
               >
                 <Download className="h-4 w-4 text-white" />

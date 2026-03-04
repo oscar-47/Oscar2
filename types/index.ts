@@ -105,16 +105,18 @@ export type GenerationModel =
   | 'qiniu-gemini-flash'
   | 'volc-seedream-4.5'
   | 'volc-seedream-5.0-lite'
-  | 'or-gemini-2.5-flash'
-  | 'or-gemini-3.1-flash'
-  | 'or-gemini-3-pro'
-  | 'ta-gemini-3.1-flash'
-  | 'ta-gemini-2.5-flash'
-  | 'ta-gemini-3-pro'
   // Legacy aliases kept for compatibility with existing data.
   | 'flux-kontext-pro'
   | 'gemini-pro-image'
   | 'gemini-flash-image'
+  // OpenRouter models
+  | 'or-gemini-2.5-flash'
+  | 'or-gemini-3.1-flash'
+  | 'or-gemini-3-pro'
+  // ToAPIs models
+  | 'ta-gemini-2.5-flash'
+  | 'ta-gemini-3.1-flash'
+  | 'ta-gemini-3-pro'
 export type AspectRatio =
   | '1:1' | '2:3' | '3:2' | '3:4' | '4:3'
   | '4:5' | '5:4' | '9:16' | '16:9' | '21:9'
@@ -129,15 +131,15 @@ export const DEFAULT_CREDIT_COSTS: Record<string, number> = {
   'qiniu-gemini-flash': 5,
   'volc-seedream-4.5': 5,
   'volc-seedream-5.0-lite': 5,
-  'or-gemini-2.5-flash': 3,
-  'or-gemini-3.1-flash': 5,
-  'or-gemini-3-pro': 10,
-  'ta-gemini-3.1-flash': 3,
-  'ta-gemini-2.5-flash': 3,
-  'ta-gemini-3-pro': 5,
   'flux-kontext-pro': 5,
   'gemini-pro-image': 5,
   'gemini-flash-image': 5,
+  'or-gemini-2.5-flash': 3,
+  'or-gemini-3.1-flash': 5,
+  'or-gemini-3-pro': 10,
+  'ta-gemini-2.5-flash': 3,
+  'ta-gemini-3.1-flash': 3,
+  'ta-gemini-3-pro': 5,
   'turbo-1k': 8,
   'turbo-2k': 12,
   'turbo-4k': 17,
@@ -212,7 +214,17 @@ export interface GeneratedPrompt {
   prompt: string
 }
 
+// --- Studio Genesis phases ---
+
+export type GenesisPhase = 'input' | 'analyzing' | 'preview' | 'generating' | 'complete'
+
+// --- Clothing Studio phases ---
+
+export type ClothingPhase = 'input' | 'analyzing' | 'preview' | 'generating' | 'complete'
+
 // --- Ecommerce Studio ---
+
+export type EcommercePhase = 'input' | 'analyzing' | 'preview' | 'generating' | 'complete'
 
 export type EcommercePlatformStyle = 'domestic' | 'international'
 
@@ -224,16 +236,6 @@ export interface EcommerceAnalysisResult {
   detail_prompts: string[]
   platform_style: EcommercePlatformStyle
 }
-
-export type EcommercePhase = 'input' | 'analyzing' | 'preview' | 'generating' | 'complete'
-
-// --- Studio Genesis phases ---
-
-export type GenesisPhase = 'input' | 'analyzing' | 'preview' | 'generating' | 'complete'
-
-// --- Clothing Studio phases ---
-
-export type ClothingPhase = 'input' | 'analyzing' | 'preview' | 'generating' | 'complete'
 
 // --- Public config ---
 

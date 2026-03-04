@@ -4,11 +4,10 @@ import { useCallback, useRef, useState } from 'react'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useTranslations } from 'next-intl'
 import { useDropzone, type FileRejection } from 'react-dropzone'
-import { Loader2, Plus, Download, Sparkles, FileText, Upload, X, ImageIcon, Zap } from 'lucide-react'
+import { Loader2, Plus, Download, Sparkles, FileText, Upload, X, ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -18,6 +17,7 @@ import {
 } from '@/components/ui/select'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
 import { CorePageShell } from '@/components/studio/CorePageShell'
+import { GenerationParametersCard } from '@/components/studio/GenerationParametersCard'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
@@ -198,8 +198,6 @@ export function RefinementStudioForm() {
     'refinement-studio',
     () => ({
       userPrompt, backgroundMode, model, aspectRatio, imageSize, turboEnabled,
-      cards: phase === 'success' ? cards : [],
-      phase: phase === 'success' ? 'success' : 'idle',
     }),
     (s) => {
       if (typeof s.userPrompt === 'string') setUserPrompt(s.userPrompt)
@@ -208,10 +206,6 @@ export function RefinementStudioForm() {
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (Array.isArray(s.cards) && s.cards.length > 0) {
-        setCards(s.cards)
-        setPhase('success')
-      }
     }
   )
 
@@ -219,8 +213,8 @@ export function RefinementStudioForm() {
   const uploadedUrlsRef = useRef<string[]>([])
 
   const expectedCount = productImages.length
-  const baseCost = Math.max(DEFAULT_CREDIT_COSTS[model] ?? 5, 5)
-  const turboExtra = imageSize === '1K' ? 8 : imageSize === '2K' ? 12 : 16
+  const baseCost = DEFAULT_CREDIT_COSTS[model] ?? 5
+  const turboExtra = imageSize === '1K' ? 3 : imageSize === '2K' ? 7 : 12
   const unitCost = turboEnabled ? baseCost + turboExtra : baseCost
   const totalCost = unitCost * Math.max(1, expectedCount)
   const insufficientCredits = total !== null && total < totalCost
@@ -546,24 +540,22 @@ export function RefinementStudioForm() {
               className="mt-4 resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] px-4 py-3 text-[14px] text-[#20242c] placeholder:text-[#7c8390] focus-visible:ring-0 focus-visible:ring-offset-0"
             />
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div>
-                <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{tc('model')}</Label>
-                <Select value={model} onValueChange={(v) => setModel(v as GenerationModel)} disabled={isRunning}>
-                  <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="or-gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
-                    <SelectItem value="or-gemini-3.1-flash">Gemini 3.1 Flash</SelectItem>
-                    <SelectItem value="or-gemini-3-pro">Gemini 3 Pro</SelectItem>
-                    <SelectItem value="ta-gemini-3.1-flash">TA Gemini 3.1 Flash</SelectItem>
-                    <SelectItem value="ta-gemini-2.5-flash">TA Gemini 2.5 Flash</SelectItem>
-                    <SelectItem value="ta-gemini-3-pro">TA Gemini 3 Pro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          </section>
 
-              <div>
-                <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{t('backgroundMode')}</Label>
+          <GenerationParametersCard
+            model={model}
+            onModelChange={setModel}
+            aspectRatio={aspectRatio}
+            onAspectRatioChange={setAspectRatio}
+            imageSize={imageSize}
+            onImageSizeChange={setImageSize}
+            disabled={isRunning}
+            turboEnabled={turboEnabled}
+            onTurboChange={setTurboEnabled}
+            aspectRatioOptions={['1:1', '3:4', '4:3', '16:9', '9:16', '3:2', '2:3', '21:9']}
+            extraFields={
+              <div className="mt-4 space-y-1.5">
+                <Label className="text-[13px] font-medium text-[#5a5e6b]">{t('backgroundMode')}</Label>
                 <Select value={backgroundMode} onValueChange={(v) => setBackgroundMode(v as BackgroundMode)} disabled={isRunning}>
                   <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -572,52 +564,11 @@ export function RefinementStudioForm() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div>
-                <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{tc('aspectRatio')}</Label>
-                <Select value={aspectRatio} onValueChange={(v) => setAspectRatio(v as AspectRatio)} disabled={isRunning}>
-                  <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {(['1:1', '3:4', '4:3', '16:9', '9:16', '3:2', '2:3', '21:9'] as AspectRatio[]).map((ratio) => (
-                      <SelectItem key={ratio} value={ratio}>{ratio}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{tc('imageSize')}</Label>
-                <Select value={imageSize} onValueChange={(v) => setImageSize(v as ImageSize)} disabled={isRunning}>
-                  <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1K">1K</SelectItem>
-                    <SelectItem value="2K">2K</SelectItem>
-                    <SelectItem value="4K">4K</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </section>
+            }
+          />
 
           <section className={`${panelClass} p-4`}>
-            <div className="flex items-center justify-between rounded-[16px] border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-2.5">
-              <div className="flex items-start gap-2">
-                <div className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full ${turboEnabled ? 'bg-[#e7f8ee] text-[#22b968]' : 'bg-[#eceef2] text-[#6f737c]'}`}>
-                  <Zap className="h-3.5 w-3.5" />
-                </div>
-                <div>
-                  <p className="text-[14px] font-semibold text-[#1a1d24]">{t('turboTitle')}</p>
-                  <p className="text-[12px] text-[#636b78]">{t('turboDesc')}</p>
-                </div>
-              </div>
-              <Switch
-                checked={turboEnabled}
-                onCheckedChange={setTurboEnabled}
-                className="h-8 w-14 border-0 data-[state=checked]:bg-[#1a1d24] data-[state=unchecked]:bg-[#d8d9dd]"
-              />
-            </div>
-
-            <div className="mt-4">
+            <div className="mt-0">
               {isRunning ? (
                 <div className="grid grid-cols-2 gap-2">
                   <Button className="h-12 w-full rounded-2xl bg-[#8e9096] text-white hover:bg-[#84868d]" disabled>
@@ -643,7 +594,8 @@ export function RefinementStudioForm() {
                   onClick={handleSubmit}
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
-                  {t('generate')}
+                  {expectedCount > 0 ? t('generateBatchCount', { count: expectedCount }) : t('generate')}
+                  <span className="ml-1.5 text-white/70 text-[12px]">({t('creditCost', { cost: totalCost })})</span>
                 </Button>
               )}
             </div>

@@ -116,8 +116,6 @@ export function AestheticMirrorForm() {
     'aesthetic-mirror',
     () => ({
       mode, userPrompt, model, aspectRatio, imageSize, imageCount, groupCount, turboEnabled,
-      cards: phase === 'success' ? cards : [],
-      phase: phase === 'success' ? 'success' : 'idle',
     }),
     (s) => {
       if (s.mode === 'single' || s.mode === 'batch') setMode(s.mode)
@@ -128,10 +126,6 @@ export function AestheticMirrorForm() {
       if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
       if (typeof s.groupCount === 'number') setGroupCount(s.groupCount)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (Array.isArray(s.cards) && s.cards.length > 0) {
-        setCards(s.cards)
-        setPhase('success')
-      }
     }
   )
 
@@ -142,8 +136,8 @@ export function AestheticMirrorForm() {
   const lastRequestRef = useRef<{ refs: string[]; product: string } | null>(null)
 
   const expectedCount = mode === 'batch' ? batchRefs.length * groupCount : singleProducts.length * imageCount
-  const baseCost = Math.max(DEFAULT_CREDIT_COSTS[model] ?? 5, 5)
-  const turboExtra = imageSize === '1K' ? 8 : imageSize === '2K' ? 12 : 16
+  const baseCost = DEFAULT_CREDIT_COSTS[model] ?? 5
+  const turboExtra = imageSize === '1K' ? 3 : imageSize === '2K' ? 7 : 12
   const unitCost = turboEnabled ? baseCost + turboExtra : baseCost
   const totalCost = unitCost * Math.max(1, expectedCount)
   const insufficientCredits = total !== null && total < totalCost

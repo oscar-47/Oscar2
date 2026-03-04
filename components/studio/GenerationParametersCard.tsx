@@ -1,0 +1,344 @@
+'use client'
+
+import { useLocale } from 'next-intl'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SelectGroup,
+  SelectLabel,
+} from '@/components/ui/select'
+import { SectionIcon } from '@/components/shared/SectionIcon'
+import { SlidersHorizontal, Zap } from 'lucide-react'
+import type { GenerationModel, AspectRatio, ImageSize, OutputLanguage } from '@/types'
+import { DEFAULT_CREDIT_COSTS } from '@/types'
+
+// ─── Props ──────────────────────────────────────────────────────────────────
+
+interface GenerationParametersCardProps {
+  // Required
+  model: GenerationModel
+  onModelChange: (v: GenerationModel) => void
+  aspectRatio: AspectRatio
+  onAspectRatioChange: (v: AspectRatio) => void
+  imageSize: ImageSize
+  onImageSizeChange: (v: ImageSize) => void
+  disabled?: boolean
+
+  // Optional fields (shown when provided)
+  outputLanguage?: OutputLanguage
+  onOutputLanguageChange?: (v: OutputLanguage) => void
+  imageCount?: number
+  onImageCountChange?: (v: number) => void
+  showImageCount?: boolean
+  imageCountOptions?: number[]
+  turboEnabled?: boolean
+  onTurboChange?: (v: boolean) => void
+
+  // Aspect ratio options to show (different forms may want different options)
+  aspectRatioOptions?: AspectRatio[]
+
+  // Extra slots for form-specific fields
+  extraFields?: React.ReactNode
+}
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+const IMAGE_COUNTS = [1, 2, 3, 4]
+
+const ASPECT_RATIO_LABELS: Record<AspectRatio, { en: string; zh: string }> = {
+  '1:1': { en: '1:1', zh: '1:1' },
+  '2:3': { en: '2:3', zh: '2:3' },
+  '3:2': { en: '3:2', zh: '3:2' },
+  '3:4': { en: '3:4', zh: '3:4' },
+  '4:3': { en: '4:3', zh: '4:3' },
+  '4:5': { en: '4:5', zh: '4:5' },
+  '5:4': { en: '5:4', zh: '5:4' },
+  '9:16': { en: '9:16', zh: '9:16' },
+  '16:9': { en: '16:9', zh: '16:9' },
+  '21:9': { en: '21:9', zh: '21:9' },
+}
+
+const DEFAULT_ASPECT_RATIOS: AspectRatio[] = ['1:1', '3:4', '4:3', '4:5', '16:9']
+
+const RESOLUTION_OPTIONS: ImageSize[] = ['1K', '2K', '4K']
+
+interface OutputLangOption {
+  value: OutputLanguage
+  label: string
+}
+
+const OUTPUT_LANGUAGE_OPTIONS: OutputLangOption[] = [
+  { value: 'none', label: '' }, // label set dynamically by locale
+  { value: 'en', label: 'English' },
+  { value: 'zh', label: '中文' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+  { value: 'es', label: 'Español' },
+  { value: 'fr', label: 'Français' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'pt', label: 'Português' },
+  { value: 'ar', label: 'العربية' },
+  { value: 'ru', label: 'Русский' },
+]
+
+function creditLabel(model: string): string {
+  const cost = DEFAULT_CREDIT_COSTS[model]
+  return cost !== undefined ? `(${cost}cr)` : ''
+}
+
+// ─── Component ──────────────────────────────────────────────────────────────
+
+export function GenerationParametersCard({
+  model,
+  onModelChange,
+  aspectRatio,
+  onAspectRatioChange,
+  imageSize,
+  onImageSizeChange,
+  disabled = false,
+  outputLanguage,
+  onOutputLanguageChange,
+  imageCount,
+  onImageCountChange,
+  showImageCount = false,
+  turboEnabled,
+  onTurboChange,
+  aspectRatioOptions,
+  imageCountOptions,
+  extraFields,
+}: GenerationParametersCardProps) {
+  const locale = useLocale()
+  const isZh = locale === 'zh'
+
+  const ratios = aspectRatioOptions ?? DEFAULT_ASPECT_RATIOS
+
+  const selectTriggerClass =
+    'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] text-[#1b1f26] shadow-none'
+
+  const showOutputLanguage =
+    outputLanguage !== undefined && onOutputLanguageChange !== undefined
+  const showImageCountField =
+    showImageCount && imageCount !== undefined && onImageCountChange !== undefined
+  const showTurbo = turboEnabled !== undefined && onTurboChange !== undefined
+
+  return (
+    <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+      {/* Header */}
+      <div className="mb-4 flex items-center gap-3">
+        <SectionIcon icon={SlidersHorizontal} />
+        <div>
+          <h3 className="text-[15px] font-semibold text-[#1a1d24]">
+            {isZh ? '生成参数' : 'Generation Parameters'}
+          </h3>
+          <p className="text-[13px] text-[#7d818d]">
+            {isZh ? '配置模型、比例和输出选项' : 'Configure model, ratio and output options'}
+          </p>
+        </div>
+      </div>
+
+      {/* Model */}
+      <div className="space-y-1.5">
+        <Label className="text-[13px] font-medium text-[#5a5e6b]">
+          {isZh ? '模型' : 'Model'}
+        </Label>
+        <Select
+          value={model}
+          onValueChange={(v) => onModelChange(v as GenerationModel)}
+          disabled={disabled}
+        >
+          <SelectTrigger className={selectTriggerClass}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel className="text-[12px] text-[#8b909b]">OpenRouter</SelectLabel>
+              <SelectItem value="or-gemini-2.5-flash">
+                Gemini 2.5 Flash {creditLabel('or-gemini-2.5-flash')}
+              </SelectItem>
+              <SelectItem value="or-gemini-3.1-flash">
+                Gemini 3.1 Flash {creditLabel('or-gemini-3.1-flash')}
+              </SelectItem>
+              <SelectItem value="or-gemini-3-pro">
+                Gemini 3 Pro {creditLabel('or-gemini-3-pro')}
+              </SelectItem>
+            </SelectGroup>
+            <SelectGroup>
+              <SelectLabel className="text-[12px] text-[#8b909b]">ToAPIs</SelectLabel>
+              <SelectItem value="ta-gemini-3.1-flash">
+                TA Gemini 3.1 Flash {creditLabel('ta-gemini-3.1-flash')}
+              </SelectItem>
+              <SelectItem value="ta-gemini-2.5-flash">
+                TA Gemini 2.5 Flash {creditLabel('ta-gemini-2.5-flash')}
+              </SelectItem>
+              <SelectItem value="ta-gemini-3-pro">
+                TA Gemini 3 Pro {creditLabel('ta-gemini-3-pro')}
+              </SelectItem>
+            </SelectGroup>
+            <SelectGroup>
+              <SelectLabel className="text-[12px] text-[#8b909b]">Premium</SelectLabel>
+              <SelectItem value="midjourney">
+                Midjourney {creditLabel('midjourney')}
+              </SelectItem>
+              <SelectItem value="dall-e-4">
+                DALL·E 4 {creditLabel('dall-e-4')}
+              </SelectItem>
+              <SelectItem value="ideogram-3">
+                Ideogram 3 {creditLabel('ideogram-3')}
+              </SelectItem>
+              <SelectItem value="sd-3.5-ultra">
+                SD 3.5 Ultra {creditLabel('sd-3.5-ultra')}
+              </SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Aspect Ratio — button group */}
+      <div className="mt-4 space-y-1.5">
+        <Label className="text-[13px] font-medium text-[#5a5e6b]">
+          {isZh ? '宽高比' : 'Aspect Ratio'}
+        </Label>
+        <div className="flex flex-wrap gap-2">
+          {ratios.map((r) => {
+            const active = aspectRatio === r
+            return (
+              <button
+                key={r}
+                type="button"
+                disabled={disabled}
+                onClick={() => onAspectRatioChange(r)}
+                className={
+                  active
+                    ? 'rounded-full bg-[#191b22] px-3 py-1.5 text-[13px] font-medium text-white transition-colors'
+                    : 'rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-1.5 text-[13px] font-medium text-[#5a5e6b] transition-colors hover:border-[#191b22] disabled:opacity-50'
+                }
+              >
+                {ASPECT_RATIO_LABELS[r]?.[isZh ? 'zh' : 'en'] ?? r}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Resolution — button group */}
+      <div className="mt-4 space-y-1.5">
+        <Label className="text-[13px] font-medium text-[#5a5e6b]">
+          {isZh ? '分辨率' : 'Resolution'}
+        </Label>
+        <div className="flex gap-2">
+          {RESOLUTION_OPTIONS.map((s) => {
+            const active = imageSize === s
+            return (
+              <button
+                key={s}
+                type="button"
+                disabled={disabled}
+                onClick={() => onImageSizeChange(s)}
+                className={
+                  active
+                    ? 'rounded-full bg-[#191b22] px-3 py-1.5 text-[13px] font-medium text-white transition-colors'
+                    : 'rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-1.5 text-[13px] font-medium text-[#5a5e6b] transition-colors hover:border-[#191b22] disabled:opacity-50'
+                }
+              >
+                {s}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Output Language */}
+      {showOutputLanguage && (
+        <div className="mt-4 space-y-1.5">
+          <Label className="text-[13px] font-medium text-[#5a5e6b]">
+            {isZh ? '输出语言' : 'Output Language'}
+          </Label>
+          <Select
+            value={outputLanguage}
+            onValueChange={(v) => onOutputLanguageChange!(v as OutputLanguage)}
+            disabled={disabled}
+          >
+            <SelectTrigger className={selectTriggerClass}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {OUTPUT_LANGUAGE_OPTIONS.map((lang) => (
+                <SelectItem key={lang.value} value={lang.value}>
+                  {lang.value === 'none'
+                    ? isZh
+                      ? '无文字(纯视觉)'
+                      : 'No Text (Visual Only)'
+                    : lang.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Image Count */}
+      {showImageCountField && (
+        <div className="mt-4 space-y-1.5">
+          <Label className="text-[13px] font-medium text-[#5a5e6b]">
+            {isZh ? '生成数量' : 'Image Count'}
+          </Label>
+          <Select
+            value={String(imageCount)}
+            onValueChange={(v) => onImageCountChange!(Number(v))}
+            disabled={disabled}
+          >
+            <SelectTrigger className={selectTriggerClass}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(imageCountOptions ?? IMAGE_COUNTS).map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n} {isZh ? '张' : n === 1 ? 'Image' : 'Images'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Extra fields slot */}
+      {extraFields}
+
+      {/* Turbo Mode */}
+      {showTurbo && (
+        <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <div
+              className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                turboEnabled
+                  ? 'bg-[#e7f8ee] text-[#22b968]'
+                  : 'bg-[#eceef2] text-[#6f737c]'
+              }`}
+            >
+              <Zap className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-[14px] font-semibold text-[#1a1d24]">
+                {isZh ? 'Turbo 加速模式' : 'Turbo Mode'}
+              </p>
+              <p className="text-[12px] text-[#7d818d]">
+                {isZh ? '更快、更稳定' : 'Faster & more stable'}
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={turboEnabled}
+            onCheckedChange={onTurboChange}
+            disabled={disabled}
+            className="h-8 w-14 border-0 data-[state=checked]:bg-[#1a1d24] data-[state=unchecked]:bg-[#d8d9dd]"
+          />
+        </div>
+      )}
+    </div>
+  )
+}

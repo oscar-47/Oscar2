@@ -83,6 +83,38 @@ function isToAPIs(url: string): boolean {
   }
 }
 
+/** Detect GoAPI (Midjourney proxy) endpoint */
+function isGoAPI(url: string): boolean {
+  try {
+    return new URL(url).hostname === "api.goapi.ai";
+  } catch {
+    return false;
+  }
+}
+
+/** Detect Stability AI endpoint */
+function isStabilityAI(url: string): boolean {
+  try {
+    return new URL(url).hostname === "api.stability.ai";
+  } catch {
+    return false;
+  }
+}
+
+/** Detect Ideogram API endpoint */
+function isIdeogram(url: string): boolean {
+  try {
+    return new URL(url).hostname === "api.ideogram.ai";
+  } catch {
+    return false;
+  }
+}
+
+/** Detect OpenAI native images/generations endpoint (for DALL-E 4 etc.) */
+function isOpenAINativeGenerations(url: string): boolean {
+  return url.includes("api.openai.com/v1/images/generations");
+}
+
 function normalizeArkSize(size: string | undefined): string {
   if (!size) return "2048x2048";
   // Pass through pixel dimensions (e.g. "2048x3072")
@@ -209,6 +241,7 @@ export async function callQnImageAPI(params: {
   endpointOverride?: string;
   apiKeyOverride?: string;
   timeoutMsOverride?: number;
+  providerHint?: string;
 }): Promise<Record<string, unknown>> {
   const envEndpoint = Deno.env.get("QN_IMAGE_API_ENDPOINT") ?? "https://api.qnaigc.com/v1/images/edits";
   const envModel = Deno.env.get("QN_IMAGE_MODEL") ?? "gemini-3.0-pro-image-preview";
@@ -382,6 +415,130 @@ export async function callQnImageAPI(params: {
         }
       }
       throw new Error("OPENROUTER_IMAGE_INVALID_RESPONSE: no image found: " + JSON.stringify(parsed).substring(0, 500));
+    } else if (isGoAPI(endpoint) || params.providerHint === "midjourney") {
+      // GoAPI (Midjourney proxy): OpenAI-compatible JSON body with images/generations
+      const mjBody: Record<string, unknown> = {
+        model,
+        prompt: params.prompt,
+        n: params.n ?? 1,
+        response_format: "url",
+      };
+      if (size) mjBody.size = size;
+
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(mjBody),
+        signal: controller.signal,
+      });
+    } else if (isStabilityAI(endpoint) || params.providerHint === "stability") {
+      // Stability AI: multipart form data
+      const formData = new FormData();
+      formData.append("prompt", params.prompt);
+      formData.append("output_format", "png");
+      if (params.aspectRatio) {
+        formData.append("aspect_ratio", params.aspectRatio);
+      }
+      // Attach reference image if available (image-to-image mode)
+      const images = params.imageDataUrls && params.imageDataUrls.length > 0
+        ? params.imageDataUrls
+        : params.imageDataUrl ? [params.imageDataUrl] : [];
+      if (images.length > 0 && images[0]) {
+        formData.append("image", dataUrlToBlob(images[0]), "reference.png");
+        formData.append("strength", "0.5");
+      }
+
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Accept": "application/json",
+        },
+        body: formData,
+        signal: controller.signal,
+      });
+
+      const stabText = await res.text();
+      let stabParsed: Record<string, unknown> = {};
+      try {
+        stabParsed = stabText ? JSON.parse(stabText) : {};
+      } catch {
+        stabParsed = { raw: stabText };
+      }
+
+      if (!res.ok) {
+        throw new Error(`STABILITY_API_ERROR ${res.status}: ${JSON.stringify(stabParsed)}`);
+      }
+
+      // Stability returns { image: "<base64>" } — normalize to standard format
+      const stabB64 = stabParsed.image as string | undefined;
+      if (!stabB64) throw new Error("IMAGE_RESULT_MISSING");
+      return { data: [{ b64_json: stabB64 }] };
+    } else if (isIdeogram(endpoint) || params.providerHint === "ideogram") {
+      // Ideogram API: JSON body with image_request wrapper
+      const imageRequest: Record<string, unknown> = {
+        prompt: params.prompt,
+        model,
+        magic_prompt_option: "AUTO",
+      };
+      if (params.aspectRatio) {
+        imageRequest.aspect_ratio = `ASPECT_${params.aspectRatio.replace(":", "_")}`;
+      }
+
+      const ideoBody: Record<string, unknown> = {
+        image_request: imageRequest,
+      };
+
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Api-Key": apiKey,
+        },
+        body: JSON.stringify(ideoBody),
+        signal: controller.signal,
+      });
+
+      const ideoText = await res.text();
+      let ideoParsed: Record<string, unknown> = {};
+      try {
+        ideoParsed = ideoText ? JSON.parse(ideoText) : {};
+      } catch {
+        ideoParsed = { raw: ideoText };
+      }
+
+      if (!res.ok) {
+        throw new Error(`IDEOGRAM_API_ERROR ${res.status}: ${JSON.stringify(ideoParsed)}`);
+      }
+
+      // Ideogram returns { data: [{ url: "..." }] } — already in standard format
+      // deno-lint-ignore no-explicit-any
+      const ideoData = (ideoParsed as any)?.data;
+      if (Array.isArray(ideoData) && ideoData.length > 0 && ideoData[0]?.url) {
+        return { data: [{ url: ideoData[0].url }] };
+      }
+      throw new Error("IMAGE_RESULT_MISSING");
+    } else if (isOpenAINativeGenerations(endpoint) || params.providerHint === "openai-generations") {
+      // OpenAI images/generations (DALL-E 4 etc.): JSON body, no image input
+      const dalleBody: Record<string, unknown> = {
+        model,
+        prompt: params.prompt,
+        n: params.n ?? 1,
+        size: size,
+      };
+
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(dalleBody),
+        signal: controller.signal,
+      });
     } else if (isAzureAIFoundryGenerations(endpoint)) {
       // Azure AI Foundry /images/generations (e.g. FLUX Kontext Pro): JSON body
       const images = params.imageDataUrls && params.imageDataUrls.length > 0

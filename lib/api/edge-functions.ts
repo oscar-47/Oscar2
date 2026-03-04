@@ -160,6 +160,28 @@ export async function analyzeProductV2(
   return res
 }
 
+/** Ecommerce Studio analysis — reuses analyze-product-v2 with studioType='ecommerce' */
+export async function analyzeEcommerceProduct(params: {
+  productImage: string
+  userDescription?: string
+  platformStyle: string
+  studioType: string
+  detailCount: number
+  trace_id: string
+}): Promise<JobResponse> {
+  const res = await invokeFunction<JobResponse>('analyze-product-v2', {
+    productImage: params.productImage,
+    additionalImages: [],
+    productDescription: params.userDescription ?? '',
+    studioType: params.studioType,
+    detailCount: params.detailCount,
+    trace_id: params.trace_id,
+    clothingMode: undefined,
+  } as AnalyzeProductParams)
+  void processGenerationJob(res.job_id)
+  return res
+}
+
 export interface GeneratePromptsParams {
   analysisJson?: unknown
   design_specs?: unknown
@@ -269,31 +291,6 @@ export async function generateModelImage(
     imageCount: params.imageCount ?? params.count ?? 1,
   }
   const res = await invokeFunction<JobResponse>('generate-model-image', payload)
-  void processGenerationJob(res.job_id)
-  return res
-}
-
-// ── Ecommerce Studio ─────────────────────────────────────────────────────────
-
-export interface AnalyzeEcommerceParams {
-  productImage: string
-  userDescription: string
-  platformStyle: 'domestic' | 'international'
-  studioType: 'ecommerce'
-  detailCount?: number
-  trace_id: string
-  client_job_id?: string
-  fe_attempt?: number
-}
-
-export async function analyzeEcommerceProduct(
-  params: AnalyzeEcommerceParams
-): Promise<JobResponse> {
-  const res = await invokeFunction<JobResponse>('analyze-product-v2', {
-    ...params,
-    detailCount: params.detailCount
-      ?? (params.platformStyle === 'domestic' ? 6 : 4),
-  })
   void processGenerationJob(res.job_id)
   return res
 }
