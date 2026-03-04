@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -454,6 +455,29 @@ export function StudioGenesisForm() {
   const [failedSlotIndices, setFailedSlotIndices] = useState<number[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [analyzingMessageIndex, setAnalyzingMessageIndex] = useState(0)
+
+  useSessionPersistence(
+    'studio-genesis',
+    () => ({
+      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, turboEnabled,
+      results: phase === 'complete' ? results : [],
+      phase: phase === 'complete' ? 'complete' : 'input',
+    }),
+    (s) => {
+      if (typeof s.requirements === 'string') setRequirements(s.requirements)
+      if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
+      if (typeof s.model === 'string') setModel(s.model as GenerationModel)
+      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
+      if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
+      if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
+      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (Array.isArray(s.results) && s.results.length > 0) {
+        setResults(s.results)
+        setPhase('complete')
+      }
+    }
+  )
+
   const abortRef = useRef<AbortController | null>(null)
 
   const { total } = useCredits()

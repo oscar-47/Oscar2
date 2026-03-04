@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
+import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -98,6 +99,41 @@ export function AestheticMirrorForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null)
   const [downloadingAll, setDownloadingAll] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  // Lightbox: Escape key + scroll lock
+  useEffect(() => {
+    if (!previewUrl) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreviewUrl(null) }
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
+  }, [previewUrl])
+
+  // Persist all form state to sessionStorage
+  useSessionPersistence(
+    'aesthetic-mirror',
+    () => ({
+      mode, userPrompt, model, aspectRatio, imageSize, imageCount, groupCount, turboEnabled,
+      cards: phase === 'success' ? cards : [],
+      phase: phase === 'success' ? 'success' : 'idle',
+    }),
+    (s) => {
+      if (s.mode === 'single' || s.mode === 'batch') setMode(s.mode)
+      if (typeof s.userPrompt === 'string') setUserPrompt(s.userPrompt)
+      if (typeof s.model === 'string') setModel(s.model as GenerationModel)
+      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
+      if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
+      if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
+      if (typeof s.groupCount === 'number') setGroupCount(s.groupCount)
+      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (Array.isArray(s.cards) && s.cards.length > 0) {
+        setCards(s.cards)
+        setPhase('success')
+      }
+    }
+  )
 
   const abortRef = useRef<AbortController | null>(null)
   const productInputRef = useRef<HTMLInputElement | null>(null)
@@ -266,6 +302,7 @@ export function AestheticMirrorForm() {
   const addSingleProducts = (files: FileList | null) => setSingleProducts((prev) => [...prev, ...Array.from(files ?? []).filter((f) => f.type.startsWith('image/')).slice(0, Math.max(0, 6 - prev.length)).map((file) => ({ file, previewUrl: URL.createObjectURL(file) }))])
 
   return (
+    <>
     <CorePageShell maxWidthClass="max-w-[1360px]" contentClassName="space-y-8">
         <section className="pt-6 text-center sm:pt-8">
           <div className="inline-flex items-center gap-1.5 rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-4 py-1.5 text-xs font-medium text-[#3f4047]">
@@ -561,13 +598,20 @@ export function AestheticMirrorForm() {
                   {cards.map((c, i) => c.status === 'success' && c.url ? (
                     <div
                       key={i}
-                      className="group relative w-[220px] max-w-full overflow-hidden rounded-2xl border border-[#dcdce1] bg-white"
+                      role="button"
+                      tabIndex={0}
+                      className="group relative w-[220px] max-w-full cursor-pointer overflow-hidden rounded-2xl border border-[#dcdce1] bg-white"
                       style={{ aspectRatio: previewAspectRatio }}
+                      onClick={() => setPreviewUrl(c.url)}
+                      onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPreviewUrl(c.url) }
+                      }}
                     >
                       <img src={c.url} alt={`result-${i + 1}`} className="w-full object-cover" />
-                      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button type="button" onClick={() => { const sid = createEditorSession([c.url!]); router.push(`/${locale}/image-editor?sid=${sid}`) }} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30"><Pencil className="h-4 w-4" /></button>
-                        <button type="button" onClick={() => void downloadOne(c.url as string, i)} disabled={downloadingIndex === i || downloadingAll} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30 disabled:opacity-60">{downloadingIndex === i ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}</button>
+                      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/35 opacity-0 transition-opacity pointer-events-none group-hover:opacity-100 group-focus-within:opacity-100">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); const sid = createEditorSession([c.url!]); router.push(`/${locale}/image-editor?sid=${sid}`) }} className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30"><Pencil className="h-4 w-4" /></button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); void downloadOne(c.url as string, i) }} disabled={downloadingIndex === i || downloadingAll} className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30 disabled:opacity-60">{downloadingIndex === i ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}</button>
                       </div>
                     </div>
                   ) : (
@@ -612,5 +656,31 @@ export function AestheticMirrorForm() {
           </div>
         </div>
     </CorePageShell>
+    {previewUrl && (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm animate-in fade-in duration-200"
+        onClick={() => setPreviewUrl(null)}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Image Preview"
+      >
+        <button
+          type="button"
+          className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/80 transition-all hover:bg-white/20 hover:text-white"
+          onClick={(e) => { e.stopPropagation(); setPreviewUrl(null) }}
+          aria-label="Close"
+          autoFocus
+        >
+          <X className="h-5 w-5" />
+        </button>
+        <img
+          src={previewUrl}
+          alt="preview"
+          className="max-h-[85vh] max-w-[85vw] rounded-xl object-contain shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
+    </>
   )
 }

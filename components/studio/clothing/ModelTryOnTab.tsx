@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { Image as ImageIcon, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SectionIcon } from '@/components/shared/SectionIcon'
@@ -82,6 +83,28 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
   const [progress, setProgress] = useState(0)
   const [results, setResults] = useState<ResultImage[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  useSessionPersistence(
+    'clothing-model-tryon',
+    () => ({
+      requirements, language, model, aspectRatio, resolution, turboEnabled,
+      results: phase === 'complete' ? results : [],
+      phase: phase === 'complete' ? 'complete' : 'input',
+    }),
+    (s) => {
+      if (typeof s.requirements === 'string') setRequirements(s.requirements)
+      if (typeof s.language === 'string') setLanguage(s.language)
+      if (typeof s.model === 'string') setModel(s.model as GenerationModel)
+      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
+      if (typeof s.resolution === 'string') setResolution(s.resolution as ImageSize)
+      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (Array.isArray(s.results) && s.results.length > 0) {
+        setResults(s.results)
+        setPhase('complete')
+      }
+    }
+  )
+
   const abortRef = useRef<AbortController | null>(null)
 
   const isProcessing = phase === 'analyzing' || phase === 'generating'

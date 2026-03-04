@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
+import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useTranslations } from 'next-intl'
 import { useDropzone, type FileRejection } from 'react-dropzone'
 import { Loader2, Plus, Download, Sparkles, FileText, Upload, X, ImageIcon, Zap } from 'lucide-react'
@@ -192,6 +193,27 @@ export function RefinementStudioForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null)
   const [downloadingAll, setDownloadingAll] = useState(false)
+
+  useSessionPersistence(
+    'refinement-studio',
+    () => ({
+      userPrompt, backgroundMode, model, aspectRatio, imageSize, turboEnabled,
+      cards: phase === 'success' ? cards : [],
+      phase: phase === 'success' ? 'success' : 'idle',
+    }),
+    (s) => {
+      if (typeof s.userPrompt === 'string') setUserPrompt(s.userPrompt)
+      if (typeof s.backgroundMode === 'string') setBackgroundMode(s.backgroundMode as BackgroundMode)
+      if (typeof s.model === 'string') setModel(s.model as GenerationModel)
+      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
+      if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
+      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (Array.isArray(s.cards) && s.cards.length > 0) {
+        setCards(s.cards)
+        setPhase('success')
+      }
+    }
+  )
 
   const abortRef = useRef<AbortController | null>(null)
   const uploadedUrlsRef = useRef<string[]>([])

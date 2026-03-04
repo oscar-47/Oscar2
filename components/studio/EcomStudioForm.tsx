@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useTranslations, useLocale } from 'next-intl'
 import {
   ShoppingBag,
@@ -177,12 +178,33 @@ export function EcomStudioForm() {
   // Error
   const [error, setError] = useState<string | null>(null)
 
-  // Abort
-  const abortRef = useRef<AbortController | null>(null)
-
   // Prompt visibility
   const [showMainPrompt, setShowMainPrompt] = useState(false)
   const [showDetailPrompts, setShowDetailPrompts] = useState(false)
+
+  useSessionPersistence(
+    'ecom-studio',
+    () => ({
+      description, platformStyle, model, aspectRatio, imageSize, turboEnabled,
+      generatedImages: phase === 'complete' ? generatedImages : [],
+      phase: phase === 'complete' ? 'complete' : 'input',
+    }),
+    (s) => {
+      if (typeof s.description === 'string') setDescription(s.description)
+      if (typeof s.platformStyle === 'string') setPlatformStyle(s.platformStyle as EcommercePlatformStyle)
+      if (typeof s.model === 'string') setModel(s.model as GenerationModel)
+      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
+      if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
+      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (Array.isArray(s.generatedImages) && s.generatedImages.length > 0) {
+        setGeneratedImages(s.generatedImages)
+        setPhase('complete')
+      }
+    }
+  )
+
+  // Abort
+  const abortRef = useRef<AbortController | null>(null)
 
   const traceId = useRef(uid()).current
 

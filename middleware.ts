@@ -50,16 +50,17 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  // 3. Guard protected routes
-  if (isProtectedPath(request.nextUrl.pathname) && !user) {
-    const locale = request.nextUrl.pathname.split('/')[1] || routing.defaultLocale
-    const authUrl = new URL(`/${locale}/auth`, request.url)
-    authUrl.searchParams.set('returnTo', request.nextUrl.pathname)
-    return NextResponse.redirect(authUrl)
+  // 3. Guard protected routes — only call getUser() when needed (it hits Supabase API)
+  if (isProtectedPath(request.nextUrl.pathname)) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      const locale = request.nextUrl.pathname.split('/')[1] || routing.defaultLocale
+      const authUrl = new URL(`/${locale}/auth`, request.url)
+      authUrl.searchParams.set('returnTo', request.nextUrl.pathname)
+      return NextResponse.redirect(authUrl)
+    }
   }
 
   return response
