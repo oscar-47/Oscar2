@@ -535,6 +535,7 @@ export function StudioGenesisForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [analyzingMessageIndex, setAnalyzingMessageIndex] = useState(0)
   const [retryContext, setRetryContext] = useState<RetryContext | null>(null)
+  const [generatedPrompts, setGeneratedPrompts] = useState<GeneratedPrompt[]>([])
   const abortRef = useRef<AbortController | null>(null)
 
   const { total } = useCredits()
@@ -627,6 +628,7 @@ export function StudioGenesisForm() {
     setSteps([
       { id: 'upload', label: t('steps.upload'), status: 'pending' },
       { id: 'analyze', label: t('steps.analyze'), status: 'pending' },
+      { id: 'prompts', label: t('steps.prompts'), status: 'pending' },
     ])
     setProgress(0)
     setErrorMessage(null)
@@ -696,6 +698,52 @@ export function StudioGenesisForm() {
 
       setEditableImagePlans(plansWithIds)
       setSelectedPlanIds(new Set(plansWithIds.map(p => p.id!)))
+
+      // 4. Generate prompts for all plans
+      set('prompts', { status: 'active' })
+      const promptBlueprint: AnalysisBlueprint = {
+        images: plansWithIds,
+        design_specs: blueprint.design_specs ?? '',
+        _ai_meta: blueprint._ai_meta,
+      }
+      let promptText = ''
+      const stream = await generatePromptsV2Stream(
+        {
+          analysisJson: promptBlueprint,
+          design_specs: blueprint.design_specs ?? '',
+          imageCount: plansWithIds.length,
+          targetLanguage: backendLocale,
+          outputLanguage,
+          stream: true,
+          trace_id,
+        },
+        abort.signal,
+      )
+      const reader = stream.getReader()
+      const decoder = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        for (const line of decoder.decode(value, { stream: true }).split('\n')) {
+          if (line.startsWith('data: ')) {
+            const payload = line.slice(6).trim()
+            if (payload && payload !== '[DONE]' && !payload.startsWith('[ERROR]')) {
+              try {
+                const chunk = JSON.parse(payload) as PromptSseChunk
+                if (chunk.fullText) {
+                  promptText = chunk.fullText
+                }
+              } catch {
+                promptText += payload
+              }
+            }
+          }
+        }
+      }
+      const parsedPrompts = parsePromptArray(promptText, plansWithIds.length)
+      setGeneratedPrompts(parsedPrompts)
+      set('prompts', { status: 'done' })
+
       setPhase('preview')
       setAnalysisParams({ imageCount, outputLanguage, platform })
     } catch (err: unknown) {
@@ -725,7 +773,6 @@ export function StudioGenesisForm() {
 
     setPhase('generating')
     setSteps([
-      { id: 'prompts', label: t('steps.prompts'), status: 'pending' },
       { id: 'generate', label: t('steps.generate'), status: 'pending' },
       { id: 'done', label: t('steps.done'), status: 'pending' },
     ])
@@ -739,66 +786,19 @@ export function StudioGenesisForm() {
       setSteps((prev) => patchStep(prev, id, patch))
 
     try {
-      // 1. Generate prompts — pass edited blueprint (only selected plans)
-      set('prompts', { status: 'active' })
+      // Use pre-generated prompts from analysis phase (user may have edited them)
       const selectedPlans = editableImagePlans.filter(p => p.id && selectedPlanIds.has(p.id))
-      const modifiedBlueprint: AnalysisBlueprint = {
-        images: selectedPlans,
-        design_specs: editableDesignSpecs,
-        _ai_meta: analysisBlueprint._ai_meta,
-      }
-
-      let promptText = ''
-      const stream = await generatePromptsV2Stream(
-        {
-          analysisJson: modifiedBlueprint,
-          design_specs: editableDesignSpecs,
-          imageCount: selectedPlans.length,
-          targetLanguage: backendLocale,
-          outputLanguage,
-          stream: true,
-          trace_id,
-        },
-        abort.signal
-      )
-
-      const reader = stream.getReader()
-      const decoder = new TextDecoder()
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        for (const line of decoder.decode(value, { stream: true }).split('\n')) {
-          if (line.startsWith('data: ')) {
-            const payload = line.slice(6).trim()
-            if (payload && payload !== '[DONE]' && !payload.startsWith('[ERROR]')) {
-              try {
-                const chunk = JSON.parse(payload) as PromptSseChunk
-                if (chunk.fullText) {
-                  promptText = chunk.fullText
-                }
-              } catch {
-                promptText += payload
-              }
-            }
-          }
-        }
-      }
-      set('prompts', { status: 'done' })
-      setProgress(40)
-
-      // 2. Parse structured prompt JSON
-      const parsedPrompts = parsePromptArray(promptText, selectedPlans.length)
       const prompts = Array.from({ length: selectedPlans.length }, (_, i) => {
-        const gp = parsedPrompts[i] ?? parsedPrompts[i % parsedPrompts.length]
-        return gp?.prompt ?? promptText
-      })
+        const gp = generatedPrompts[i] ?? generatedPrompts[i % Math.max(1, generatedPrompts.length)]
+        return gp?.prompt ?? ''
+      }).filter(p => p.length > 0)
       if (prompts.length === 0) {
-        throw new Error('No prompts generated from SSE response')
+        throw new Error('No prompts available — please re-analyze')
       }
 
-      // 3. Generate images — one per prompt
+      // Generate images — one per prompt
       set('generate', { status: 'active' })
-      setProgress(55)
+      setProgress(10)
 
       // Create initial slots
       const initialSlots: ImageSlot[] = prompts.map(() => ({
@@ -909,7 +909,7 @@ export function StudioGenesisForm() {
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
     }
-  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, platform, imageCount, analysisParams, t, tc])
+  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, platform, imageCount, analysisParams, generatedPrompts, t, tc])
 
   const handleBackToInput = useCallback(() => {
     setPhase('input')
@@ -920,6 +920,7 @@ export function StudioGenesisForm() {
     setPlatform('none')
     setAnalysisParams(null)
     setRetryContext(null)
+    setGeneratedPrompts([])
   }, [])
 
   const handleBackToPreview = useCallback(() => {
@@ -945,6 +946,7 @@ export function StudioGenesisForm() {
     setPlatform('none')
     setAnalysisParams(null)
     setRetryContext(null)
+    setGeneratedPrompts([])
   }, [])
 
   // ─── handleAddPlan / handleDuplicatePlan ──────────────────────────────────
@@ -1311,6 +1313,10 @@ export function StudioGenesisForm() {
           onAddPlan={handleAddPlan}
           onDuplicatePlan={handleDuplicatePlan}
           platformMinImages={getPlatformMinImages(platform)}
+          generatedPrompts={generatedPrompts}
+          onPromptChange={(i, prompt) => {
+            setGeneratedPrompts((prev) => prev.map((gp, idx) => idx === i ? { ...gp, prompt } : gp))
+          }}
           onSelectAll={() => {
             setSelectedPlanIds(new Set(editableImagePlans.map((p) => p.id!)))
           }}

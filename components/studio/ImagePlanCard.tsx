@@ -1,11 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, Trash2, Check, Copy } from 'lucide-react'
+import { ChevronDown, Trash2, Check, Copy, AlertTriangle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import type { BlueprintImagePlan } from '@/types'
+import type { BlueprintImagePlan, GeneratedPrompt } from '@/types'
 import { cn } from '@/lib/utils'
+
+const PROMPT_MIN_LENGTH = 50
 
 interface ImagePlanCardProps {
   index: number
@@ -16,9 +18,11 @@ interface ImagePlanCardProps {
   onToggleSelect?: () => void
   onDelete?: () => void
   onDuplicate?: () => void
+  generatedPrompt?: GeneratedPrompt
+  onPromptChange?: (prompt: string) => void
 }
 
-export function ImagePlanCard({ index, plan, onChange, disabled = false, selected, onToggleSelect, onDelete, onDuplicate }: ImagePlanCardProps) {
+export function ImagePlanCard({ index, plan, onChange, disabled = false, selected, onToggleSelect, onDelete, onDuplicate, generatedPrompt, onPromptChange }: ImagePlanCardProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -48,7 +52,12 @@ export function ImagePlanCard({ index, plan, onChange, disabled = false, selecte
           )}
           {!open && (
             <div className="min-w-0 flex-1 space-y-0.5">
-              <h4 className="truncate text-[15px] font-semibold text-[#1a1d24]">{plan.title}</h4>
+              <div className="flex items-center gap-2">
+                <h4 className="truncate text-[15px] font-semibold text-[#1a1d24]">{plan.title}</h4>
+                {generatedPrompt && generatedPrompt.prompt.length < PROMPT_MIN_LENGTH && (
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                )}
+              </div>
               <p className="line-clamp-2 text-[13px] leading-5 text-[#7d818d]">{plan.description}</p>
             </div>
           )}
@@ -118,6 +127,28 @@ export function ImagePlanCard({ index, plan, onChange, disabled = false, selecte
               placeholder="补充该图片的设计内容"
               className="resize-none rounded-2xl border-[#d0d4dc] bg-[#f5f6f8] text-[14px] leading-7 text-[#262a32]"
             />
+            {generatedPrompt && (
+              <div className="mt-1">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-[12px] font-medium text-[#7d818d]">Prompt</span>
+                  {generatedPrompt.prompt.length < PROMPT_MIN_LENGTH ? (
+                    <span className="flex items-center gap-1 text-[11px] text-amber-500">
+                      <AlertTriangle className="h-3 w-3" />
+                      Short
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-emerald-500">OK</span>
+                  )}
+                </div>
+                <Textarea
+                  value={generatedPrompt.prompt}
+                  onChange={(e) => onPromptChange?.(e.target.value)}
+                  disabled={disabled || !onPromptChange}
+                  rows={4}
+                  className="resize-none rounded-2xl border-[#d0d4dc] bg-[#eff6ff] text-[13px] leading-6 text-[#262a32]"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ImagePlanCard } from './ImagePlanCard'
 import { SectionIcon } from '@/components/shared/SectionIcon'
-import type { BlueprintImagePlan } from '@/types'
+import type { BlueprintImagePlan, GeneratedPrompt } from '@/types'
 
 interface DesignBlueprintProps {
   designSpecs: string
@@ -24,6 +24,8 @@ interface DesignBlueprintProps {
   onSelectAll?: () => void
   onDeselectAll?: () => void
   platformMinImages?: number
+  generatedPrompts?: GeneratedPrompt[]
+  onPromptChange?: (index: number, prompt: string) => void
 }
 
 export function DesignBlueprint({
@@ -40,6 +42,8 @@ export function DesignBlueprint({
   onSelectAll,
   onDeselectAll,
   platformMinImages,
+  generatedPrompts,
+  onPromptChange,
 }: DesignBlueprintProps) {
   const t = useTranslations('studio.genesis')
   const [specsExpanded, setSpecsExpanded] = useState(false)
@@ -93,6 +97,8 @@ export function DesignBlueprint({
               onToggleSelect={onToggleSelect && plan.id ? () => onToggleSelect(plan.id!) : undefined}
               onDelete={onDeletePlan && plan.id ? () => onDeletePlan(plan.id!) : undefined}
               onDuplicate={onDuplicatePlan && plan.id ? () => onDuplicatePlan(plan.id!) : undefined}
+              generatedPrompt={generatedPrompts?.[i]}
+              onPromptChange={onPromptChange ? (prompt) => onPromptChange(i, prompt) : undefined}
             />
           ))}
           {onAddPlan && !disabled && (

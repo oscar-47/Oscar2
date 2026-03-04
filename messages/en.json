@@ -132,6 +132,8 @@
       "templateStructured": "Use template",
       "templateFree": "Clear",
       "addPlan": "Add Image Plan",
+      "generatedPrompt": "Generated Prompt",
+      "promptTooShort": "Prompt is short — may produce vague results",
       "steps": {
         "upload": "Uploading images",
         "analyze": "Analyzing product",
