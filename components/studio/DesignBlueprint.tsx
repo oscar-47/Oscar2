@@ -16,6 +16,11 @@ interface DesignBlueprintProps {
   onImagePlanChange: (index: number, plan: BlueprintImagePlan) => void
   disabled?: boolean
   aspectRatio?: string
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string) => void
+  onDeletePlan?: (id: string) => void
+  onSelectAll?: () => void
+  onDeselectAll?: () => void
 }
 
 export function DesignBlueprint({
@@ -24,6 +29,11 @@ export function DesignBlueprint({
   imagePlans,
   onImagePlanChange,
   disabled,
+  selectedIds,
+  onToggleSelect,
+  onDeletePlan,
+  onSelectAll,
+  onDeselectAll,
 }: DesignBlueprintProps) {
   const t = useTranslations('studio.genesis')
   const [specsExpanded, setSpecsExpanded] = useState(false)
@@ -33,21 +43,49 @@ export function DesignBlueprint({
       <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5">
         <div className="mb-4 flex items-center gap-3">
           <SectionIcon icon={ImageIcon} />
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-[15px] font-semibold text-[#1a1d24]">{t('imagePlan')}</p>
-            <p className="text-[13px] text-[#7d818d]">
-              {t('imagePlanCount', { count: imagePlans.length })}
-            </p>
+            {selectedIds ? (
+              <p className="text-[13px] text-[#7d818d]">
+                {t('selectedCount', { selected: selectedIds.size, total: imagePlans.length })}
+              </p>
+            ) : (
+              <p className="text-[13px] text-[#7d818d]">
+                {t('imagePlanCount', { count: imagePlans.length })}
+              </p>
+            )}
           </div>
+          {selectedIds && onSelectAll && onDeselectAll && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onSelectAll}
+                className="text-[13px] font-medium text-[#191b22] hover:underline"
+              >
+                {t('selectAll')}
+              </button>
+              <span className="text-[13px] text-[#d0d4dc]">/</span>
+              <button
+                type="button"
+                onClick={onDeselectAll}
+                className="text-[13px] font-medium text-[#7d818d] hover:underline"
+              >
+                {t('deselectAll')}
+              </button>
+            </div>
+          )}
         </div>
         <div className="space-y-3">
           {imagePlans.map((plan, i) => (
             <ImagePlanCard
-              key={i}
+              key={plan.id ?? i}
               index={i}
               plan={plan}
               onChange={(updated) => onImagePlanChange(i, updated)}
               disabled={disabled}
+              selected={selectedIds && plan.id ? selectedIds.has(plan.id) : undefined}
+              onToggleSelect={onToggleSelect && plan.id ? () => onToggleSelect(plan.id!) : undefined}
+              onDelete={onDeletePlan && plan.id ? () => onDeletePlan(plan.id!) : undefined}
             />
           ))}
         </div>

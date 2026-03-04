@@ -194,6 +194,7 @@ export interface CheckoutResponse {
 // --- Studio Genesis: Analysis Blueprint ---
 
 export interface BlueprintImagePlan {
+  id?: string
   title: string
   description: string
   design_content: string

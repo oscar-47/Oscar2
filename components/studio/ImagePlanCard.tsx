@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Trash2, Check } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import type { BlueprintImagePlan } from '@/types'
@@ -12,18 +12,39 @@ interface ImagePlanCardProps {
   plan: BlueprintImagePlan
   onChange: (next: BlueprintImagePlan) => void
   disabled?: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
+  onDelete?: () => void
 }
 
-export function ImagePlanCard({ index, plan, onChange, disabled = false }: ImagePlanCardProps) {
+export function ImagePlanCard({ index, plan, onChange, disabled = false, selected, onToggleSelect, onDelete }: ImagePlanCardProps) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="rounded-[24px] border border-[#d0d4dc] bg-white p-5">
+    <div className={cn(
+      'rounded-[24px] border bg-white p-5 transition-opacity',
+      onToggleSelect && selected === false ? 'border-[#e1e4ea] opacity-60' : 'border-[#d0d4dc]',
+    )}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2]">
-            <span className="text-[14px] font-semibold text-[#1a1d24]">{index + 1}</span>
-          </div>
+          {onToggleSelect ? (
+            <button
+              type="button"
+              onClick={onToggleSelect}
+              className={cn(
+                'mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                selected
+                  ? 'border-[#191b22] bg-[#191b22] text-white'
+                  : 'border-[#d0d4dc] bg-white text-transparent hover:border-[#9a9ca3]',
+              )}
+            >
+              <Check className="h-4 w-4" />
+            </button>
+          ) : (
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2]">
+              <span className="text-[14px] font-semibold text-[#1a1d24]">{index + 1}</span>
+            </div>
+          )}
           {!open && (
             <div className="min-w-0 flex-1 space-y-0.5">
               <h4 className="truncate text-[15px] font-semibold text-[#1a1d24]">{plan.title}</h4>
@@ -38,14 +59,26 @@ export function ImagePlanCard({ index, plan, onChange, disabled = false }: Image
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="rounded-md p-2 text-[#7a7f8b] hover:bg-[#eceff4] hover:text-[#31343c]"
-          disabled={disabled}
-        >
-          <ChevronDown className={cn('h-5 w-5 transition-transform', open && 'rotate-180')} />
-        </button>
+        <div className="flex items-center gap-1">
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="rounded-md p-2 text-[#7a7f8b] hover:bg-red-50 hover:text-red-500"
+              disabled={disabled}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-md p-2 text-[#7a7f8b] hover:bg-[#eceff4] hover:text-[#31343c]"
+            disabled={disabled}
+          >
+            <ChevronDown className={cn('h-5 w-5 transition-transform', open && 'rotate-180')} />
+          </button>
+        </div>
       </div>
 
       {open && (

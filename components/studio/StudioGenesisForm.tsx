@@ -443,6 +443,7 @@ export function StudioGenesisForm() {
   const [analysisBlueprint, setAnalysisBlueprint] = useState<AnalysisBlueprint | null>(null)
   const [editableDesignSpecs, setEditableDesignSpecs] = useState('')
   const [editableImagePlans, setEditableImagePlans] = useState<BlueprintImagePlan[]>([])
+  const [selectedPlanIds, setSelectedPlanIds] = useState<Set<string>>(new Set())
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([])
 
   // ── Flow state ──
@@ -457,7 +458,8 @@ export function StudioGenesisForm() {
   const abortRef = useRef<AbortController | null>(null)
 
   const { total } = useCredits()
-  const totalCost = computeCost(model, turboEnabled, imageSize, imageCount)
+  const selectedCount = selectedPlanIds.size
+  const totalCost = computeCost(model, turboEnabled, imageSize, phase === 'preview' ? selectedCount : imageCount)
   const insufficientCredits = total !== null && total < totalCost
   const analyzingMessages = [
     t('analyzingStep1'),
@@ -524,6 +526,7 @@ export function StudioGenesisForm() {
   const handleStop = useCallback(() => {
     abortRef.current?.abort()
     setPhase('input')
+    setSelectedPlanIds(new Set())
   }, [])
 
   // ── Phase 1: Analyze & Blueprint ──
@@ -584,12 +587,15 @@ export function StudioGenesisForm() {
       // 3. Enter Plan Preview
       setAnalysisBlueprint(blueprint)
       setEditableDesignSpecs(blueprint.design_specs ?? '')
-      setEditableImagePlans([...(blueprint.images ?? [])])
+      const plansWithIds = (blueprint.images ?? []).map(p => ({ ...p, id: crypto.randomUUID() }))
+      setEditableImagePlans(plansWithIds)
+      setSelectedPlanIds(new Set(plansWithIds.map(p => p.id!)))
       setPhase('preview')
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') return
       setErrorMessage(err instanceof Error ? err.message : tc('error'))
       setPhase('input')
+      setSelectedPlanIds(new Set())
     }
   }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, t, tc])
 
@@ -617,10 +623,11 @@ export function StudioGenesisForm() {
       setSteps((prev) => patchStep(prev, id, patch))
 
     try {
-      // 1. Generate prompts — pass edited blueprint
+      // 1. Generate prompts — pass edited blueprint (only selected plans)
       set('prompts', { status: 'active' })
+      const selectedPlans = editableImagePlans.filter(p => p.id && selectedPlanIds.has(p.id))
       const modifiedBlueprint: AnalysisBlueprint = {
-        images: editableImagePlans,
+        images: selectedPlans,
         design_specs: editableDesignSpecs,
         _ai_meta: analysisBlueprint._ai_meta,
       }
@@ -630,7 +637,7 @@ export function StudioGenesisForm() {
         {
           analysisJson: modifiedBlueprint,
           design_specs: editableDesignSpecs,
-          imageCount: editableImagePlans.length,
+          imageCount: selectedPlans.length,
           targetLanguage: backendLocale,
           outputLanguage,
           stream: true,
@@ -664,8 +671,8 @@ export function StudioGenesisForm() {
       setProgress(40)
 
       // 2. Parse structured prompt JSON
-      const parsedPrompts = parsePromptArray(promptText, editableImagePlans.length)
-      const prompts = Array.from({ length: editableImagePlans.length }, (_, i) => {
+      const parsedPrompts = parsePromptArray(promptText, selectedPlans.length)
+      const prompts = Array.from({ length: selectedPlans.length }, (_, i) => {
         const value = parsedPrompts[i] ?? parsedPrompts[i % parsedPrompts.length]
         return value ?? promptText
       })
@@ -772,13 +779,14 @@ export function StudioGenesisForm() {
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
     }
-  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, t, tc])
+  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, t, tc])
 
   const handleBackToInput = useCallback(() => {
     setPhase('input')
     setSteps([])
     setProgress(0)
     setErrorMessage(null)
+    setSelectedPlanIds(new Set())
   }, [])
 
   const handleBackToPreview = useCallback(() => {
@@ -799,6 +807,7 @@ export function StudioGenesisForm() {
     setAnalysisBlueprint(null)
     setEditableDesignSpecs('')
     setEditableImagePlans([])
+    setSelectedPlanIds(new Set())
     setUploadedUrls([])
   }, [])
 
@@ -856,18 +865,22 @@ export function StudioGenesisForm() {
           <Button
             size="lg"
             onClick={handleGenerate}
-            disabled={insufficientCredits}
+            disabled={insufficientCredits || selectedCount === 0}
             className="h-14 w-full rounded-3xl bg-[#171a22] text-[17px] font-semibold text-white hover:bg-[#11131a] disabled:bg-[#9ca1ad]"
           >
             <ArrowRight className="mr-2 h-5 w-5" />
             {isZh
-              ? `确认生成 ${editableImagePlans.length} 张图片`
-              : `Generate ${editableImagePlans.length} ${editableImagePlans.length > 1 ? 'images' : 'image'}`}
+              ? `确认生成 ${selectedCount} 张图片`
+              : `Generate ${selectedCount} ${selectedCount > 1 ? 'images' : 'image'}`}
           </Button>
 
           <p className="text-center text-[14px] text-[#7b808c]">
             {isZh ? `消耗 ${totalCost} 积分` : `Cost ${totalCost} credits`}
           </p>
+
+          {selectedCount === 0 && (
+            <p className="text-center text-sm text-destructive">{t('noCardsSelected')}</p>
+          )}
 
           {insufficientCredits && (
             <div className="text-center">
@@ -978,6 +991,29 @@ export function StudioGenesisForm() {
           aspectRatio={aspectRatio}
           onImagePlanChange={(i, plan) => {
             setEditableImagePlans((prev) => prev.map((p, idx) => (idx === i ? plan : p)))
+          }}
+          selectedIds={selectedPlanIds}
+          onToggleSelect={(id) => {
+            setSelectedPlanIds((prev) => {
+              const next = new Set(prev)
+              if (next.has(id)) next.delete(id)
+              else next.add(id)
+              return next
+            })
+          }}
+          onDeletePlan={(id) => {
+            setEditableImagePlans((prev) => prev.filter((p) => p.id !== id))
+            setSelectedPlanIds((prev) => {
+              const next = new Set(prev)
+              next.delete(id)
+              return next
+            })
+          }}
+          onSelectAll={() => {
+            setSelectedPlanIds(new Set(editableImagePlans.map((p) => p.id!)))
+          }}
+          onDeselectAll={() => {
+            setSelectedPlanIds(new Set())
           }}
         />
       )
