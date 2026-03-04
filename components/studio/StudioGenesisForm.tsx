@@ -438,6 +438,26 @@ function ImageSlotCard({
   )
 }
 
+// ─── Reanalyze helper ─────────────────────────────────────────────────────────
+
+interface AnalysisParamSnapshot {
+  imageCount: number
+  outputLanguage: OutputLanguage
+  platform: EcommercePlatform
+}
+
+function isAnalysisStale(
+  current: { imageCount: number; outputLanguage: OutputLanguage; platform: EcommercePlatform },
+  snapshot: AnalysisParamSnapshot | null,
+): boolean {
+  if (!snapshot) return false
+  return (
+    snapshot.imageCount !== current.imageCount ||
+    snapshot.outputLanguage !== current.outputLanguage ||
+    snapshot.platform !== current.platform
+  )
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function StudioGenesisForm() {
@@ -468,6 +488,7 @@ export function StudioGenesisForm() {
   const [editableImagePlans, setEditableImagePlans] = useState<BlueprintImagePlan[]>([])
   const [selectedPlanIds, setSelectedPlanIds] = useState<Set<string>>(new Set())
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([])
+  const [analysisParams, setAnalysisParams] = useState<AnalysisParamSnapshot | null>(null)
 
   // ── Flow state ──
   const [phase, setPhase] = useState<GenesisPhase>('input')
@@ -515,9 +536,9 @@ export function StudioGenesisForm() {
 
   // Derived: is the left panel disabled?
   const leftPanelDisabled = phase === 'analyzing' || phase === 'generating'
-  const leftParamsDisabled = leftPanelDisabled || phase === 'preview' || phase === 'complete'
-
-
+  const keyParamsDisabled = phase === 'analyzing' || phase === 'generating' || phase === 'complete'
+  const genParamsDisabled = leftPanelDisabled || phase === 'preview' || phase === 'complete'
+  const needsReanalyze = phase === 'preview' && isAnalysisStale({ imageCount, outputLanguage, platform }, analysisParams)
 
   useEffect(() => {
     if (phase !== 'analyzing' || analyzingMessages.length === 0) return
@@ -556,6 +577,7 @@ export function StudioGenesisForm() {
     abortRef.current?.abort()
     setPhase('input')
     setSelectedPlanIds(new Set())
+    setAnalysisParams(null)
   }, [])
 
   // ── Phase 1: Analyze & Blueprint ──
@@ -639,6 +661,7 @@ export function StudioGenesisForm() {
       setEditableImagePlans(plansWithIds)
       setSelectedPlanIds(new Set(plansWithIds.map(p => p.id!)))
       setPhase('preview')
+      setAnalysisParams({ imageCount, outputLanguage, platform })
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') return
       setErrorMessage(err instanceof Error ? err.message : tc('error'))
@@ -649,6 +672,10 @@ export function StudioGenesisForm() {
 
   // ── Phase 2: Confirm & Generate ──
   const handleGenerate = useCallback(async () => {
+    if (isAnalysisStale({ imageCount, outputLanguage, platform }, analysisParams)) {
+      setErrorMessage(t('reanalyzeWarning'))
+      return
+    }
     const platformMin = getPlatformMinImages(platform)
     if (platform !== 'none' && selectedPlanIds.size < platformMin) {
       setErrorMessage(t('platformMinWarning', { min: platformMin }))
@@ -832,7 +859,7 @@ export function StudioGenesisForm() {
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
     }
-  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, platform, t, tc])
+  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, platform, imageCount, analysisParams, t, tc])
 
   const handleBackToInput = useCallback(() => {
     setPhase('input')
@@ -841,6 +868,7 @@ export function StudioGenesisForm() {
     setErrorMessage(null)
     setSelectedPlanIds(new Set())
     setPlatform('none')
+    setAnalysisParams(null)
   }, [])
 
   const handleBackToPreview = useCallback(() => {
@@ -864,6 +892,7 @@ export function StudioGenesisForm() {
     setSelectedPlanIds(new Set())
     setUploadedUrls([])
     setPlatform('none')
+    setAnalysisParams(null)
   }, [])
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -900,6 +929,12 @@ export function StudioGenesisForm() {
     if (phase === 'preview') {
       return (
         <div className="space-y-4">
+          {needsReanalyze && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <p className="font-medium">{t('reanalyzeWarning')}</p>
+            </div>
+          )}
+
           <div className="flex items-center justify-between rounded-3xl border border-[#d0d4dc] bg-white px-4 py-3.5">
             <div className="flex items-center gap-3">
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${turboEnabled ? 'bg-[#e7f8ee] text-[#22b968]' : 'bg-[#eceef2] text-[#7a7f8b]'}`}>
@@ -917,17 +952,28 @@ export function StudioGenesisForm() {
             />
           </div>
 
-          <Button
-            size="lg"
-            onClick={handleGenerate}
-            disabled={insufficientCredits || selectedCount === 0 || (platform !== 'none' && selectedCount < getPlatformMinImages(platform))}
-            className="h-14 w-full rounded-3xl bg-[#171a22] text-[17px] font-semibold text-white hover:bg-[#11131a] disabled:bg-[#9ca1ad]"
-          >
-            <ArrowRight className="mr-2 h-5 w-5" />
-            {isZh
-              ? `确认生成 ${selectedCount} 张图片`
-              : `Generate ${selectedCount} ${selectedCount > 1 ? 'images' : 'image'}`}
-          </Button>
+          {needsReanalyze ? (
+            <Button
+              size="lg"
+              onClick={handleAnalyze}
+              className="h-14 w-full rounded-3xl bg-amber-600 text-[17px] font-semibold text-white hover:bg-amber-700"
+            >
+              <RefreshCw className="mr-2 h-5 w-5" />
+              {t('reanalyze')}
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              onClick={handleGenerate}
+              disabled={insufficientCredits || selectedCount === 0 || (platform !== 'none' && selectedCount < getPlatformMinImages(platform))}
+              className="h-14 w-full rounded-3xl bg-[#171a22] text-[17px] font-semibold text-white hover:bg-[#11131a] disabled:bg-[#9ca1ad]"
+            >
+              <ArrowRight className="mr-2 h-5 w-5" />
+              {isZh
+                ? `确认生成 ${selectedCount} 张图片`
+                : `Generate ${selectedCount} ${selectedCount > 1 ? 'images' : 'image'}`}
+            </Button>
+          )}
 
           <p className="text-center text-[14px] text-[#7b808c]">
             {isZh ? `消耗 ${totalCost} 积分` : `Cost ${totalCost} credits`}
@@ -1233,7 +1279,7 @@ export function StudioGenesisForm() {
                 <Select
                   value={outputLanguage}
                   onValueChange={(v) => setOutputLanguage(v as OutputLanguage)}
-                  disabled={leftParamsDisabled}
+                  disabled={keyParamsDisabled}
                 >
                   <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -1250,7 +1296,7 @@ export function StudioGenesisForm() {
                   <Select
                     value={model}
                     onValueChange={(v) => setModel(v as GenerationModel)}
-                    disabled={leftParamsDisabled}
+                    disabled={genParamsDisabled}
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -1265,7 +1311,7 @@ export function StudioGenesisForm() {
                   <Select
                     value={aspectRatio}
                     onValueChange={(v) => setAspectRatio(v as AspectRatio)}
-                    disabled={leftParamsDisabled}
+                    disabled={genParamsDisabled}
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -1280,7 +1326,7 @@ export function StudioGenesisForm() {
                   <Select
                     value={imageSize}
                     onValueChange={(v) => setImageSize(v as ImageSize)}
-                    disabled={leftParamsDisabled}
+                    disabled={genParamsDisabled}
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -1301,7 +1347,7 @@ export function StudioGenesisForm() {
                   <Select
                     value={platform}
                     onValueChange={(v) => handlePlatformChange(v as EcommercePlatform)}
-                    disabled={leftParamsDisabled}
+                    disabled={keyParamsDisabled}
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -1325,7 +1371,7 @@ export function StudioGenesisForm() {
                   <Select
                     value={String(imageCount)}
                     onValueChange={(v) => setImageCount(Number(v))}
-                    disabled={leftParamsDisabled}
+                    disabled={keyParamsDisabled}
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>

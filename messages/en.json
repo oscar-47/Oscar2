@@ -126,6 +126,8 @@
       "platformTiktok": "TikTok Shop",
       "platformHint": "This platform requires at least {min} images",
       "platformMinWarning": "Please select at least {min} images for this platform",
+      "reanalyzeWarning": "Key parameters changed since last analysis. Please re-analyze.",
+      "reanalyze": "Re-Analyze",
       "steps": {
         "upload": "Uploading images",
         "analyze": "Analyzing product",
