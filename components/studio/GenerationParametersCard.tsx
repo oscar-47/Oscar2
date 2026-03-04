@@ -13,7 +13,7 @@ import {
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { SlidersHorizontal, Zap } from 'lucide-react'
 import type { GenerationModel, AspectRatio, ImageSize, OutputLanguage } from '@/types'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS } from '@/types'
+import { AVAILABLE_MODELS } from '@/types'
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -84,11 +84,6 @@ const OUTPUT_LANGUAGE_OPTIONS: OutputLangOption[] = [
   { value: 'ru', label: 'Русский' },
 ]
 
-function creditLabel(model: string): string {
-  const cost = DEFAULT_CREDIT_COSTS[model]
-  return cost !== undefined ? `(${cost}cr)` : ''
-}
-
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function GenerationParametersCard({
@@ -155,7 +150,7 @@ export function GenerationParametersCard({
           <SelectContent>
             {AVAILABLE_MODELS.map((m) => (
               <SelectItem key={m.value} value={m.value}>
-                {m.label} {creditLabel(m.value)}
+                {m.label}
               </SelectItem>
             ))}
           </SelectContent>
