@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, useEffect } from 'react'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useTranslations } from 'next-intl'
 import { useDropzone, type FileRejection } from 'react-dropzone'
@@ -193,6 +193,17 @@ export function RefinementStudioForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null)
   const [downloadingAll, setDownloadingAll] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  // Lightbox: Escape key + scroll lock
+  useEffect(() => {
+    if (!previewUrl) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreviewUrl(null) }
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
+  }, [previewUrl])
 
   useSessionPersistence(
     'refinement-studio',
@@ -445,6 +456,7 @@ export function RefinementStudioForm() {
   const resultPanelSubtitle = phase === 'running' ? '正在分析产品并生成设计规范' : t('resultSubtitle')
 
   return (
+    <>
     <CorePageShell maxWidthClass="max-w-[1360px]" contentClassName="space-y-8">
       <div className="pt-4 text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-4 py-1.5 text-xs font-medium text-[#1e2127]">
@@ -648,16 +660,23 @@ export function RefinementStudioForm() {
                 card.status === 'success' && card.url ? (
                   <div
                     key={i}
-                    className="group relative w-[220px] max-w-full overflow-hidden rounded-2xl border border-[#d2d6de] bg-[#eef0f4]"
+                    role="button"
+                    tabIndex={0}
+                    className="group relative w-[220px] max-w-full cursor-pointer overflow-hidden rounded-2xl border border-[#d2d6de] bg-[#eef0f4]"
                     style={{ aspectRatio: previewAspectRatio }}
+                    onClick={() => setPreviewUrl(card.url)}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPreviewUrl(card.url) }
+                    }}
                   >
                     <img src={card.url} alt={`result-${i + 1}`} className="w-full object-cover" />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity group-hover:opacity-100">
+                    <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/35 opacity-0 transition-opacity pointer-events-none group-hover:opacity-100 group-focus-within:opacity-100">
                       <button
                         type="button"
-                        onClick={() => downloadOne(card.url as string, i)}
+                        onClick={(e) => { e.stopPropagation(); downloadOne(card.url as string, i) }}
                         disabled={downloadingIndex === i || downloadingAll}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30 disabled:opacity-60"
+                        className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30 disabled:opacity-60"
                       >
                         {downloadingIndex === i ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                       </button>
@@ -713,5 +732,31 @@ export function RefinementStudioForm() {
         </div>
       </div>
     </CorePageShell>
+    {previewUrl && (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm animate-in fade-in duration-200"
+        onClick={() => setPreviewUrl(null)}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Image Preview"
+      >
+        <button
+          type="button"
+          className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/80 transition-all hover:bg-white/20 hover:text-white"
+          onClick={(e) => { e.stopPropagation(); setPreviewUrl(null) }}
+          aria-label="Close"
+          autoFocus
+        >
+          <X className="h-5 w-5" />
+        </button>
+        <img
+          src={previewUrl}
+          alt="preview"
+          className="max-h-[85vh] max-w-[85vw] rounded-xl object-contain shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
+    </>
   )
 }
