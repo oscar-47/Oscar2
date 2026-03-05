@@ -34,6 +34,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useCredits } from '@/lib/hooks/useCredits'
 import { refreshCredits } from '@/lib/hooks/useCredits'
 import { cn } from '@/lib/utils'
+import { normalizeEcommerceAnalysisResult } from '@/lib/studio/ecom-analysis'
 import {
   DEFAULT_CREDIT_COSTS,
   type EcommercePhase,
@@ -270,9 +271,9 @@ export function EcomStudioForm() {
         productImage: uploaded.publicUrl,
         userDescription: description,
         platformStyle,
-        studioType: 'ecommerce',
         detailCount: defaultDetailCount,
         trace_id: traceId,
+        uiLanguage: isZh ? 'zh' : 'en',
       })
 
       setAnalysisProgress(60)
@@ -281,7 +282,11 @@ export function EcomStudioForm() {
       const job = await waitForJob(res.job_id, ac.signal)
       if (ac.signal.aborted) return
 
-      const result = job.result_data as EcommerceAnalysisResult
+      const result = normalizeEcommerceAnalysisResult(job.result_data, {
+        description: description.trim(),
+        platformStyle,
+        isZh,
+      })
       if (!result?.main_image_prompt) {
         throw new Error('Analysis returned invalid data')
       }
