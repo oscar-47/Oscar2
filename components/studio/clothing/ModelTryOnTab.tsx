@@ -115,7 +115,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
         if (Object.keys(restored).length > 0) setStyleDimensions(restored)
       }
       if (Array.isArray(s.results)) {
-        const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string')
+        const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string' && !r.url.startsWith('data:'))
         if (restored.length > 0) setResults(restored)
       }
     }
