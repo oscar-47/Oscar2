@@ -42,6 +42,7 @@ import {
   type GenerationModel,
   type AspectRatio,
   type ImageSize,
+  type OutputLanguage,
   type GenerationJob,
   isValidModel,
 } from '@/types'
@@ -152,6 +153,7 @@ export function EcomStudioForm() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [imageSize, setImageSize] = useState<ImageSize>('2K')
   const [turboEnabled, setTurboEnabled] = useState(false)
+  const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>('none')
 
   // Analysis result (editable in preview)
   const [analysisResult, setAnalysisResult] = useState<EcommerceAnalysisResult | null>(null)
@@ -195,7 +197,7 @@ export function EcomStudioForm() {
   useSessionPersistence(
     'ecom-studio',
     () => ({
-      description, model, aspectRatio, imageSize, turboEnabled,
+      description, model, aspectRatio, imageSize, turboEnabled, outputLanguage,
       generatedImages: generatedImages.filter((r) => !r.url.startsWith('data:')),
     }),
     (s) => {
@@ -204,6 +206,7 @@ export function EcomStudioForm() {
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
       if (Array.isArray(s.generatedImages)) {
         const restored = (s.generatedImages as ResultImage[]).filter((r) => r.url && typeof r.url === 'string')
         if (restored.length > 0) setGeneratedImages(restored)
@@ -252,6 +255,7 @@ export function EcomStudioForm() {
         detailCount: defaultDetailCount,
         trace_id: traceId,
         uiLanguage: isZh ? 'zh' : 'en',
+        outputLanguage,
       })
 
       setAnalysisProgress(60)
@@ -275,7 +279,7 @@ export function EcomStudioForm() {
       setError((e as Error).message || 'Analysis failed')
       setPhase('input')
     }
-  }, [productImages, description, defaultDetailCount, traceId, isZh])
+  }, [productImages, description, defaultDetailCount, traceId, isZh, outputLanguage])
 
   // ── Generation ──────────────────────────────────────────────────────────────
 
@@ -693,6 +697,8 @@ export function EcomStudioForm() {
               disabled={isLocked}
               turboEnabled={turboEnabled}
               onTurboChange={setTurboEnabled}
+              outputLanguage={outputLanguage}
+              onOutputLanguageChange={setOutputLanguage}
             />
           )}
 

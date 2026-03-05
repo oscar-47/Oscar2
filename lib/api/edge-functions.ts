@@ -169,6 +169,7 @@ export async function analyzeEcommerceProduct(params: {
   detailCount: number
   trace_id: string
   uiLanguage?: string
+  outputLanguage?: string
 }): Promise<JobResponse> {
   const uiLanguage = (params.uiLanguage ?? 'en').startsWith('zh') ? 'zh' : 'en'
   const requirements = params.userDescription?.trim() || undefined
@@ -180,7 +181,7 @@ export async function analyzeEcommerceProduct(params: {
     requirements,
     imageCount,
     uiLanguage,
-    outputLanguage: uiLanguage,
+    outputLanguage: params.outputLanguage ?? uiLanguage,
     studioType: 'ecommerce',
     trace_id: params.trace_id,
     clothingMode: undefined,
