@@ -259,11 +259,11 @@ function computeCost(model: GenerationModel, turboEnabled: boolean, imageSize: I
   return perImage * imageCount
 }
 
-function extractResultFromJob(job: GenerationJob, index: number): ResultImage | null {
+function extractResultFromJob(job: GenerationJob, index: number, batchId?: string, batchTimestamp?: number): ResultImage | null {
   const resultData = job.result_data as Record<string, unknown> | null
   const url = job.result_url
     ?? (typeof resultData?.b64_json === 'string' ? `data:image/png;base64,${resultData.b64_json}` : null)
-  return url ? { url, label: `Image ${index + 1}` } : null
+  return url ? { url, label: `Image ${index + 1}`, batchId, batchTimestamp } : null
 }
 
 function hasCjkText(value: string): boolean {
@@ -545,6 +545,7 @@ export function StudioGenesisForm() {
     'studio-genesis',
     () => ({
       requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, platform, turboEnabled,
+      results: results.filter((r) => !r.url.startsWith('data:')),
     }),
     (s) => {
       if (typeof s.requirements === 'string') setRequirements(s.requirements)
@@ -555,6 +556,10 @@ export function StudioGenesisForm() {
       if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
       if (typeof s.platform === 'string') setPlatform(s.platform as EcommercePlatform)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (Array.isArray(s.results)) {
+        const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string')
+        if (restored.length > 0) setResults(restored)
+      }
     }
   )
 
@@ -613,7 +618,6 @@ export function StudioGenesisForm() {
       previewUrl: URL.createObjectURL(f),
     }))
     setProductImages((prev) => [...prev, ...newImages])
-    setResults([])
     setErrorMessage(null)
   }, [])
 
@@ -789,6 +793,8 @@ export function StudioGenesisForm() {
     if (!analysisBlueprint) return
     const trace_id = uid()
     const client_job_id = uid()
+    const batchId = uid()
+    const batchTimestamp = Date.now()
     const abort = new AbortController()
     abortRef.current = abort
 
@@ -798,7 +804,6 @@ export function StudioGenesisForm() {
       { id: 'done', label: t('steps.done'), status: 'pending' },
     ])
     setProgress(0)
-    setResults([])
     setImageSlots([])
     setFailedSlotIndices([])
     setErrorMessage(null)
@@ -879,7 +884,7 @@ export function StudioGenesisForm() {
         imageJobIds.map((id, i) => {
           if (!id) return Promise.reject(new Error('Submission failed'))
           return waitForJob(id, abort.signal).then((job) => {
-            const result = extractResultFromJob(job, i)
+            const result = extractResultFromJob(job, i, batchId, batchTimestamp)
             setImageSlots((prev) =>
               prev.map((s, idx) =>
                 idx === i ? { ...s, status: 'done', result: result ?? undefined } : s
@@ -913,7 +918,7 @@ export function StudioGenesisForm() {
       set('generate', { status: 'done' })
       set('done', { status: 'done' })
       setProgress(100)
-      setResults(successResults)
+      setResults((prev) => [...prev, ...successResults])
       setFailedSlotIndices(failedIndices)
 
       if (successResults.length === 0) {
@@ -955,7 +960,6 @@ export function StudioGenesisForm() {
     setPhase('input')
     setSteps([])
     setProgress(0)
-    setResults([])
     setImageSlots([])
     setFailedSlotIndices([])
     setErrorMessage(null)
@@ -1281,6 +1285,13 @@ export function StudioGenesisForm() {
   // Right panel content
   const renderRightPanel = () => {
     if (phase === 'input') {
+      if (results.length > 0) {
+        return (
+          <div className="space-y-6">
+            <ResultGallery images={results} aspectRatio={aspectRatio} onClear={() => setResults([])} />
+          </div>
+        )
+      }
       return (
         <div className="flex min-h-[520px] flex-col items-center justify-center px-4 text-center">
           <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#ececef] text-[#7f8390]">
@@ -1387,7 +1398,7 @@ export function StudioGenesisForm() {
     return (
       <div className="space-y-6">
         {results.length > 0 && (
-          <ResultGallery images={results} aspectRatio={aspectRatio} />
+          <ResultGallery images={results} aspectRatio={aspectRatio} onClear={() => setResults([])} />
         )}
 
         {/* Show failed slots */}

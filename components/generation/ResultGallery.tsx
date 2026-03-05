@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { motion } from 'framer-motion'
-import { Download, ZoomIn, X, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
+import { Download, ZoomIn, X, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createEditorSession } from '@/lib/utils/editor-session'
@@ -12,6 +12,8 @@ import { createEditorSession } from '@/lib/utils/editor-session'
 export interface ResultImage {
   url: string
   label?: string
+  batchId?: string
+  batchTimestamp?: number
 }
 
 interface ResultGalleryProps {
@@ -21,6 +23,7 @@ interface ResultGalleryProps {
   className?: string
   aspectRatio?: string
   onImageClick?: (image: ResultImage, index: number) => void
+  onClear?: () => void
 }
 
 function toCssAspectRatio(aspectRatio: string): string {
@@ -35,6 +38,26 @@ function SkeletonCard({ aspectRatio }: { aspectRatio: string }) {
   )
 }
 
+/** Group images by batchId, preserving insertion order. */
+function groupByBatch(images: ResultImage[]): { batchId: string | undefined; batchTimestamp: number | undefined; images: ResultImage[] }[] {
+  const groups: { batchId: string | undefined; batchTimestamp: number | undefined; images: ResultImage[] }[] = []
+  let current: (typeof groups)[number] | null = null
+  for (const img of images) {
+    if (!current || img.batchId !== current.batchId) {
+      current = { batchId: img.batchId, batchTimestamp: img.batchTimestamp, images: [img] }
+      groups.push(current)
+    } else {
+      current.images.push(img)
+    }
+  }
+  return groups
+}
+
+function formatBatchTime(ts: number): string {
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 export function ResultGallery({
   images,
   isLoading = false,
@@ -42,6 +65,7 @@ export function ResultGallery({
   className,
   aspectRatio = '4:3',
   onImageClick,
+  onClear,
 }: ResultGalleryProps) {
   const t = useTranslations('studio.editor')
   const locale = useLocale()
@@ -71,15 +95,10 @@ export function ResultGallery({
 
   if (!isLoading && images.length === 0) return null
 
-  return (
-    <>
-      <div className={cn('flex flex-wrap content-start items-start gap-3', className)}>
-        {isLoading &&
-          Array.from({ length: loadingCount }).map((_, i) => (
-            <SkeletonCard key={`skel-${i}`} aspectRatio={cssAspectRatio} />
-          ))}
+  const hasBatches = images.some((img) => img.batchId)
+  const batches = hasBatches ? groupByBatch(images) : null
 
-        {images.map((img, i) => (
+  const renderImageCard = (img: ResultImage, i: number) => (
           <motion.div
             key={img.url}
             initial={{ opacity: 0, scale: 0.95 }}
@@ -133,8 +152,56 @@ export function ResultGallery({
               </a>
             </div>
           </motion.div>
-        ))}
-      </div>
+  )
+
+  return (
+    <>
+      {/* Clear history button */}
+      {onClear && images.length > 0 && !isLoading && (
+        <div className="flex justify-end mb-2">
+          <button
+            type="button"
+            onClick={onClear}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Trash2 className="h-3 w-3" />
+            {locale === 'zh' ? '清除历史' : 'Clear History'}
+          </button>
+        </div>
+      )}
+
+      {batches ? (
+        /* Batch-grouped rendering */
+        batches.map((batch, bIdx) => (
+          <div key={batch.batchId ?? `batch-${bIdx}`}>
+            {batches.length > 1 && (
+              <div className="flex items-center gap-2 my-3">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                  {locale === 'zh' ? `第${bIdx + 1}批` : `Batch ${bIdx + 1}`}
+                  {batch.batchTimestamp ? ` · ${formatBatchTime(batch.batchTimestamp)}` : ''}
+                </span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+            )}
+            <div className={cn('flex flex-wrap content-start items-start gap-3', className)}>
+              {batch.images.map((img, i) => {
+                const globalIndex = images.indexOf(img)
+                return renderImageCard(img, globalIndex)
+              })}
+            </div>
+          </div>
+        ))
+      ) : (
+        /* Flat rendering (no batches) */
+        <div className={cn('flex flex-wrap content-start items-start gap-3', className)}>
+          {isLoading &&
+            Array.from({ length: loadingCount }).map((_, i) => (
+              <SkeletonCard key={`skel-${i}`} aspectRatio={cssAspectRatio} />
+            ))}
+          {images.map((img, i) => renderImageCard(img, i))}
+        </div>
+      )}
 
       {/* Batch Edit button */}
       {images.length > 0 && !isLoading && (

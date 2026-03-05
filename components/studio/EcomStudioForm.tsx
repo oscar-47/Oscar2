@@ -215,6 +215,7 @@ export function EcomStudioForm() {
     'ecom-studio',
     () => ({
       description, platformStyle, model, aspectRatio, imageSize, turboEnabled,
+      generatedImages: generatedImages.filter((r) => !r.url.startsWith('data:')),
     }),
     (s) => {
       if (typeof s.description === 'string') setDescription(s.description)
@@ -223,6 +224,10 @@ export function EcomStudioForm() {
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (Array.isArray(s.generatedImages)) {
+        const restored = (s.generatedImages as ResultImage[]).filter((r) => r.url && typeof r.url === 'string')
+        if (restored.length > 0) setGeneratedImages(restored)
+      }
     }
   )
 
@@ -400,7 +405,6 @@ export function EcomStudioForm() {
     if (!analysisResult || !productImages.length) return
     setPhase('generating')
     setError(null)
-    setGeneratedImages([])
     setImageGroups([])
     setComplianceWarnings({})
     setComplianceStatus(null)
@@ -467,7 +471,7 @@ export function EcomStudioForm() {
 
     setImageGroups([...groups])
     const allImages = groups.flatMap((g) => g.images.filter((img) => img.url))
-    setGeneratedImages(allImages)
+    setGeneratedImages((prev) => [...prev, ...allImages])
     refreshCredits()
     setPhase('complete')
   }, [analysisResult, productImages, generateForSingleProduct, isZh])
@@ -591,7 +595,6 @@ export function EcomStudioForm() {
     abortRef.current?.abort()
     setPhase('input')
     setAnalysisResult(null)
-    setGeneratedImages([])
     setImageGroups([])
     setComplianceWarnings({})
     setComplianceStatus(null)
@@ -1187,6 +1190,7 @@ export function EcomStudioForm() {
                 <ResultGallery
                   images={generatedImages}
                   aspectRatio={aspectRatio}
+                  onClear={() => setGeneratedImages([])}
                   onImageClick={(img, i) =>
                     setPreviewImage({ url: img.url, index: i })
                   }
@@ -1195,8 +1199,20 @@ export function EcomStudioForm() {
             </div>
           )}
 
-          {/* Input phase — empty state */}
-          {phase === 'input' && (
+          {/* Input phase — show results or empty state */}
+          {phase === 'input' && generatedImages.length > 0 && (
+            <div className="space-y-4">
+              <ResultGallery
+                images={generatedImages}
+                aspectRatio={aspectRatio}
+                onClear={() => setGeneratedImages([])}
+                onImageClick={(img, i) =>
+                  setPreviewImage({ url: img.url, index: i })
+                }
+              />
+            </div>
+          )}
+          {phase === 'input' && generatedImages.length === 0 && (
             <div className="flex min-h-[300px] items-center justify-center">
               <div className="text-center">
                 <ShoppingBag className="mx-auto mb-3 h-12 w-12 text-[#d0d2da]" />
