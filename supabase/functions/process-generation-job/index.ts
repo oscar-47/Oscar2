@@ -1039,12 +1039,15 @@ ${requirements || "(no extra brief provided)"}
   ];
 
   const chatConfig = getQnChatConfig();
+  // Analysis may need to generate many detailed plans — allow more time than the default 30s
+  const analysisTimeoutMs = Math.max(chatConfig.timeoutMs, 90_000);
   let chatResponse: Record<string, unknown>;
   try {
     chatResponse = await callQnChatAPI({
       model: chatConfig.model,
       messages,
       maxTokens: 2048,
+      timeoutMsOverride: analysisTimeoutMs,
     });
   } catch (primaryErr) {
     const fallbackModel = Deno.env.get("QN_IMAGE_MODEL");
@@ -1053,6 +1056,7 @@ ${requirements || "(no extra brief provided)"}
       model: fallbackModel,
       messages,
       maxTokens: 2048,
+      timeoutMsOverride: analysisTimeoutMs,
     });
   }
 

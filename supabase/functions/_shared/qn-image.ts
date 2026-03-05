@@ -135,10 +135,12 @@ export async function callQnChatAPI(params: {
   model?: string;
   maxTokens?: number;
   stream?: boolean;
+  timeoutMsOverride?: number;
 }): Promise<Record<string, unknown>> {
   const config = getQnChatConfig();
+  const timeoutMs = params.timeoutMsOverride ?? config.timeoutMs;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const azure = isAzureEndpoint(config.endpoint);
 
   try {
