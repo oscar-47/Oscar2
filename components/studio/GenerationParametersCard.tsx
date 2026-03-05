@@ -150,7 +150,7 @@ export function GenerationParametersCard({
           <SelectContent>
             {AVAILABLE_MODELS.map((m) => (
               <SelectItem key={m.value} value={m.value}>
-                {m.label}
+                {isZh ? m.tierLabel.zh : m.tierLabel.en}
               </SelectItem>
             ))}
           </SelectContent>

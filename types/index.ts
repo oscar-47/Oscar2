@@ -123,13 +123,19 @@ export type GenerationModel =
   | 'dall-e-4'
   | 'ideogram-3'
 
-export const AVAILABLE_MODELS: ReadonlyArray<{ value: GenerationModel; label: string }> = [
-  { value: 'or-gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  { value: 'or-gemini-3.1-flash', label: 'Gemini 3.1 Flash' },
-  { value: 'or-gemini-3-pro', label: 'Gemini 3 Pro' },
-  { value: 'ta-gemini-3.1-flash', label: 'TA Gemini 3.1 Flash' },
-  { value: 'ta-gemini-2.5-flash', label: 'TA Gemini 2.5 Flash' },
-  { value: 'ta-gemini-3-pro', label: 'TA Gemini 3 Pro' },
+export type ModelTier = 'high' | 'balanced' | 'fast'
+
+export interface AvailableModel {
+  value: GenerationModel
+  label: string
+  tier: ModelTier
+  tierLabel: { en: string; zh: string }
+}
+
+export const AVAILABLE_MODELS: ReadonlyArray<AvailableModel> = [
+  { value: 'or-gemini-3.1-flash', label: 'Gemini 3.1 Flash', tier: 'high', tierLabel: { en: 'High Quality', zh: '高画质' } },
+  { value: 'or-gemini-3-pro', label: 'Gemini 3 Pro', tier: 'balanced', tierLabel: { en: 'Balanced', zh: '均衡' } },
+  { value: 'ta-gemini-3.1-flash', label: 'TA Gemini 3.1 Flash', tier: 'fast', tierLabel: { en: 'Fast', zh: '极速' } },
 ]
 
 export const DEFAULT_MODEL: GenerationModel = 'or-gemini-3.1-flash'

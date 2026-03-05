@@ -144,7 +144,7 @@ const defaultQuickEdit: QuickEditState = {
   prompt: '',
   referenceImage: null,
   referencePreview: null,
-  model: 'azure-flux',
+  model: 'or-gemini-3.1-flash',
   aspectRatio: '1:1',
   imageSize: '2K',
   turboEnabled: false,

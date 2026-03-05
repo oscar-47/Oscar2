@@ -7,18 +7,9 @@ import { useEditorStore } from '@/lib/stores/editor-store'
 import { generateImage } from '@/lib/api/edge-functions'
 import { uploadFile } from '@/lib/api/upload'
 import { useWaitForJob } from '@/lib/hooks/useWaitForJob'
-import { DEFAULT_CREDIT_COSTS } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS } from '@/types'
 import type { GenerationModel, AspectRatio, ImageSize } from '@/types'
 import { cn } from '@/lib/utils'
-
-const MODEL_OPTIONS: Array<{ value: GenerationModel; label: string }> = [
-  { value: 'or-gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  { value: 'or-gemini-3.1-flash', label: 'Gemini 3.1 Flash' },
-  { value: 'or-gemini-3-pro', label: 'Gemini 3 Pro' },
-  { value: 'ta-gemini-3.1-flash', label: 'TA Gemini 3.1 Flash' },
-  { value: 'ta-gemini-2.5-flash', label: 'TA Gemini 2.5 Flash' },
-  { value: 'ta-gemini-3-pro', label: 'TA Gemini 3 Pro' },
-]
 
 const RESOLUTION_OPTIONS: Array<{ value: ImageSize; label: string; labelZh: string }> = [
   { value: '1K', label: '1K', labelZh: '1K 标准' },
@@ -181,8 +172,8 @@ export function QuickEditPanel() {
               onChange={(e) => setQuickEditField('model', e.target.value as GenerationModel)}
               className="w-full rounded-lg border border-[#d1d5db] bg-white px-2.5 py-1.5 text-sm text-[#111827] focus:border-[#6366f1] focus:outline-none"
             >
-              {MODEL_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              {AVAILABLE_MODELS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{locale.startsWith('zh') ? opt.tierLabel.zh : opt.tierLabel.en}</option>
               ))}
             </select>
           </div>

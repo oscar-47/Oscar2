@@ -1739,7 +1739,7 @@ export function StudioGenesisForm() {
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {AVAILABLE_MODELS.map((m) => (
-                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        <SelectItem key={m.value} value={m.value}>{locale.startsWith('zh') ? m.tierLabel.zh : m.tierLabel.en}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
