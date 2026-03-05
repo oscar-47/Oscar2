@@ -140,6 +140,48 @@
         "prompts": "生成提示词中",
         "generate": "生成图片中",
         "done": "完成"
+      },
+      "style": {
+        "sceneStyle": {
+          "label": "场景风格",
+          "minimal": "极简",
+          "natural": "自然",
+          "urban": "都市",
+          "luxury": "奢华",
+          "industrial": "工业"
+        },
+        "lighting": {
+          "label": "光影氛围",
+          "naturalLight": "自然光",
+          "warm": "暖色调",
+          "cool": "冷色调",
+          "dramatic": "戏剧光",
+          "soft": "柔和光"
+        },
+        "composition": {
+          "label": "构图视角",
+          "front": "正面平视",
+          "overhead45": "45°俯拍",
+          "topDown": "俯视平铺",
+          "closeUp": "特写",
+          "wide": "远景"
+        },
+        "colorTone": {
+          "label": "色彩基调",
+          "original": "原色",
+          "warmTone": "暖调",
+          "coolTone": "冷调",
+          "monochrome": "黑白",
+          "vibrant": "高饱和"
+        },
+        "material": {
+          "label": "材质质感",
+          "default": "默认",
+          "matte": "磨砂",
+          "glossy": "光泽",
+          "wood": "木纹",
+          "marble": "大理石"
+        }
       }
     },
     "aestheticMirrorSteps": {

@@ -19,6 +19,7 @@ import type { ProgressStep } from '@/components/generation/GenerationProgress'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
 import { ResultGallery, type ResultImage } from '@/components/generation/ResultGallery'
 import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
+import { StyleDimensionRadio } from '@/components/studio/StyleDimensionRadio'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
@@ -43,7 +44,8 @@ import type {
   PromptSseChunk,
   GeneratedPrompt,
 } from '@/types'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel, STYLE_DIMENSIONS, buildStylePrefix } from '@/types'
+import type { StyleDimensionKey } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -664,6 +666,7 @@ export function StudioGenesisForm() {
 
   // ── Preview state ──
   const [turboEnabled, setTurboEnabled] = useState(false)
+  const [styleDimensions, setStyleDimensions] = useState<Partial<Record<StyleDimensionKey, string>>>({})
   const [analysisBlueprint, setAnalysisBlueprint] = useState<AnalysisBlueprint | null>(null)
   const [editableDesignSpecs, setEditableDesignSpecs] = useState('')
   const [editableImagePlans, setEditableImagePlans] = useState<BlueprintImagePlan[]>([])
@@ -688,7 +691,7 @@ export function StudioGenesisForm() {
   useSessionPersistence(
     'studio-genesis',
     () => ({
-      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, turboEnabled,
+      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, turboEnabled, styleDimensions,
       results: results.filter((r) => !r.url.startsWith('data:')),
     }),
     (s) => {
@@ -699,6 +702,19 @@ export function StudioGenesisForm() {
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
       if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (s.styleDimensions && typeof s.styleDimensions === 'object') {
+        const restored: Partial<Record<StyleDimensionKey, string>> = {}
+        const validKeys = new Set(STYLE_DIMENSIONS.map(d => d.key))
+        for (const [k, v] of Object.entries(s.styleDimensions as Record<string, string>)) {
+          if (validKeys.has(k as StyleDimensionKey) && typeof v === 'string') {
+            const dim = STYLE_DIMENSIONS.find(d => d.key === k)
+            if (dim?.options.some(o => o.value === v)) {
+              restored[k as StyleDimensionKey] = v
+            }
+          }
+        }
+        if (Object.keys(restored).length > 0) setStyleDimensions(restored)
+      }
       if (Array.isArray(s.results)) {
         const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string')
         if (restored.length > 0) setResults(restored)
@@ -776,6 +792,7 @@ export function StudioGenesisForm() {
     setPhase('input')
     setSelectedPlanIds(new Set())
     setAnalysisParams(null)
+    setStyleDimensions({})
   }, [])
 
   // ── Phase 1: Analyze & Blueprint ──
@@ -962,19 +979,23 @@ export function StudioGenesisForm() {
         throw new Error('No prompts available — please re-analyze')
       }
 
+      // Prepend style dimension prefix to each prompt
+      const stylePrefix = buildStylePrefix(styleDimensions)
+      const prefixedPrompts = prompts.map(p => stylePrefix + p)
+
       // Generate images — one per prompt
       set('generate', { status: 'active' })
       setProgress(10)
 
       // Create initial slots
-      const initialSlots: ImageSlot[] = prompts.map(() => ({
+      const initialSlots: ImageSlot[] = prefixedPrompts.map(() => ({
         jobId: '',
         status: 'pending' as const,
       }))
       setImageSlots(initialSlots)
 
       const submissionResults = await runWithConcurrency(
-        prompts.map((prompt, i) => () =>
+        prefixedPrompts.map((prompt, i) => () =>
           generateImage({
             productImage: uploadedUrls[0],
             productImages: uploadedUrls,
@@ -1065,7 +1086,7 @@ export function StudioGenesisForm() {
         setErrorMessage(t('allImagesFailed'))
       }
 
-      setRetryContext({ prompts, trace_id })
+      setRetryContext({ prompts: prefixedPrompts, trace_id })
       setPhase('complete')
       refreshCredits()
     } catch (err: unknown) {
@@ -1075,7 +1096,7 @@ export function StudioGenesisForm() {
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
     }
-  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, imageCount, analysisParams, generatedPrompts, t, tc])
+  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, imageCount, analysisParams, generatedPrompts, styleDimensions, t, tc])
 
   const handleBackToInput = useCallback(() => {
     setPhase('input')
@@ -1086,6 +1107,7 @@ export function StudioGenesisForm() {
     setAnalysisParams(null)
     setRetryContext(null)
     setGeneratedPrompts([])
+    setStyleDimensions({})
   }, [])
 
   const handleBackToPreview = useCallback(() => {
@@ -1110,6 +1132,7 @@ export function StudioGenesisForm() {
     setAnalysisParams(null)
     setRetryContext(null)
     setGeneratedPrompts([])
+    setStyleDimensions({})
   }, [])
 
   // ─── handleAddPlan / handleDuplicatePlan ──────────────────────────────────
@@ -1451,6 +1474,21 @@ export function StudioGenesisForm() {
 
     if (phase === 'preview') {
       return (
+        <>
+        <StyleDimensionRadio
+          values={styleDimensions}
+          onChange={(key, value) => {
+            setStyleDimensions(prev => {
+              const next = { ...prev }
+              if (value === null) {
+                delete next[key]
+              } else {
+                next[key] = value
+              }
+              return next
+            })
+          }}
+        />
         <DesignBlueprint
           designSpecs={editableDesignSpecs}
           onDesignSpecsChange={setEditableDesignSpecs}
@@ -1489,6 +1527,7 @@ export function StudioGenesisForm() {
             setSelectedPlanIds(new Set())
           }}
         />
+        </>
       )
     }
 

@@ -140,6 +140,48 @@
         "prompts": "Engineering prompts",
         "generate": "Generating images",
         "done": "Complete"
+      },
+      "style": {
+        "sceneStyle": {
+          "label": "Scene Style",
+          "minimal": "Minimal",
+          "natural": "Natural",
+          "urban": "Urban",
+          "luxury": "Luxury",
+          "industrial": "Industrial"
+        },
+        "lighting": {
+          "label": "Lighting",
+          "naturalLight": "Natural Light",
+          "warm": "Warm",
+          "cool": "Cool",
+          "dramatic": "Dramatic",
+          "soft": "Soft"
+        },
+        "composition": {
+          "label": "Composition",
+          "front": "Front View",
+          "overhead45": "45° Overhead",
+          "topDown": "Top Down",
+          "closeUp": "Close-Up",
+          "wide": "Wide Angle"
+        },
+        "colorTone": {
+          "label": "Color Tone",
+          "original": "Original",
+          "warmTone": "Warm",
+          "coolTone": "Cool",
+          "monochrome": "B&W",
+          "vibrant": "Vibrant"
+        },
+        "material": {
+          "label": "Surface",
+          "default": "Default",
+          "matte": "Matte",
+          "glossy": "Glossy",
+          "wood": "Wood",
+          "marble": "Marble"
+        }
       }
     },
     "aestheticMirrorSteps": {

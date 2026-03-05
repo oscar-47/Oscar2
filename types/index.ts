@@ -303,6 +303,91 @@ export interface EcommerceAnalysisResult {
   detail_prompts: string[]
 }
 
+// ─── Style Dimensions (5-dim radio) ─────────────────────────────────────────
+
+export type StyleDimensionKey = 'sceneStyle' | 'lighting' | 'composition' | 'colorTone' | 'material'
+
+export interface StyleDimensionOption {
+  value: string
+  labelKey: string  // i18n key suffix, e.g. 'minimal' → resolved as studio.genesis.style.sceneStyle.minimal
+  promptTag: string // English tag for prompt injection, e.g. 'minimalist clean background'
+}
+
+export interface StyleDimension {
+  key: StyleDimensionKey
+  labelKey: string  // i18n key suffix
+  options: StyleDimensionOption[]
+}
+
+export const STYLE_DIMENSIONS: StyleDimension[] = [
+  {
+    key: 'sceneStyle',
+    labelKey: 'sceneStyle',
+    options: [
+      { value: 'minimal', labelKey: 'minimal', promptTag: 'minimalist clean background' },
+      { value: 'natural', labelKey: 'natural', promptTag: 'natural outdoor setting with plants' },
+      { value: 'urban', labelKey: 'urban', promptTag: 'modern urban city environment' },
+      { value: 'luxury', labelKey: 'luxury', promptTag: 'luxurious premium elegant setting' },
+      { value: 'industrial', labelKey: 'industrial', promptTag: 'raw industrial warehouse aesthetic' },
+    ],
+  },
+  {
+    key: 'lighting',
+    labelKey: 'lighting',
+    options: [
+      { value: 'natural', labelKey: 'naturalLight', promptTag: 'natural daylight' },
+      { value: 'warm', labelKey: 'warm', promptTag: 'warm golden hour lighting' },
+      { value: 'cool', labelKey: 'cool', promptTag: 'cool blue-toned lighting' },
+      { value: 'dramatic', labelKey: 'dramatic', promptTag: 'dramatic high-contrast lighting' },
+      { value: 'soft', labelKey: 'soft', promptTag: 'soft diffused studio lighting' },
+    ],
+  },
+  {
+    key: 'composition',
+    labelKey: 'composition',
+    options: [
+      { value: 'front', labelKey: 'front', promptTag: 'straight-on front view' },
+      { value: 'overhead45', labelKey: 'overhead45', promptTag: '45-degree overhead angle' },
+      { value: 'topDown', labelKey: 'topDown', promptTag: 'top-down flat lay' },
+      { value: 'closeUp', labelKey: 'closeUp', promptTag: 'close-up macro detail shot' },
+      { value: 'wide', labelKey: 'wide', promptTag: 'wide-angle environmental shot' },
+    ],
+  },
+  {
+    key: 'colorTone',
+    labelKey: 'colorTone',
+    options: [
+      { value: 'original', labelKey: 'original', promptTag: 'true-to-life natural colors' },
+      { value: 'warmTone', labelKey: 'warmTone', promptTag: 'warm color palette' },
+      { value: 'coolTone', labelKey: 'coolTone', promptTag: 'cool color palette' },
+      { value: 'monochrome', labelKey: 'monochrome', promptTag: 'black and white monochrome' },
+      { value: 'vibrant', labelKey: 'vibrant', promptTag: 'vibrant high-saturation colors' },
+    ],
+  },
+  {
+    key: 'material',
+    labelKey: 'material',
+    options: [
+      { value: 'default', labelKey: 'default', promptTag: 'neutral background surface' },
+      { value: 'matte', labelKey: 'matte', promptTag: 'matte textured surface' },
+      { value: 'glossy', labelKey: 'glossy', promptTag: 'glossy reflective surface' },
+      { value: 'wood', labelKey: 'wood', promptTag: 'natural wood grain surface' },
+      { value: 'marble', labelKey: 'marble', promptTag: 'marble stone surface' },
+    ],
+  },
+]
+
+export function buildStylePrefix(selections: Partial<Record<StyleDimensionKey, string>>): string {
+  const parts: string[] = []
+  for (const dim of STYLE_DIMENSIONS) {
+    const selected = selections[dim.key]
+    if (!selected) continue
+    const opt = dim.options.find(o => o.value === selected)
+    if (opt) parts.push(opt.promptTag)
+  }
+  return parts.length > 0 ? parts.join(', ') + '. ' : ''
+}
+
 // --- Public config ---
 
 export interface PublicConfig {
