@@ -209,12 +209,53 @@ function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[]
   return plans
 }
 
+/** Check if a plan title/content refers to front or back orientation. */
+function planMatchesOrientation(plan: BlueprintImagePlan, orientation: 'front' | 'back'): boolean {
+  const text = `${plan.title} ${plan.description} ${plan.design_content}`.toLowerCase()
+  if (orientation === 'front') return /正面|front/.test(text)
+  return /背面|back/.test(text)
+}
+
+/**
+ * Enforce that front/back white-bg plans exist when both are selected.
+ * AI might merge them into a single plan or omit one — we inject defaults.
+ */
+function enforceWhiteBgPlans(plans: BlueprintImagePlan[], typeState: BasicPhotoTypeState): BlueprintImagePlan[] {
+  const needFront = typeState.whiteBgRetouched.front
+  const needBack = typeState.whiteBgRetouched.back
+  if (!needFront || !needBack) return plans
+
+  const hasFront = plans.some((p) => planMatchesOrientation(p, 'front'))
+  const hasBack = plans.some((p) => planMatchesOrientation(p, 'back'))
+  if (hasFront && hasBack) return plans
+
+  const result = [...plans]
+  if (!hasFront) {
+    result.unshift({
+      title: '白底精修图（正面）',
+      description: '展示服装正面版型与颜色细节',
+      design_content: '白底平铺或模特正面展示，重点表现服装轮廓、主色和做工细节。',
+    })
+  }
+  if (!hasBack) {
+    // Insert after front plan
+    const frontIdx = result.findIndex((p) => planMatchesOrientation(p, 'front'))
+    result.splice(frontIdx + 1, 0, {
+      title: '白底精修图（背面）',
+      description: '展示服装背面版型与工艺细节',
+      design_content: '白底背面展示，清晰呈现后背剪裁与结构。',
+    })
+  }
+  return result
+}
+
 function normalizeBlueprint(
   resultData: unknown,
   typeState: BasicPhotoTypeState
 ): AnalysisBlueprint {
   if (isAnalysisBlueprint(resultData)) {
-    const plans = resultData.images.length > 0 ? resultData.images : buildDefaultPlans(typeState)
+    let plans = resultData.images.length > 0 ? resultData.images : buildDefaultPlans(typeState)
+    plans = enforceWhiteBgPlans(plans, typeState)
     return { ...resultData, images: plans }
   }
 
