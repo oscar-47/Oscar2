@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, useEffect } from 'react'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { useDropzone, type FileRejection } from 'react-dropzone'
 import { Loader2, Plus, Download, Sparkles, FileText, Upload, X, ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,7 @@ import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import type { AspectRatio, BackgroundMode, GenerationJob, GenerationModel, ImageSize } from '@/types'
 import { DEFAULT_CREDIT_COSTS, isValidModel } from '@/types'
+import { friendlyError } from '@/lib/utils'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
 
@@ -176,6 +177,8 @@ function normalizeCardsFromJob(job: GenerationJob, fallbackCount: number): {
 export function RefinementStudioForm() {
   const t = useTranslations('studio.refinementStudio')
   const tc = useTranslations('studio.common')
+  const locale = useLocale()
+  const isZh = locale.startsWith('zh')
   const { total } = useCredits()
 
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
@@ -380,7 +383,7 @@ export function RefinementStudioForm() {
         }
       } catch (e: unknown) {
         if ((e as Error).name !== 'AbortError') {
-          setErrorMessage(e instanceof Error ? e.message : tc('error'))
+          setErrorMessage(friendlyError(e instanceof Error ? e.message : tc('error'), isZh))
           setPhase('failed')
           setProgress(0)
         }
@@ -407,7 +410,7 @@ export function RefinementStudioForm() {
       uploadedUrlsRef.current = urls
       await runRefinement(urls)
     } catch (e: unknown) {
-      setErrorMessage(e instanceof Error ? e.message : tc('error'))
+      setErrorMessage(friendlyError(e instanceof Error ? e.message : tc('error'), isZh))
       setPhase('failed')
       setProgress(0)
     }
@@ -432,7 +435,7 @@ export function RefinementStudioForm() {
       setDownloadingIndex(index)
       triggerDirectDownload(url, `refinement-${index + 1}-${Date.now()}.png`)
     } catch (e: unknown) {
-      setErrorMessage(e instanceof Error ? e.message : tc('error'))
+      setErrorMessage(friendlyError(e instanceof Error ? e.message : tc('error'), isZh))
       setPhase('failed')
     } finally {
       setDownloadingIndex(null)
@@ -448,7 +451,7 @@ export function RefinementStudioForm() {
         await new Promise((resolve) => setTimeout(resolve, 120))
       }
     } catch (e: unknown) {
-      setErrorMessage(e instanceof Error ? e.message : tc('error'))
+      setErrorMessage(friendlyError(e instanceof Error ? e.message : tc('error'), isZh))
       setPhase('failed')
     } finally {
       setDownloadingAll(false)

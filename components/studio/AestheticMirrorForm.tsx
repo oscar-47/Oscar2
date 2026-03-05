@@ -19,6 +19,7 @@ import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationModel, AspectRatio, ImageSize, GenerationJob, StyleDimensionKey } from '@/types'
 import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel, STYLE_DIMENSIONS, buildStylePrefix } from '@/types'
+import { friendlyError } from '@/lib/utils'
 import { StyleDimensionRadio } from '@/components/studio/StyleDimensionRadio'
 import { Loader2, Sparkles, Wand2, X, Plus, Download, Image as ImageIcon, ShieldCheck, Zap, Pencil } from 'lucide-react'
 import { createEditorSession } from '@/lib/utils/editor-session'
@@ -224,7 +225,7 @@ export function AestheticMirrorForm() {
       }
       setProgress(100); setPhase('success')
     } catch (e: unknown) {
-      if ((e as Error).name !== 'AbortError') { setErrorMessage(e instanceof Error ? e.message : tc('error')); setPhase('failed'); setProgress(0) }
+      if ((e as Error).name !== 'AbortError') { setErrorMessage(friendlyError(e instanceof Error ? e.message : tc('error'), isZh)); setPhase('failed'); setProgress(0) }
     } finally {
       clearInterval(progressTimer); clearInterval(statusTimer); refreshCredits()
     }
@@ -261,7 +262,7 @@ export function AestheticMirrorForm() {
       lastRequestRef.current = { refs: refUrls, product: product.publicUrl, prompt: finalPrompt }
       await runRequest({ mode: 'batch', referenceImages: refUrls, productImage: product.publicUrl, groupCount, model, aspectRatio, imageSize, userPrompt: finalPrompt }, refUrls.length * groupCount)
     } catch (e: unknown) {
-      if ((e as Error).name !== 'AbortError') { setErrorMessage(e instanceof Error ? e.message : 'Upload failed'); setPhase('failed'); setProgress(0) }
+      if ((e as Error).name !== 'AbortError') { setErrorMessage(friendlyError(e instanceof Error ? e.message : 'Upload failed', isZh)); setPhase('failed'); setProgress(0) }
     }
   }, [mode, singleRefFile, singleProducts, batchRefs, batchProduct, model, aspectRatio, imageSize, imageCount, groupCount, userPrompt, styleDimensions, runRequest, t])
 
@@ -289,7 +290,7 @@ export function AestheticMirrorForm() {
       a.remove()
       URL.revokeObjectURL(o)
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : tc('error'))
+      setErrorMessage(friendlyError(e instanceof Error ? e.message : tc('error'), isZh))
       setPhase('failed')
     } finally {
       setDownloadingIndex(null)
@@ -314,7 +315,7 @@ export function AestheticMirrorForm() {
         URL.revokeObjectURL(o)
       }
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : tc('error'))
+      setErrorMessage(friendlyError(e instanceof Error ? e.message : tc('error'), isZh))
       setPhase('failed')
     } finally {
       setDownloadingAll(false)

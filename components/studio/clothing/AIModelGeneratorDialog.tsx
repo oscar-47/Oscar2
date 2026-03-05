@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { GenerationJob } from '@/types'
 import type { UploadedImage } from '@/components/upload/MultiImageUploader'
 import type { AIModelHistoryItem } from './types'
+import { friendlyError } from '@/lib/utils'
 import { Loader2, Clock3, UserCircle2, Sparkles } from 'lucide-react'
 
 type Gender = 'female' | 'male'
@@ -296,7 +297,7 @@ export function AIModelGeneratorDialog({
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       setDialogState('error')
-      setError((err as Error).message ?? '生成失败')
+      setError(friendlyError((err as Error).message ?? '生成失败', true))
     }
   }
 
@@ -313,7 +314,7 @@ export function AIModelGeneratorDialog({
       onGenerate([{ file, previewUrl: selectedImageUrl }])
       onOpenChange(false)
     } catch (err) {
-      setError((err as Error).message ?? '使用模特失败')
+      setError(friendlyError((err as Error).message ?? '使用模特失败', true))
     } finally {
       setIsApplying(false)
     }

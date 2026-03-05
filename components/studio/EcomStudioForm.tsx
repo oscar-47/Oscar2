@@ -33,7 +33,7 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { useCredits } from '@/lib/hooks/useCredits'
 import { refreshCredits } from '@/lib/hooks/useCredits'
-import { cn } from '@/lib/utils'
+import { cn, friendlyError } from '@/lib/utils'
 import { normalizeEcommerceAnalysisResult } from '@/lib/studio/ecom-analysis'
 import {
   DEFAULT_CREDIT_COSTS,
@@ -276,7 +276,7 @@ export function EcomStudioForm() {
       setPhase('preview')
     } catch (e: unknown) {
       if ((e as Error).name === 'AbortError') return
-      setError((e as Error).message || 'Analysis failed')
+      setError(friendlyError((e as Error).message || 'Analysis failed', isZh))
       setPhase('input')
     }
   }, [productImages, description, defaultDetailCount, traceId, isZh, outputLanguage])

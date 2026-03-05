@@ -45,6 +45,7 @@ import type {
   GeneratedPrompt,
 } from '@/types'
 import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel, STYLE_DIMENSIONS, buildStylePrefix } from '@/types'
+import { friendlyError } from '@/lib/utils'
 import type { StyleDimensionKey } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -916,7 +917,7 @@ export function StudioGenesisForm() {
         const parsedPrompts = parsePromptArray(promptText, plansWithIds.length)
         finalPrompts = mergePromptsWithFallback(parsedPrompts, plansWithIds, isZh)
       } catch (promptErr: unknown) {
-        const msg = promptErr instanceof Error ? promptErr.message : String(promptErr)
+        const msg = friendlyError(promptErr instanceof Error ? promptErr.message : String(promptErr), isZh)
         setErrorMessage(
           isZh
             ? `提示词生成失败，已使用默认提示词。(${msg})`
@@ -932,7 +933,7 @@ export function StudioGenesisForm() {
       setAnalysisParams({ imageCount, outputLanguage })
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') return
-      setErrorMessage(err instanceof Error ? err.message : tc('error'))
+      setErrorMessage(friendlyError(err instanceof Error ? err.message : tc('error'), isZh))
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase(fallbackPhase)
       if (fallbackPhase === 'input') {
@@ -1091,7 +1092,7 @@ export function StudioGenesisForm() {
       refreshCredits()
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') return
-      setErrorMessage(err instanceof Error ? err.message : tc('error'))
+      setErrorMessage(friendlyError(err instanceof Error ? err.message : tc('error'), isZh))
       setSteps((prev) =>
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
@@ -1270,7 +1271,7 @@ export function StudioGenesisForm() {
       }
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') return // handleStop already set phase='input'
-      setErrorMessage(err instanceof Error ? err.message : 'Retry failed')
+      setErrorMessage(friendlyError(err instanceof Error ? err.message : 'Retry failed', isZh))
       if (!abort.signal.aborted) {
         setPhase('complete')
       }

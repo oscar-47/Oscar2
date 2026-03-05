@@ -18,6 +18,7 @@ import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationModel, AspectRatio, ImageSize, GenerationJob, ClothingPhase } from '@/types'
 import { isValidModel, STYLE_DIMENSIONS, buildStylePrefix } from '@/types'
+import { friendlyError } from '@/lib/utils'
 import type { StyleDimensionKey } from '@/types'
 import { StyleDimensionRadio } from '@/components/studio/StyleDimensionRadio'
 
@@ -211,7 +212,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       setPhase('preview')
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      setErrorMessage((err as Error).message ?? '分析失败')
+      setErrorMessage(friendlyError((err as Error).message ?? '分析失败', true))
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase('input')
     }
@@ -281,7 +282,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       setPhase('complete')
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      setErrorMessage((err as Error).message ?? '生成失败')
+      setErrorMessage(friendlyError((err as Error).message ?? '生成失败', true))
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase('preview')
     }
