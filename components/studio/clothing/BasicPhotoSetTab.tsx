@@ -312,6 +312,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     'clothing-basic-photo',
     () => ({
       requirements, language, model, aspectRatio, resolution, turboEnabled, styleDimensions,
+      results: results.filter((r) => r.url && !r.url.startsWith('data:')),
     }),
     (s) => {
       if (typeof s.requirements === 'string') setRequirements(s.requirements)
@@ -332,6 +333,10 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
           }
         }
         if (Object.keys(restored).length > 0) setStyleDimensions(restored)
+      }
+      if (Array.isArray(s.results)) {
+        const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string')
+        if (restored.length > 0) setResults(restored)
       }
     }
   )

@@ -209,6 +209,7 @@ export function RefinementStudioForm() {
     'refinement-studio',
     () => ({
       userPrompt, backgroundMode, model, aspectRatio, imageSize, turboEnabled,
+      cards: cards.filter((c) => c.status === 'success' && c.url),
     }),
     (s) => {
       if (typeof s.userPrompt === 'string') setUserPrompt(s.userPrompt)
@@ -217,6 +218,10 @@ export function RefinementStudioForm() {
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (Array.isArray(s.cards)) {
+        const restored = (s.cards as Card[]).filter((c) => c.status === 'success' && c.url && typeof c.url === 'string')
+        if (restored.length > 0) setCards(restored)
+      }
     }
   )
 

@@ -118,6 +118,7 @@ export function AestheticMirrorForm() {
     'aesthetic-mirror',
     () => ({
       mode, userPrompt, model, aspectRatio, imageSize, imageCount, groupCount, turboEnabled, styleDimensions,
+      cards: cards.filter((c) => c.status === 'success' && c.url),
     }),
     (s) => {
       if (s.mode === 'single' || s.mode === 'batch') setMode(s.mode)
@@ -140,6 +141,10 @@ export function AestheticMirrorForm() {
           }
         }
         if (Object.keys(restored).length > 0) setStyleDimensions(restored)
+      }
+      if (Array.isArray(s.cards)) {
+        const restored = (s.cards as Card[]).filter((c) => c.status === 'success' && c.url && typeof c.url === 'string')
+        if (restored.length > 0) setCards(restored)
       }
     }
   )
