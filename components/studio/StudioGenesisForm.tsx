@@ -411,6 +411,158 @@ function isAnalysisBlueprint(value: unknown): value is AnalysisBlueprint {
   return true
 }
 
+function asTrimmedString(value: unknown, fallback = ''): string {
+  if (typeof value !== 'string') return fallback
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : fallback
+}
+
+function fallbackPlanTitle(index: number, isZh: boolean): string {
+  return isZh ? `图片方案 ${index + 1}` : `Image Plan ${index + 1}`
+}
+
+function fallbackPlanDescription(isZh: boolean): string {
+  return isZh ? '请编辑该图片方案的描述。' : 'Edit this image plan description.'
+}
+
+function fallbackPlanDesignContent(isZh: boolean): string {
+  return isZh
+    ? '请根据产品特征补充画面描述、构图方式和光影方案。'
+    : 'Complete this plan with product-focused scene description, composition, and lighting.'
+}
+
+function fallbackPromptFromPlan(plan: BlueprintImagePlan, isZh: boolean): string {
+  const designContent = plan.design_content.trim()
+  if (designContent.length > 0) return designContent
+  const title = asTrimmedString(plan.title, isZh ? '产品图方案' : 'Product image plan')
+  const description = asTrimmedString(plan.description, isZh ? '突出产品卖点' : 'Highlight product selling points')
+  return isZh
+    ? `${title}。${description}。保持产品外观一致，商业摄影质感，高清细节。`
+    : `${title}. ${description}. Keep product appearance consistent, with commercial photography quality and clear details.`
+}
+
+function buildFallbackPrompts(
+  plans: BlueprintImagePlan[],
+  isZh: boolean,
+): GeneratedPrompt[] {
+  return plans.map((plan) => ({
+    prompt: fallbackPromptFromPlan(plan, isZh),
+    title: asTrimmedString(plan.title, ''),
+    negative_prompt: '',
+    marketing_hook: '',
+    priority: 0,
+  }))
+}
+
+function normalizeAnalysisBlueprintResult(
+  resultData: unknown,
+  expectedCount: number,
+  isZh: boolean,
+): AnalysisBlueprint | null {
+  if (isAnalysisBlueprint(resultData)) return resultData
+
+  let parsed: Record<string, unknown> | null = null
+  if (resultData && typeof resultData === 'object') {
+    parsed = resultData as Record<string, unknown>
+  } else if (typeof resultData === 'string') {
+    try {
+      const json = JSON.parse(resultData)
+      if (json && typeof json === 'object') {
+        parsed = json as Record<string, unknown>
+      }
+    } catch {
+      parsed = null
+    }
+  }
+  if (!parsed) return null
+
+  const rawImages = Array.isArray(parsed.images)
+    ? parsed.images
+    : Array.isArray(parsed.image_plans)
+      ? parsed.image_plans
+      : Array.isArray(parsed.plans)
+        ? parsed.plans
+        : []
+
+  const images: BlueprintImagePlan[] = rawImages
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    .map((item, index) => {
+      const title = asTrimmedString(item.title, '')
+        || asTrimmedString(item.name, '')
+        || fallbackPlanTitle(index, isZh)
+      const description = asTrimmedString(item.description, '')
+        || asTrimmedString(item.desc, '')
+        || fallbackPlanDescription(isZh)
+      const designContent = asTrimmedString(item.design_content, '')
+        || asTrimmedString(item.designContent, '')
+        || asTrimmedString(item.prompt, '')
+        || asTrimmedString(item.content, '')
+        || description
+      const id = typeof item.id === 'string' ? item.id : undefined
+      return {
+        id,
+        title,
+        description,
+        design_content: designContent,
+      }
+    })
+
+  const normalizedCount = Math.max(1, Math.min(15, Number(expectedCount || 1)))
+  while (images.length < normalizedCount) {
+    images.push({
+      title: fallbackPlanTitle(images.length, isZh),
+      description: fallbackPlanDescription(isZh),
+      design_content: fallbackPlanDesignContent(isZh),
+    })
+  }
+  const normalizedImages = images.slice(0, normalizedCount)
+
+  const designSpecs = asTrimmedString(parsed.design_specs, '')
+    || asTrimmedString(parsed.designSpecs, '')
+    || asTrimmedString(parsed.specs, '')
+    || (isZh
+      ? '请统一所有图片的色彩体系、构图逻辑与光影风格。'
+      : 'Keep color system, composition logic, and lighting style consistent across all images.')
+
+  const meta = parsed._ai_meta && typeof parsed._ai_meta === 'object'
+    ? (parsed._ai_meta as Record<string, unknown>)
+    : {}
+  const imageCountMeta = Number(meta.image_count)
+  return {
+    images: normalizedImages,
+    design_specs: designSpecs,
+    _ai_meta: {
+      model: asTrimmedString(meta.model, 'unknown'),
+      usage: meta.usage && typeof meta.usage === 'object' ? meta.usage as Record<string, unknown> : {},
+      provider: asTrimmedString(meta.provider, 'fallback'),
+      image_count: Number.isFinite(imageCountMeta) && imageCountMeta > 0 ? Math.round(imageCountMeta) : normalizedImages.length,
+      target_language: asTrimmedString(meta.target_language, isZh ? 'zh' : 'en'),
+    },
+  }
+}
+
+function mergePromptsWithFallback(
+  parsedPrompts: GeneratedPrompt[],
+  plans: BlueprintImagePlan[],
+  isZh: boolean,
+): GeneratedPrompt[] {
+  const fallbackPrompts = buildFallbackPrompts(plans, isZh)
+  return plans.map((plan, index) => {
+    const parsed = parsedPrompts[index]
+    const fallback = fallbackPrompts[index]
+    if (!parsed) return fallback
+    const prompt = asTrimmedString(parsed.prompt, fallback.prompt)
+    return {
+      ...parsed,
+      prompt,
+      title: asTrimmedString(parsed.title, asTrimmedString(plan.title, fallback.title)),
+      negative_prompt: asTrimmedString(parsed.negative_prompt, ''),
+      marketing_hook: asTrimmedString(parsed.marketing_hook, ''),
+      priority: Number.isFinite(Number(parsed.priority)) ? Number(parsed.priority) : 0,
+    }
+  })
+}
+
 // ─── Image Slot Card ────────────────────────────────────────────────────────
 
 function toCssAspectRatio(aspectRatio: AspectRatio): string {
@@ -648,6 +800,7 @@ export function StudioGenesisForm() {
     const trace_id = uid()
     const abort = new AbortController()
     abortRef.current = abort
+    const fallbackPhase: GenesisPhase = analysisBlueprint ? 'preview' : 'input'
 
     setPhase('analyzing')
     setSteps([
@@ -687,25 +840,30 @@ export function StudioGenesisForm() {
       processGenerationJob(analysisJobId).catch(() => {})
 
       const analysisJob = await waitForJob(analysisJobId, abort.signal)
-      if (!isAnalysisBlueprint(analysisJob.result_data)) {
-        throw new Error('Analysis output format mismatch')
+      const normalizedBlueprint = normalizeAnalysisBlueprintResult(analysisJob.result_data, imageCount, isZh)
+      if (!normalizedBlueprint) {
+        throw new Error(isZh ? '分析结果格式异常，请重试。' : 'Analysis output format mismatch')
       }
-      const rawBlueprint = analysisJob.result_data
       const blueprint: AnalysisBlueprint = isZh
-        ? { ...rawBlueprint, images: localizeImagePlansForZh(rawBlueprint.images ?? []) }
-        : rawBlueprint
+        ? { ...normalizedBlueprint, images: localizeImagePlansForZh(normalizedBlueprint.images ?? []) }
+        : normalizedBlueprint
 
       set('analyze', { status: 'done' })
-      setProgress(100)
+      setProgress(70)
 
       // 3. Enter Plan Preview
       setAnalysisBlueprint(blueprint)
       setEditableDesignSpecs(blueprint.design_specs ?? '')
       const plansWithIds = (blueprint.images ?? []).map(p => ({ ...p, id: crypto.randomUUID() }))
 
-      // Fail-fast on zero plans
+      // Safety fallback: ensure at least one plan is available
       if (plansWithIds.length === 0) {
-        throw new Error('Analysis returned no image plans')
+        plansWithIds.push({
+          id: crypto.randomUUID(),
+          title: isZh ? '图片方案 1' : 'Image Plan 1',
+          description: isZh ? '请编辑该图片方案的描述。' : 'Edit this image plan description.',
+          design_content: fallbackPlanDesignContent(isZh),
+        })
       }
       // Defensive padding for platform minimum
       const minCount = getPlatformMinImages(platform)
@@ -726,58 +884,75 @@ export function StudioGenesisForm() {
 
       // 4. Generate prompts for all plans
       set('prompts', { status: 'active' })
+      setProgress(85)
       const promptBlueprint: AnalysisBlueprint = {
         images: plansWithIds,
         design_specs: blueprint.design_specs ?? '',
         _ai_meta: blueprint._ai_meta,
       }
-      let promptText = ''
-      const stream = await generatePromptsV2Stream(
-        {
-          analysisJson: promptBlueprint,
-          design_specs: blueprint.design_specs ?? '',
-          imageCount: plansWithIds.length,
-          targetLanguage: backendLocale,
-          outputLanguage,
-          stream: true,
-          trace_id,
-        },
-        abort.signal,
-      )
-      const reader = stream.getReader()
-      const decoder = new TextDecoder()
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        for (const line of decoder.decode(value, { stream: true }).split('\n')) {
-          if (line.startsWith('data: ')) {
-            const payload = line.slice(6).trim()
-            if (payload && payload !== '[DONE]' && !payload.startsWith('[ERROR]')) {
-              try {
-                const chunk = JSON.parse(payload) as PromptSseChunk
-                if (chunk.fullText) {
-                  promptText = chunk.fullText
+      let finalPrompts = buildFallbackPrompts(plansWithIds, isZh)
+      try {
+        let promptText = ''
+        const stream = await generatePromptsV2Stream(
+          {
+            analysisJson: promptBlueprint,
+            design_specs: blueprint.design_specs ?? '',
+            imageCount: plansWithIds.length,
+            targetLanguage: backendLocale,
+            outputLanguage,
+            stream: true,
+            trace_id,
+          },
+          abort.signal,
+        )
+        const reader = stream.getReader()
+        const decoder = new TextDecoder()
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          for (const line of decoder.decode(value, { stream: true }).split('\n')) {
+            if (line.startsWith('data: ')) {
+              const payload = line.slice(6).trim()
+              if (payload && payload !== '[DONE]' && !payload.startsWith('[ERROR]')) {
+                try {
+                  const chunk = JSON.parse(payload) as PromptSseChunk
+                  if (chunk.fullText) {
+                    promptText = chunk.fullText
+                  }
+                } catch {
+                  promptText += payload
                 }
-              } catch {
-                promptText += payload
               }
             }
           }
         }
+        const parsedPrompts = parsePromptArray(promptText, plansWithIds.length)
+        finalPrompts = mergePromptsWithFallback(parsedPrompts, plansWithIds, isZh)
+      } catch (promptErr: unknown) {
+        const msg = promptErr instanceof Error ? promptErr.message : String(promptErr)
+        setErrorMessage(
+          isZh
+            ? `提示词生成失败，已使用默认提示词。(${msg})`
+            : `Prompt generation failed. Using fallback prompts. (${msg})`
+        )
       }
-      const parsedPrompts = parsePromptArray(promptText, plansWithIds.length)
-      setGeneratedPrompts(parsedPrompts)
+
+      setGeneratedPrompts(finalPrompts)
       set('prompts', { status: 'done' })
+      setProgress(100)
 
       setPhase('preview')
       setAnalysisParams({ imageCount, outputLanguage, platform })
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') return
       setErrorMessage(err instanceof Error ? err.message : tc('error'))
-      setPhase('input')
-      setSelectedPlanIds(new Set())
+      setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
+      setPhase(fallbackPhase)
+      if (fallbackPhase === 'input') {
+        setSelectedPlanIds(new Set())
+      }
     }
-  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, platform, t, tc])
+  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, platform, t, tc, analysisBlueprint, getPlatformMinImages])
 
   // ── Phase 2: Confirm & Generate ──
   const handleGenerate = useCallback(async () => {
@@ -1449,6 +1624,12 @@ export function StudioGenesisForm() {
         </div>
 
         <StepIndicator currentPhase={phase} locale={locale} />
+
+        {errorMessage && phase !== 'complete' && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {errorMessage}
+          </div>
+        )}
 
         <div className="grid gap-6 xl:grid-cols-[540px_minmax(0,1fr)]">
           <div className="space-y-5">

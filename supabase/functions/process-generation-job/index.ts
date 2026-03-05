@@ -81,23 +81,50 @@ async function toDataUrl(pathOrUrl: string): Promise<string> {
 
 function parseJsonFromContent(content: string): Record<string, unknown> {
   const trimmed = content.trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const blockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    if (blockMatch?.[1]) {
-      try {
-        return JSON.parse(blockMatch[1]);
-      } catch {
-        // fall through
-      }
-    }
-    const objMatch = trimmed.match(/\{[\s\S]*\}$/);
-    if (objMatch?.[0]) {
-      return JSON.parse(objMatch[0]);
-    }
-    throw new Error("ANALYSIS_JSON_PARSE_FAILED");
+  if (!trimmed) {
+    return { __parse_failed: true, __raw_preview: "" };
   }
+
+  const baseCandidates = new Set<string>([trimmed]);
+  const blockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (blockMatch?.[1]) baseCandidates.add(blockMatch[1].trim());
+  const objMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (objMatch?.[0]) baseCandidates.add(objMatch[0].trim());
+  const arrMatch = trimmed.match(/\[[\s\S]*\]/);
+  if (arrMatch?.[0]) baseCandidates.add(arrMatch[0].trim());
+
+  const allCandidates: string[] = [];
+  for (const candidate of baseCandidates) {
+    const normalizedQuotes = candidate.replace(/[“”]/g, "\"").replace(/[‘’]/g, "'");
+    const noTrailingCommas = candidate.replace(/,\s*([}\]])/g, "$1");
+    allCandidates.push(
+      candidate,
+      normalizedQuotes,
+      noTrailingCommas,
+      normalizedQuotes.replace(/,\s*([}\]])/g, "$1"),
+    );
+  }
+
+  for (const candidate of allCandidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) {
+        return { images: parsed as unknown[] };
+      }
+      if (parsed && typeof parsed === "object") {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // keep trying other candidates
+    }
+  }
+
+  // Never hard-fail the whole ANALYSIS task for malformed model output.
+  // Downstream normalizeBlueprint() will synthesize a safe fallback blueprint.
+  return {
+    __parse_failed: true,
+    __raw_preview: trimmed.slice(0, 4000),
+  };
 }
 
 function sanitizeString(value: unknown, fallback: string): string {
@@ -982,6 +1009,8 @@ ${requirements || "(no extra brief provided)"}
 
   const content = String((chatResponse as Record<string, unknown>)?.choices?.[0]?.message?.content ?? "");
   const parsed = parseJsonFromContent(content);
+  const parseFailed = parsed.__parse_failed === true;
+  const parseRawPreview = typeof parsed.__raw_preview === "string" ? parsed.__raw_preview : null;
   const blueprint = normalizeBlueprint(parsed, imageCount, outputLanguage, uiLanguage);
 
   blueprint._ai_meta = {
@@ -995,6 +1024,9 @@ ${requirements || "(no extra brief provided)"}
     mannequin_enabled: mannequinEnabled,
     mannequin_white_background: mannequinWhiteBackground,
     three_d_white_background: threeDWhiteBackground,
+    parse_failed: parseFailed,
+    parse_warning: parseFailed ? "ANALYSIS_JSON_PARSE_FAILED_FALLBACK_USED" : null,
+    parse_raw_preview: parseFailed ? parseRawPreview : null,
   };
 
   const aiRequest = {
