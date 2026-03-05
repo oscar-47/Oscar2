@@ -195,7 +195,11 @@ export function AestheticMirrorForm() {
     const abort = new AbortController()
     abortRef.current = abort
     setPhase('running'); setProgress(10); setStatusLine(t('runningText1')); setErrorMessage(null)
-    if (!mergeIdx?.length) setCards(Array.from({ length: Math.max(1, slots) }, (_, i) => ({ url: null, status: 'loading', referenceIndex: i, groupIndex: 0 })))
+    if (!mergeIdx?.length) {
+      const loadingCards: Card[] = Array.from({ length: Math.max(1, slots) }, (_, i) => ({ url: null, status: 'loading' as const, referenceIndex: i, groupIndex: 0 }))
+      // Append: keep previous successful results, add loading placeholders after them
+      setCards(prev => [...prev.filter(c => c.status === 'success' && c.url), ...loadingCards])
+    }
     const progressTimer = setInterval(() => setProgress((p) => Math.min(90, p + 7)), 900)
     const statusTimer = setInterval(() => setStatusLine((s) => s === t('runningText1') ? t('runningText2') : s === t('runningText2') ? t('runningText3') : t('runningText1')), 1800)
     try {
@@ -209,7 +213,10 @@ export function AestheticMirrorForm() {
           mergeIdx.forEach((idx, i) => { if (next[i]) merged[idx] = { ...next[i], referenceIndex: merged[idx]?.referenceIndex ?? next[i].referenceIndex, groupIndex: merged[idx]?.groupIndex ?? next[i].groupIndex } })
           return merged
         })
-      } else setCards(next)
+      } else {
+        // Replace loading placeholders with actual results, keep previous successes
+        setCards(prev => [...prev.filter(c => c.status === 'success' && c.url), ...next])
+      }
       setProgress(100); setPhase('success')
     } catch (e: unknown) {
       if ((e as Error).name !== 'AbortError') { setErrorMessage(e instanceof Error ? e.message : tc('error')); setPhase('failed'); setProgress(0) }
@@ -603,7 +610,15 @@ export function AestheticMirrorForm() {
                   statusPlacement="below"
                 />
                 <div className="flex flex-wrap content-start items-start gap-3">
-                  {cards.map((_, i) => (
+                  {cards.map((c, i) => c.status === 'success' && c.url ? (
+                    <div
+                      key={i}
+                      className="relative w-[220px] max-w-full overflow-hidden rounded-2xl border border-[#dcdce1] bg-white opacity-60"
+                      style={{ aspectRatio: previewAspectRatio }}
+                    >
+                      <img src={c.url} alt={`prev-${i + 1}`} className="w-full object-cover" />
+                    </div>
+                  ) : (
                     <div
                       key={i}
                       className="flex w-[220px] max-w-full items-center justify-center rounded-2xl border border-[#e1e1e5] bg-white/70"
