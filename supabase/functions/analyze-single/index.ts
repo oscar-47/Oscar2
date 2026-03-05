@@ -86,9 +86,7 @@ Deno.serve(async (req) => {
   }
 
   const modelName = String(body.model ?? "or-gemini-3.1-flash");
-  const imageSize = String(body.imageSize ?? "2K");
-  // Clamp 1K to 2K — providers require at least ~3.7M pixels
-  const effectiveImageSize = imageSize === "1K" ? "2K" : imageSize;
+  const effectiveImageSize = String(body.imageSize ?? "2K");
   const imageCount = Math.max(1, Math.min(9, Number(body.imageCount ?? 1)));
   const groupCount = Math.max(1, Math.min(9, Number(body.groupCount ?? 1)));
   const productCount = mode === "single" || mode === "refinement"

@@ -12,9 +12,9 @@ import type { GenerationModel, AspectRatio, ImageSize } from '@/types'
 import { cn } from '@/lib/utils'
 
 const RESOLUTION_OPTIONS: Array<{ value: ImageSize; label: string; labelZh: string }> = [
-  { value: '1K', label: '1K', labelZh: '1K 标准' },
-  { value: '2K', label: '2K HD', labelZh: '2K 高清' },
-  { value: '4K', label: '4K UHD', labelZh: '4K 超清' },
+  { value: '1K', label: '1K (1024px)', labelZh: '1K 标清 (1024px)' },
+  { value: '2K', label: '2K (2048px)', labelZh: '2K 高清 (2048px)' },
+  { value: '4K', label: '4K (4096px)', labelZh: '4K 超清 (4096px)' },
 ]
 
 const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [

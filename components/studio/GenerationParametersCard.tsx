@@ -13,7 +13,7 @@ import {
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { SlidersHorizontal, Zap } from 'lucide-react'
 import type { GenerationModel, AspectRatio, ImageSize, OutputLanguage } from '@/types'
-import { AVAILABLE_MODELS } from '@/types'
+import { AVAILABLE_MODELS, IMAGE_SIZE_LABELS } from '@/types'
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -204,7 +204,7 @@ export function GenerationParametersCard({
                     : 'rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-1.5 text-[13px] font-medium text-[#5a5e6b] transition-colors hover:border-[#191b22] disabled:opacity-50'
                 }
               >
-                {s}
+                {isZh ? IMAGE_SIZE_LABELS[s].zh : IMAGE_SIZE_LABELS[s].en}
               </button>
             )
           })}

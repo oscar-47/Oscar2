@@ -78,15 +78,15 @@ const ASPECT_RATIOS_ZH: { value: AspectRatio; label: string }[] = [
 const IMAGE_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
 const RESOLUTION_OPTIONS_EN: { value: ImageSize; label: string; proOnly: boolean }[] = [
-  { value: '1K', label: '1K Standard', proOnly: false },
-  { value: '2K', label: '2K HD (Pro)', proOnly: true },
-  { value: '4K', label: '4K UHD (Pro)', proOnly: true },
+  { value: '1K', label: '1K (1024px)', proOnly: false },
+  { value: '2K', label: '2K (2048px)', proOnly: true },
+  { value: '4K', label: '4K (4096px)', proOnly: true },
 ]
 
 const RESOLUTION_OPTIONS_ZH: { value: ImageSize; label: string; proOnly: boolean }[] = [
-  { value: '1K', label: '1K 标清', proOnly: false },
-  { value: '2K', label: '2K 高清 (仅Pro)', proOnly: true },
-  { value: '4K', label: '4K 超清 (仅Pro)', proOnly: true },
+  { value: '1K', label: '1K 标清 (1024px)', proOnly: false },
+  { value: '2K', label: '2K 高清 (2048px)', proOnly: true },
+  { value: '4K', label: '4K 超清 (4096px)', proOnly: true },
 ]
 
 const OUTPUT_LANGUAGES_EN: { value: OutputLanguage; label: string }[] = [

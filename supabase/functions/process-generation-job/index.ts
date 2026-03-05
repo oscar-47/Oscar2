@@ -421,22 +421,70 @@ function ratioMatches(actualSize?: string, expectedRatio?: string): boolean {
   return Math.abs(actual - expected) <= 0.01;
 }
 
+/** Map imageSize to longest-edge target: 1K=1024, 2K=2048, 4K=4096 */
+function longestEdgeForSize(imageSize: string): number {
+  if (imageSize === "1K") return 1024;
+  if (imageSize === "4K") return 4096;
+  return 2048; // 2K default
+}
+
 function scaledRequestSize(aspectRatio: string, imageSize: string): string {
   const baseSize = aspectRatioToSize(aspectRatio);
   const match = baseSize.match(/^(\d+)x(\d+)$/i);
   if (!match) return baseSize;
 
-  const baseWidth = Number(match[1]);
-  const baseHeight = Number(match[2]);
-  const scale = imageSize === "1K" ? 0.5 : imageSize === "4K" ? 2 : 1;
-  if (scale === 1) return baseSize;
+  const baseW = Number(match[1]);
+  const baseH = Number(match[2]);
+  const longest = Math.max(baseW, baseH);
+  const target = longestEdgeForSize(imageSize);
+  if (longest === target) return baseSize;
 
-  const roundToSupported = (value: number) => {
-    const rounded = Math.round(value / 64) * 64;
-    return Math.max(512, rounded);
-  };
+  const scale = target / longest;
+  const round64 = (v: number) => Math.max(512, Math.round(v * scale / 64) * 64);
+  return `${round64(baseW)}x${round64(baseH)}`;
+}
 
-  return `${roundToSupported(baseWidth * scale)}x${roundToSupported(baseHeight * scale)}`;
+/** Parse image dimensions from PNG/JPEG/WebP header bytes */
+function parseImageDimensions(bytes: Uint8Array): { w: number; h: number } | null {
+  if (bytes.length < 30) return null;
+  // PNG: bytes 0-7 = signature, IHDR at 16: 4-byte width, 4-byte height (big-endian)
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+    const w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+    const h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+    return { w, h };
+  }
+  // JPEG: find SOF0 (0xFF 0xC0) or SOF2 (0xFF 0xC2) marker
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
+    let i = 2;
+    while (i < bytes.length - 9) {
+      if (bytes[i] !== 0xFF) { i++; continue; }
+      const marker = bytes[i + 1];
+      if (marker === 0xC0 || marker === 0xC2) {
+        const h = (bytes[i + 5] << 8) | bytes[i + 6];
+        const w = (bytes[i + 7] << 8) | bytes[i + 8];
+        return { w, h };
+      }
+      const segLen = (bytes[i + 2] << 8) | bytes[i + 3];
+      i += 2 + segLen;
+    }
+  }
+  // WebP: RIFF header, VP8 chunk
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
+    // VP8L (lossless): starts at byte 21, first 14 bits = width-1, next 14 bits = height-1
+    if (bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x4C) {
+      const bits = (bytes[21]) | (bytes[22] << 8) | (bytes[23] << 16) | (bytes[24] << 24);
+      const w = (bits & 0x3FFF) + 1;
+      const h = ((bits >> 14) & 0x3FFF) + 1;
+      return { w, h };
+    }
+    // VP8 (lossy): width/height at bytes 26-29
+    if (bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x20) {
+      const w = (bytes[26] | (bytes[27] << 8)) & 0x3FFF;
+      const h = (bytes[28] | (bytes[29] << 8)) & 0x3FFF;
+      return { w, h };
+    }
+  }
+  return null;
 }
 
 type StyleOutputItem = {
@@ -445,6 +493,7 @@ type StyleOutputItem = {
   object_path: string | null;
   mime_type: string | null;
   provider_size: string | null;
+  actual_size?: { w: number; h: number } | null;
   reference_index: number;
   group_index: number;
   product_index?: number;
@@ -1177,7 +1226,8 @@ async function processImageGenJob(
       model: imageRoute.model,
       endpointOverride: imageRoute.endpoint,
       apiKeyOverride: imageRoute.apiKey,
-      size: aspectRatioToSize(aspectRatio),
+      size: scaledRequestSize(aspectRatio, imageSize),
+      aspectRatio,
       timeoutMsOverride: imageGenTimeoutMs,
     });
 
@@ -1189,10 +1239,11 @@ async function processImageGenJob(
     const outputBucket = Deno.env.get("GENERATIONS_BUCKET") ?? "generations";
     let objectPath: string | null = null;
     let actualMime = "image/png";
+    let actualDims: { w: number; h: number } | null = null;
 
     if (generatedBase64) {
-      // b64 response: decode and upload to our storage
       const imageBytes = base64ToBytes(generatedBase64);
+      actualDims = parseImageDimensions(imageBytes);
       objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
       const { error: uploadError } = await supabase.storage
         .from(outputBucket)
@@ -1203,10 +1254,10 @@ async function processImageGenJob(
       const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
       resultUrl = publicData.publicUrl;
     } else if (resultUrl) {
-      // URL response: download from provider and re-upload to our storage
       const imgRes = await fetch(resultUrl);
       if (!imgRes.ok) throw new Error(`IMAGE_DOWNLOAD_FAILED ${imgRes.status}`);
       const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
+      actualDims = parseImageDimensions(imgBytes);
       actualMime = imgRes.headers.get("content-type") || "image/png";
       const ext = actualMime.includes("jpeg") || actualMime.includes("jpg") ? "jpg"
         : actualMime.includes("webp") ? "webp" : "png";
@@ -1225,6 +1276,8 @@ async function processImageGenJob(
       throw new Error("IMAGE_RESULT_MISSING");
     }
 
+    const requestedSize = scaledRequestSize(aspectRatio, imageSize);
+
     await supabase
       .from("generation_jobs")
       .update({
@@ -1234,6 +1287,8 @@ async function processImageGenJob(
           provider: imageRoute.provider,
           model: imageRoute.model ?? model,
           image_size: imageSize,
+          requested_size: requestedSize,
+          actual_size: actualDims,
           mime_type: actualMime,
           object_path: objectPath ? `${outputBucket}/${objectPath}` : null,
           b64_json: generatedBase64,
@@ -1345,9 +1400,7 @@ async function processStyleReplicateJob(
   const payload = job.payload ?? {};
   const modelName = String(payload.model ?? "or-gemini-3.1-flash");
   const imageRoute = resolveImageRoute(modelName);
-  // Clamp minimum to 2K — many providers require at least ~3.7M pixels (1920×1920)
-  const rawImageSize = String(payload.imageSize ?? "2K");
-  const imageSize = rawImageSize === "1K" ? "2K" : rawImageSize;
+  const imageSize = String(payload.imageSize ?? "2K");
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
   const mode: StyleReplicateMode = payload.mode === "batch"
     ? "batch"
@@ -1664,6 +1717,7 @@ async function processStyleReplicateJob(
           endpointOverride: imageRoute.endpoint,
           apiKeyOverride: imageRoute.apiKey,
           ...(requestSize ? { size: requestSize } : {}),
+          aspectRatio,
           timeoutMsOverride: styleTimeoutMs,
         });
 
@@ -1682,9 +1736,11 @@ async function processStyleReplicateJob(
 
         let unitMime = "image/png";
 
+        let unitActualDims: { w: number; h: number } | null = null;
+
         if (generatedBase64) {
-          // b64 response: decode and upload to our storage
           const imageBytes = base64ToBytes(generatedBase64);
+          unitActualDims = parseImageDimensions(imageBytes);
           objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
           const { error: uploadError } = await supabase.storage
             .from(outputBucket)
@@ -1693,10 +1749,10 @@ async function processStyleReplicateJob(
           const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
           resultUrl = publicData.publicUrl;
         } else if (resultUrl) {
-          // URL response: download from provider and re-upload to our storage
           const imgRes = await fetch(resultUrl);
           if (!imgRes.ok) throw new Error(`IMAGE_DOWNLOAD_FAILED ${imgRes.status}`);
           const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
+          unitActualDims = parseImageDimensions(imgBytes);
           unitMime = imgRes.headers.get("content-type") || "image/png";
           const ext = unitMime.includes("jpeg") || unitMime.includes("jpg") ? "jpg"
             : unitMime.includes("webp") ? "webp" : "png";
@@ -1715,6 +1771,7 @@ async function processStyleReplicateJob(
           object_path: objectPath ? `${outputBucket}/${objectPath}` : null,
           mime_type: unitMime,
           provider_size: providerSize,
+          actual_size: unitActualDims,
         };
         break;
       }

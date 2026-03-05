@@ -148,6 +148,12 @@ export type AspectRatio =
   | '1:1' | '2:3' | '3:2' | '3:4' | '4:3'
   | '4:5' | '5:4' | '9:16' | '16:9' | '21:9'
 export type ImageSize = '1K' | '2K' | '4K'
+
+export const IMAGE_SIZE_LABELS: Record<ImageSize, { en: string; zh: string }> = {
+  '1K': { en: '1K (1024px)', zh: '1K 标清 (1024px)' },
+  '2K': { en: '2K (2048px)', zh: '2K 高清 (2048px)' },
+  '4K': { en: '4K (4096px)', zh: '4K 超清 (4096px)' },
+}
 export type BackgroundMode = 'white' | 'original'
 
 // Credit costs — loaded from get-public-config, fallback values here
