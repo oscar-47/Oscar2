@@ -26,7 +26,9 @@ import type {
   BlueprintImagePlan,
   GeneratedPrompt,
 } from '@/types'
-import { isValidModel } from '@/types'
+import { isValidModel, STYLE_DIMENSIONS, buildStylePrefix } from '@/types'
+import type { StyleDimensionKey } from '@/types'
+import { StyleDimensionRadio } from '@/components/studio/StyleDimensionRadio'
 
 function uid() {
   return crypto.randomUUID()
@@ -295,6 +297,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4')
   const [resolution, setResolution] = useState<ImageSize>('2K')
   const [turboEnabled, setTurboEnabled] = useState(false)
+  const [styleDimensions, setStyleDimensions] = useState<Partial<Record<StyleDimensionKey, string>>>({})
 
   const [steps, setSteps] = useState<ProgressStep[]>([])
   const [progress, setProgress] = useState(0)
@@ -308,7 +311,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   useSessionPersistence(
     'clothing-basic-photo',
     () => ({
-      requirements, language, model, aspectRatio, resolution, turboEnabled,
+      requirements, language, model, aspectRatio, resolution, turboEnabled, styleDimensions,
     }),
     (s) => {
       if (typeof s.requirements === 'string') setRequirements(s.requirements)
@@ -317,6 +320,19 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.resolution === 'string') setResolution(s.resolution as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (s.styleDimensions && typeof s.styleDimensions === 'object') {
+        const restored: Partial<Record<StyleDimensionKey, string>> = {}
+        const validKeys = new Set(STYLE_DIMENSIONS.map(d => d.key))
+        for (const [k, v] of Object.entries(s.styleDimensions as Record<string, string>)) {
+          if (validKeys.has(k as StyleDimensionKey) && typeof v === 'string') {
+            const dim = STYLE_DIMENSIONS.find(d => d.key === k)
+            if (dim?.options.some(o => o.value === v)) {
+              restored[k as StyleDimensionKey] = v
+            }
+          }
+        }
+        if (Object.keys(restored).length > 0) setStyleDimensions(restored)
+      }
     }
   )
 
@@ -463,10 +479,12 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       }
 
       const parsedPrompts = parsePromptArray(promptText, editableImagePlans.length)
+      const stylePrefix = buildStylePrefix(styleDimensions)
       const prompts = Array.from({ length: editableImagePlans.length }, (_, i) => {
         const gp = parsedPrompts[i] ?? parsedPrompts[i % Math.max(parsedPrompts.length, 1)]
         // Use || so empty prompt strings also fall back to design_content
-        return gp?.prompt || editableImagePlans[i].design_content
+        const basePrompt = gp?.prompt || editableImagePlans[i].design_content
+        return stylePrefix + basePrompt
       })
 
       set('prompts', { status: 'done' })
@@ -520,6 +538,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     aspectRatio,
     resolution,
     turboEnabled,
+    styleDimensions,
     backendLocale,
     language,
     traceId,
@@ -537,6 +556,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     setEditableDesignSpecs('')
     setEditableImagePlans([])
     setUploadedUrls([])
+    setStyleDimensions({})
   }, [])
 
   const handleCancel = useCallback(() => {
@@ -599,6 +619,22 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
         <GenerationTypeSelector
           typeState={typeState}
           onTypeStateChange={setTypeState}
+          disabled={isProcessing}
+        />
+
+        <StyleDimensionRadio
+          values={styleDimensions}
+          onChange={(key, value) => {
+            setStyleDimensions(prev => {
+              const next = { ...prev }
+              if (value === null) {
+                delete next[key]
+              } else {
+                next[key] = value
+              }
+              return next
+            })
+          }}
           disabled={isProcessing}
         />
       </fieldset>

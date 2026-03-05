@@ -17,7 +17,9 @@ import { uploadFile } from '@/lib/api/upload'
 import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationModel, AspectRatio, ImageSize, GenerationJob, ClothingPhase } from '@/types'
-import { isValidModel } from '@/types'
+import { isValidModel, STYLE_DIMENSIONS, buildStylePrefix } from '@/types'
+import type { StyleDimensionKey } from '@/types'
+import { StyleDimensionRadio } from '@/components/studio/StyleDimensionRadio'
 
 function uid() {
   return crypto.randomUUID()
@@ -78,6 +80,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [resolution, setResolution] = useState<ImageSize>('2K')
   const [turboEnabled, setTurboEnabled] = useState(false)
+  const [styleDimensions, setStyleDimensions] = useState<Partial<Record<StyleDimensionKey, string>>>({})
   const [showAIModelDialog, setShowAIModelDialog] = useState(false)
 
   const [steps, setSteps] = useState<ProgressStep[]>([])
@@ -88,7 +91,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
   useSessionPersistence(
     'clothing-model-tryon',
     () => ({
-      requirements, language, model, aspectRatio, resolution, turboEnabled,
+      requirements, language, model, aspectRatio, resolution, turboEnabled, styleDimensions,
     }),
     (s) => {
       if (typeof s.requirements === 'string') setRequirements(s.requirements)
@@ -97,6 +100,19 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.resolution === 'string') setResolution(s.resolution as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
+      if (s.styleDimensions && typeof s.styleDimensions === 'object') {
+        const restored: Partial<Record<StyleDimensionKey, string>> = {}
+        const validKeys = new Set(STYLE_DIMENSIONS.map(d => d.key))
+        for (const [k, v] of Object.entries(s.styleDimensions as Record<string, string>)) {
+          if (validKeys.has(k as StyleDimensionKey) && typeof v === 'string') {
+            const dim = STYLE_DIMENSIONS.find(d => d.key === k)
+            if (dim?.options.some(o => o.value === v)) {
+              restored[k as StyleDimensionKey] = v
+            }
+          }
+        }
+        if (Object.keys(restored).length > 0) setStyleDimensions(restored)
+      }
     }
   )
 
@@ -231,12 +247,15 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
         }
       } catch { /* use raw text */ }
 
+      const stylePrefix = buildStylePrefix(styleDimensions)
+      const finalPrompt = (stylePrefix + imagePrompt).trim()
+
       set('generate', { status: 'active' })
       const { job_id: imageJobId } = await generateImage({
         productImage: uploadedProductUrls[0],
         productImages: uploadedProductUrls,
         modelImage: uploadedModelUrl,
-        prompt: imagePrompt,
+        prompt: finalPrompt,
         model,
         aspectRatio,
         imageSize: resolution,
@@ -261,7 +280,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase('preview')
     }
-  }, [productImages, modelImage, model, aspectRatio, resolution, turboEnabled, traceId, steps, set])
+  }, [productImages, modelImage, model, aspectRatio, resolution, turboEnabled, styleDimensions, traceId, steps, set])
 
   const handleReset = useCallback(() => {
     abortRef.current?.abort()
@@ -270,6 +289,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     setProgress(0)
     setResults([])
     setErrorMessage(null)
+    setStyleDimensions({})
   }, [])
 
   const handleCancel = useCallback(() => {
@@ -337,6 +357,22 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
           onResolutionChange={setResolution}
           turboEnabled={turboEnabled}
           onTurboChange={setTurboEnabled}
+          disabled={isProcessing}
+        />
+
+        <StyleDimensionRadio
+          values={styleDimensions}
+          onChange={(key, value) => {
+            setStyleDimensions(prev => {
+              const next = { ...prev }
+              if (value === null) {
+                delete next[key]
+              } else {
+                next[key] = value
+              }
+              return next
+            })
+          }}
           disabled={isProcessing}
         />
       </fieldset>
