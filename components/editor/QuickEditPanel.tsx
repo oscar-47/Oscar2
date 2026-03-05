@@ -32,7 +32,7 @@ export function QuickEditPanel() {
   const quickEdit = useEditorStore((s) => s.quickEdit)
   const closeQuickEdit = useEditorStore((s) => s.closeQuickEdit)
   const setQuickEditField = useEditorStore((s) => s.setQuickEditField)
-  const replaceObjectUrl = useEditorStore((s) => s.replaceObjectUrl)
+  const applyTextEditResult = useEditorStore((s) => s.applyTextEditResult)
   const objects = useEditorStore((s) => s.objects)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -45,7 +45,7 @@ export function QuickEditPanel() {
       const resultUrl = job.result_url
         ?? (resultData?.outputs as Array<{ url: string }> | undefined)?.[0]?.url
       if (resultUrl && quickEdit.objectId) {
-        replaceObjectUrl(quickEdit.objectId, resultUrl)
+        applyTextEditResult(quickEdit.objectId, resultUrl)
       }
       closeQuickEdit()
     },

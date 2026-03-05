@@ -19,6 +19,7 @@ export type EditorTool = 'select' | 'pan'
 export interface CropState {
   active: boolean
   objectId: string | null
+  sessionId: string | null
   x: number
   y: number
   width: number
@@ -100,7 +101,7 @@ interface EditorState {
   // Crop
   startCrop: (objectId: string) => void
   updateCropRegion: (patch: Partial<Pick<CropState, 'x' | 'y' | 'width' | 'height' | 'aspectRatioLock'>>) => void
-  applyCrop: (croppedUrl: string) => void
+  applyCrop: (croppedUrl: string, snapshot: { objectId: string; cropW: number; cropH: number; sessionId: string }) => void
   cancelCrop: () => void
 
   // Quick Edit
@@ -131,6 +132,7 @@ const VERTICAL_GAP = 24
 const defaultCrop: CropState = {
   active: false,
   objectId: null,
+  sessionId: null,
   x: 0,
   y: 0,
   width: 0,
@@ -293,6 +295,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       crop: {
         active: true,
         objectId,
+        sessionId: crypto.randomUUID(),
         x: 0,
         y: 0,
         width: obj.naturalWidth || obj.width,
@@ -307,23 +310,34 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ crop: { ...get().crop, ...patch } })
   },
 
-  applyCrop: (croppedUrl) => {
-    const { crop } = get()
-    if (!crop.objectId) return
-    const cropW = Math.round(crop.width)
-    const cropH = Math.round(crop.height)
+  applyCrop: (croppedUrl, snapshot) => {
+    const { objectId, cropW, cropH, sessionId } = snapshot
+    if (!objectId || cropW <= 0 || cropH <= 0) return
+    // Stale completion — silently ignore
+    if (get().crop.sessionId !== sessionId) return
+    const obj = get().objects.find((o) => o.id === objectId)
+    if (!obj) {
+      set({ crop: defaultCrop })
+      return
+    }
+    const displayHeight = (cropH / cropW) * obj.width
+    const newId = crypto.randomUUID()
+    const newObj: CanvasObject = {
+      id: newId,
+      url: croppedUrl,
+      originalUrl: croppedUrl,
+      x: obj.x + obj.width + 40,
+      y: obj.y,
+      width: obj.width,
+      height: displayHeight,
+      naturalWidth: cropW,
+      naturalHeight: cropH,
+      zIndex: Math.max(...get().objects.map((o) => o.zIndex), 0) + 1,
+    }
     set({
-      objects: get().objects.map((o) => {
-        if (o.id !== crop.objectId) return o
-        const displayHeight = cropW > 0 ? (cropH / cropW) * o.width : o.height
-        return {
-          ...o,
-          url: croppedUrl,
-          naturalWidth: cropW,
-          naturalHeight: cropH,
-          height: displayHeight,
-        }
-      }),
+      objects: [...get().objects, newObj],
+      comparison: { visible: true, fromId: objectId, toId: newId },
+      selectedId: newId,
       crop: defaultCrop,
     })
   },

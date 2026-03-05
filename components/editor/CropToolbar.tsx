@@ -85,10 +85,17 @@ export function CropToolbar() {
   )
 
   const handleApply = useCallback(async () => {
-    if (!obj) return
+    if (!obj || !crop.sessionId) return
+    // Snapshot crop state BEFORE async work
+    const snapshot = {
+      objectId: obj.id,
+      cropW: Math.round(crop.width),
+      cropH: Math.round(crop.height),
+      sessionId: crop.sessionId,
+    }
     const canvas = document.createElement('canvas')
-    canvas.width = Math.round(crop.width)
-    canvas.height = Math.round(crop.height)
+    canvas.width = snapshot.cropW
+    canvas.height = snapshot.cropH
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
@@ -105,12 +112,12 @@ export function CropToolbar() {
       img,
       Math.round(crop.x),
       Math.round(crop.y),
-      Math.round(crop.width),
-      Math.round(crop.height),
+      snapshot.cropW,
+      snapshot.cropH,
       0,
       0,
-      Math.round(crop.width),
-      Math.round(crop.height)
+      snapshot.cropW,
+      snapshot.cropH
     )
 
     const blob = await new Promise<Blob | null>((resolve) =>
@@ -120,7 +127,7 @@ export function CropToolbar() {
 
     const file = new File([blob], `crop-${Date.now()}.png`, { type: 'image/png' })
     const result = await uploadFile(file)
-    applyCrop(result.publicUrl)
+    applyCrop(result.publicUrl, snapshot)
   }, [obj, crop, applyCrop])
 
   if (!crop.active) return null
