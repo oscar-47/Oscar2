@@ -22,7 +22,6 @@ import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
-import { usePlatformConfig } from '@/lib/hooks/usePlatformConfig'
 import { uploadFiles } from '@/lib/api/upload'
 import {
   analyzeProductV2,
@@ -43,9 +42,8 @@ import type {
   BlueprintImagePlan,
   PromptSseChunk,
   GeneratedPrompt,
-  EcommercePlatform,
 } from '@/types'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, PLATFORM_RULES, isValidModel } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -630,18 +628,16 @@ function ImageSlotCard({
 interface AnalysisParamSnapshot {
   imageCount: number
   outputLanguage: OutputLanguage
-  platform: EcommercePlatform
 }
 
 function isAnalysisStale(
-  current: { imageCount: number; outputLanguage: OutputLanguage; platform: EcommercePlatform },
+  current: { imageCount: number; outputLanguage: OutputLanguage },
   snapshot: AnalysisParamSnapshot | null,
 ): boolean {
   if (!snapshot) return false
   return (
     snapshot.imageCount !== current.imageCount ||
-    snapshot.outputLanguage !== current.outputLanguage ||
-    snapshot.platform !== current.platform
+    snapshot.outputLanguage !== current.outputLanguage
   )
 }
 
@@ -661,8 +657,6 @@ export function StudioGenesisForm() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [imageSize, setImageSize] = useState<ImageSize>('1K')
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>('none')
-  const [platform, setPlatform] = useState<EcommercePlatform>('none')
-
   // Locale-aware constants
   const ASPECT_RATIOS = locale === 'zh' ? ASPECT_RATIOS_ZH : ASPECT_RATIOS_EN
   const RESOLUTION_OPTIONS = locale === 'zh' ? RESOLUTION_OPTIONS_ZH : RESOLUTION_OPTIONS_EN
@@ -694,7 +688,7 @@ export function StudioGenesisForm() {
   useSessionPersistence(
     'studio-genesis',
     () => ({
-      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, platform, turboEnabled,
+      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, turboEnabled,
       results: results.filter((r) => !r.url.startsWith('data:')),
     }),
     (s) => {
@@ -704,7 +698,6 @@ export function StudioGenesisForm() {
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
       if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
-      if (typeof s.platform === 'string') setPlatform(s.platform as EcommercePlatform)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
       if (Array.isArray(s.results)) {
         const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string')
@@ -714,7 +707,6 @@ export function StudioGenesisForm() {
   )
 
   const { total } = useCredits()
-  const { getMinImages: getPlatformMinImages } = usePlatformConfig()
   const selectedCount = selectedPlanIds.size
   const totalCost = computeCost(model, turboEnabled, imageSize, phase === 'preview' ? selectedCount : imageCount)
   const insufficientCredits = total !== null && total < totalCost
@@ -751,7 +743,7 @@ export function StudioGenesisForm() {
   const leftPanelDisabled = phase === 'analyzing' || phase === 'generating'
   const keyParamsDisabled = phase === 'analyzing' || phase === 'generating' || phase === 'complete'
   const genParamsDisabled = leftPanelDisabled || phase === 'preview' || phase === 'complete'
-  const needsReanalyze = phase === 'preview' && isAnalysisStale({ imageCount, outputLanguage, platform }, analysisParams)
+  const needsReanalyze = phase === 'preview' && isAnalysisStale({ imageCount, outputLanguage }, analysisParams)
 
   useEffect(() => {
     if (phase !== 'analyzing' || analyzingMessages.length === 0) return
@@ -777,12 +769,6 @@ export function StudioGenesisForm() {
       if (removed) URL.revokeObjectURL(removed.previewUrl)
       return prev.filter((_, i) => i !== index)
     })
-  }, [])
-
-  const handlePlatformChange = useCallback((newPlatform: EcommercePlatform) => {
-    setPlatform(newPlatform)
-    const min = getPlatformMinImages(newPlatform)
-    setImageCount(prev => Math.max(prev, min))
   }, [])
 
   const handleStop = useCallback(() => {
@@ -863,20 +849,6 @@ export function StudioGenesisForm() {
           design_content: fallbackPlanDesignContent(isZh),
         })
       }
-      // Defensive padding for platform minimum
-      const minCount = getPlatformMinImages(platform)
-      if (plansWithIds.length < minCount && platform !== 'none') {
-        const deficit = minCount - plansWithIds.length
-        for (let i = 0; i < deficit; i++) {
-          const source = plansWithIds[i % plansWithIds.length]
-          plansWithIds.push({
-            ...source,
-            id: crypto.randomUUID(),
-            title: `${source.title} ${isZh ? '(补充)' : '(Supplementary)'}`,
-          })
-        }
-      }
-
       setEditableImagePlans(plansWithIds)
       setSelectedPlanIds(new Set(plansWithIds.map(p => p.id!)))
 
@@ -940,7 +912,7 @@ export function StudioGenesisForm() {
       setProgress(100)
 
       setPhase('preview')
-      setAnalysisParams({ imageCount, outputLanguage, platform })
+      setAnalysisParams({ imageCount, outputLanguage })
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') return
       setErrorMessage(err instanceof Error ? err.message : tc('error'))
@@ -950,17 +922,12 @@ export function StudioGenesisForm() {
         setSelectedPlanIds(new Set())
       }
     }
-  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, platform, t, tc, analysisBlueprint, getPlatformMinImages])
+  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, t, tc, analysisBlueprint])
 
   // ── Phase 2: Confirm & Generate ──
   const handleGenerate = useCallback(async () => {
-    if (isAnalysisStale({ imageCount, outputLanguage, platform }, analysisParams)) {
+    if (isAnalysisStale({ imageCount, outputLanguage }, analysisParams)) {
       setErrorMessage(t('reanalyzeWarning'))
-      return
-    }
-    const platformMin = getPlatformMinImages(platform)
-    if (platform !== 'none' && selectedPlanIds.size < platformMin) {
-      setErrorMessage(t('platformMinWarning', { min: platformMin }))
       return
     }
     if (!analysisBlueprint) return
@@ -1108,7 +1075,7 @@ export function StudioGenesisForm() {
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
     }
-  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, platform, imageCount, analysisParams, generatedPrompts, t, tc])
+  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, imageCount, analysisParams, generatedPrompts, t, tc])
 
   const handleBackToInput = useCallback(() => {
     setPhase('input')
@@ -1116,7 +1083,6 @@ export function StudioGenesisForm() {
     setProgress(0)
     setErrorMessage(null)
     setSelectedPlanIds(new Set())
-    setPlatform('none')
     setAnalysisParams(null)
     setRetryContext(null)
     setGeneratedPrompts([])
@@ -1141,7 +1107,6 @@ export function StudioGenesisForm() {
     setEditableImagePlans([])
     setSelectedPlanIds(new Set())
     setUploadedUrls([])
-    setPlatform('none')
     setAnalysisParams(null)
     setRetryContext(null)
     setGeneratedPrompts([])
@@ -1359,7 +1324,7 @@ export function StudioGenesisForm() {
             <Button
               size="lg"
               onClick={handleGenerate}
-              disabled={insufficientCredits || selectedCount === 0 || (platform !== 'none' && selectedCount < getPlatformMinImages(platform))}
+              disabled={insufficientCredits || selectedCount === 0}
               className="h-14 w-full rounded-3xl bg-[#171a22] text-[17px] font-semibold text-white hover:bg-[#11131a] disabled:bg-[#9ca1ad]"
             >
               <ArrowRight className="mr-2 h-5 w-5" />
@@ -1375,10 +1340,6 @@ export function StudioGenesisForm() {
 
           {selectedCount === 0 && (
             <p className="text-center text-sm text-destructive">{t('noCardsSelected')}</p>
-          )}
-
-          {platform !== 'none' && selectedCount > 0 && selectedCount < getPlatformMinImages(platform) && (
-            <p className="text-center text-sm text-destructive">{t('platformMinWarning', { min: getPlatformMinImages(platform) })}</p>
           )}
 
           {insufficientCredits && (
@@ -1517,7 +1478,6 @@ export function StudioGenesisForm() {
           }}
           onAddPlan={handleAddPlan}
           onDuplicatePlan={handleDuplicatePlan}
-          platformMinImages={getPlatformMinImages(platform)}
           generatedPrompts={generatedPrompts}
           onPromptChange={(i, prompt) => {
             setGeneratedPrompts((prev) => prev.map((gp, idx) => idx === i ? { ...gp, prompt } : gp))
@@ -1779,30 +1739,6 @@ export function StudioGenesisForm() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[13px] font-medium text-[#5a5e6b]">{t('platform')}</Label>
-                  <Select
-                    value={platform}
-                    onValueChange={(v) => handlePlatformChange(v as EcommercePlatform)}
-                    disabled={keyParamsDisabled}
-                  >
-                    <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">{t('platformNone')}</SelectItem>
-                      <SelectItem value="taobao">{t('platformTaobao')}</SelectItem>
-                      <SelectItem value="tmall">{t('platformTmall')}</SelectItem>
-                      <SelectItem value="jd">{t('platformJd')}</SelectItem>
-                      <SelectItem value="pdd">{t('platformPdd')}</SelectItem>
-                      <SelectItem value="amazon">{t('platformAmazon')}</SelectItem>
-                      <SelectItem value="shopee">{t('platformShopee')}</SelectItem>
-                      <SelectItem value="ebay">{t('platformEbay')}</SelectItem>
-                      <SelectItem value="tiktok">{t('platformTiktok')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {platform !== 'none' && (
-                    <p className="text-[12px] text-[#7d818d]">{t('platformHint', { min: getPlatformMinImages(platform) })}</p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
                   <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('imageCount')}</Label>
                   <Select
                     value={String(imageCount)}
@@ -1811,7 +1747,7 @@ export function StudioGenesisForm() {
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {IMAGE_COUNTS.filter(n => n >= getPlatformMinImages(platform)).map((n) => (
+                      {IMAGE_COUNTS.map((n) => (
                         <SelectItem key={n} value={String(n)}>
                           {n} {locale === 'zh' ? ' 张' : (n === 1 ? ' Image' : ' Images')}
                         </SelectItem>

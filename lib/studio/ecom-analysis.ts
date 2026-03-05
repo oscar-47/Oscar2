@@ -1,17 +1,13 @@
-export type EcomPlatformStyle = 'domestic' | 'international'
-
 export interface EcomAnalysisResultNormalized {
   optimized_description: string
   selling_points: string[]
   detail_focus_areas: string[]
   main_image_prompt: string
   detail_prompts: string[]
-  platform_style: EcomPlatformStyle
 }
 
 type NormalizeFallback = {
   description: string
-  platformStyle: EcomPlatformStyle
   isZh: boolean
 }
 
@@ -48,17 +44,12 @@ function normalizeLegacyEcomResult(
   const rawFocus = asStringArray(raw.detail_focus_areas)
   const detailFocusAreas = detailPrompts.map((_, i) => rawFocus[i] ?? detailLabel(i, fallback.isZh))
 
-  const platformStyle = raw.platform_style === 'domestic' || raw.platform_style === 'international'
-    ? raw.platform_style
-    : fallback.platformStyle
-
   return {
     optimized_description: asNonEmptyString(raw.optimized_description) ?? fallback.description,
     selling_points: asStringArray(raw.selling_points).slice(0, 5),
     detail_focus_areas: detailFocusAreas,
     main_image_prompt: mainPrompt,
     detail_prompts: detailPrompts,
-    platform_style: platformStyle,
   }
 }
 
@@ -93,7 +84,6 @@ function normalizeBlueprintEcomResult(
     detail_focus_areas: detailPlans.map((plan, i) => plan.focus || detailLabel(i, fallback.isZh)),
     main_image_prompt: mainPrompt,
     detail_prompts: detailPlans.map((plan) => plan.prompt),
-    platform_style: fallback.platformStyle,
   }
 }
 

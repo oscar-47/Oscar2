@@ -23,7 +23,6 @@ interface DesignBlueprintProps {
   onDuplicatePlan?: (id: string) => void
   onSelectAll?: () => void
   onDeselectAll?: () => void
-  platformMinImages?: number
   generatedPrompts?: GeneratedPrompt[]
   onPromptChange?: (index: number, prompt: string) => void
 }
@@ -41,7 +40,6 @@ export function DesignBlueprint({
   onDuplicatePlan,
   onSelectAll,
   onDeselectAll,
-  platformMinImages,
   generatedPrompts,
   onPromptChange,
 }: DesignBlueprintProps) {
@@ -110,11 +108,6 @@ export function DesignBlueprint({
               <Plus className="h-4 w-4" />
               {t('addPlan')}
             </button>
-          )}
-          {platformMinImages != null && platformMinImages > 1 && imagePlans.length < platformMinImages && (
-            <p className="mt-2 text-[13px] text-amber-600">
-              {t('platformMinWarning', { min: platformMinImages })}
-            </p>
           )}
         </div>
       </div>

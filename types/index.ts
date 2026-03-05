@@ -301,7 +301,6 @@ export interface EcommerceAnalysisResult {
   detail_focus_areas: string[]
   main_image_prompt: string
   detail_prompts: string[]
-  platform_style: EcommercePlatformStyle
 }
 
 // --- Public config ---

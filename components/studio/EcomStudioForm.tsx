@@ -38,7 +38,6 @@ import { normalizeEcommerceAnalysisResult } from '@/lib/studio/ecom-analysis'
 import {
   DEFAULT_CREDIT_COSTS,
   type EcommercePhase,
-  type EcommercePlatformStyle,
   type EcommerceAnalysisResult,
   type GenerationModel,
   type AspectRatio,
@@ -121,23 +120,6 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
   })
 }
 
-const PLATFORM_OPTIONS: { value: EcommercePlatformStyle; zhLabel: string; enLabel: string; desc_zh: string; desc_en: string }[] = [
-  {
-    value: 'domestic',
-    zhLabel: '国内电商',
-    enLabel: 'Domestic',
-    desc_zh: '淘宝 / 京东 / 拼多多',
-    desc_en: 'Taobao / JD / Pinduoduo',
-  },
-  {
-    value: 'international',
-    zhLabel: '国际电商',
-    enLabel: 'International',
-    desc_zh: 'Amazon / eBay / Shopee',
-    desc_en: 'Amazon / eBay / Shopee',
-  },
-]
-
 
 const TURBO_SURCHARGE: Record<string, number> = { '1K': 3, '2K': 7, '4K': 12 }
 
@@ -165,7 +147,6 @@ export function EcomStudioForm() {
 
   // Input state
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
-  const [platformStyle, setPlatformStyle] = useState<EcommercePlatformStyle>('domestic')
   const [description, setDescription] = useState('')
   const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
@@ -191,7 +172,6 @@ export function EcomStudioForm() {
   const [generatedImages, setGeneratedImages] = useState<ResultImage[]>([])
   const [genProgress, setGenProgress] = useState(0)
   const [genStatus, setGenStatus] = useState('')
-  const [complianceStatus, setComplianceStatus] = useState<string | null>(null)
   const [complianceWarnings, setComplianceWarnings] = useState<Record<string, string[]>>({})
 
   // Error
@@ -215,12 +195,11 @@ export function EcomStudioForm() {
   useSessionPersistence(
     'ecom-studio',
     () => ({
-      description, platformStyle, model, aspectRatio, imageSize, turboEnabled,
+      description, model, aspectRatio, imageSize, turboEnabled,
       generatedImages: generatedImages.filter((r) => !r.url.startsWith('data:')),
     }),
     (s) => {
       if (typeof s.description === 'string') setDescription(s.description)
-      if (typeof s.platformStyle === 'string') setPlatformStyle(s.platformStyle as EcommercePlatformStyle)
       if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
@@ -237,7 +216,7 @@ export function EcomStudioForm() {
 
   const traceId = useRef(uid()).current
 
-  const defaultDetailCount = platformStyle === 'domestic' ? 6 : 4
+  const defaultDetailCount = 6
   const promptsPerProduct = analysisResult
     ? 1 + analysisResult.detail_prompts.length
     : 1 + defaultDetailCount
@@ -270,7 +249,6 @@ export function EcomStudioForm() {
       const res = await analyzeEcommerceProduct({
         productImage: uploaded.publicUrl,
         userDescription: description,
-        platformStyle,
         detailCount: defaultDetailCount,
         trace_id: traceId,
         uiLanguage: isZh ? 'zh' : 'en',
@@ -284,7 +262,6 @@ export function EcomStudioForm() {
 
       const result = normalizeEcommerceAnalysisResult(job.result_data, {
         description: description.trim(),
-        platformStyle,
         isZh,
       })
       if (!result?.main_image_prompt) {
@@ -298,7 +275,7 @@ export function EcomStudioForm() {
       setError((e as Error).message || 'Analysis failed')
       setPhase('input')
     }
-  }, [productImages, description, platformStyle, defaultDetailCount, traceId, isZh])
+  }, [productImages, description, defaultDetailCount, traceId, isZh])
 
   // ── Generation ──────────────────────────────────────────────────────────────
 
@@ -349,7 +326,6 @@ export function EcomStudioForm() {
           fe_attempt: 1,
           trace_id: traceId,
           metadata: {
-            ecommerce_platform: analysis.platform_style,
             ecommerce_image_type: isMain ? 'main' : 'detail',
             detail_index: isMain ? undefined : i - 1,
             product_index: productIndex,
@@ -358,36 +334,15 @@ export function EcomStudioForm() {
 
         setTimeout(() => { void processGenerationJob(res.job_id) }, 3000 * (i + 1))
 
-        if (isMain && analysis.platform_style === 'international') {
-          setComplianceStatus(
-            isZh
-              ? `产品${productIndex + 1} 主图生成完成，正在执行合规检测...`
-              : `Product ${productIndex + 1} main image generated. Running compliance check...`
-          )
-        }
-
         const job = await waitForJob(res.job_id, ac.signal)
         if (ac.signal.aborted) return
 
         const resultData = job.result_data as Record<string, unknown> | null
         if (resultData?.compliance_warning) {
-          if (isMain && analysis.platform_style === 'international') {
-            setComplianceStatus(
-              isZh
-                ? `产品${productIndex + 1} 合规检测完成：存在潜在违规项`
-                : `Product ${productIndex + 1} compliance check: potential violations found`
-            )
-          }
           setComplianceWarnings((prev) => ({
             ...prev,
             [`${productIndex}_${i}`]: (resultData.compliance_violations as string[]) ?? [],
           }))
-        } else if (isMain && analysis.platform_style === 'international') {
-          setComplianceStatus(
-            isZh
-              ? `产品${productIndex + 1} 主图合规检测通过`
-              : `Product ${productIndex + 1} main image passed compliance check`
-          )
         }
 
         images[i] = { url: job.result_url ?? '', label: imgLabel }
@@ -412,7 +367,7 @@ export function EcomStudioForm() {
     setError(null)
     setImageGroups([])
     setComplianceWarnings({})
-    setComplianceStatus(null)
+
 
     const ac = new AbortController()
     abortRef.current = ac
@@ -602,7 +557,7 @@ export function EcomStudioForm() {
     setAnalysisResult(null)
     setImageGroups([])
     setComplianceWarnings({})
-    setComplianceStatus(null)
+
     setError(null)
     setProductImages([])
     setDescription('')
@@ -666,37 +621,6 @@ export function EcomStudioForm() {
               disabled={isLocked}
               compactAfterUpload
             />
-          </div>
-
-          {/* Platform Style */}
-          <div className="rounded-[20px] border border-[#e0e2e8] bg-white p-5">
-            <h3 className="mb-3 text-[14px] font-semibold text-[#1a1d24]">
-              {t('platformStyle')}
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              {PLATFORM_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  disabled={isLocked}
-                  onClick={() => setPlatformStyle(opt.value)}
-                  className={cn(
-                    'rounded-xl border-2 px-4 py-3 text-left transition-all',
-                    platformStyle === opt.value
-                      ? 'border-[#17191f] bg-[#17191f]/5'
-                      : 'border-[#e0e2e8] hover:border-[#c0c2c8]',
-                    isLocked && 'opacity-60 cursor-not-allowed'
-                  )}
-                >
-                  <div className="text-[13px] font-semibold text-[#1a1d24]">
-                    {isZh ? opt.zhLabel : opt.enLabel}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-[#7d818d]">
-                    {isZh ? opt.desc_zh : opt.desc_en}
-                  </div>
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Product Description */}
@@ -1069,11 +993,6 @@ export function EcomStudioForm() {
                 statusLine={genStatus}
                 statusPlacement="below"
               />
-              {analysisResult?.platform_style === 'international' && complianceStatus && (
-                <div className="rounded-xl border border-[#e0e2e8] bg-[#f8f9fb] px-4 py-3 text-[12px] text-[#555a67]">
-                  {complianceStatus}
-                </div>
-              )}
               {/* Per-product progress during generation */}
               {productImages.length > 1 && imageGroups.length > 0 && (
                 <div className="space-y-4">

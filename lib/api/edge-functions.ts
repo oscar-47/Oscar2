@@ -166,18 +166,12 @@ export async function analyzeProductV2(
 export async function analyzeEcommerceProduct(params: {
   productImage: string
   userDescription?: string
-  platformStyle: 'domestic' | 'international'
   detailCount: number
   trace_id: string
   uiLanguage?: string
 }): Promise<JobResponse> {
   const uiLanguage = (params.uiLanguage ?? 'en').startsWith('zh') ? 'zh' : 'en'
-  const platformHint = params.platformStyle === 'international'
-    ? 'Target platform: Amazon/eBay/Shopee style. Main image must be compliance-safe: no overlay text, no watermark, no extra badges.'
-    : 'Target platform: Taobao/JD/Pinduoduo style.'
-  const requirements = [params.userDescription?.trim(), platformHint]
-    .filter((v): v is string => Boolean(v && v.trim().length > 0))
-    .join('\n')
+  const requirements = params.userDescription?.trim() || undefined
   const imageCount = Math.max(1, Math.min(15, Number(params.detailCount ?? 0) + 1))
 
   const res = await invokeFunction<JobResponse>('analyze-product-v2', {
@@ -187,7 +181,6 @@ export async function analyzeEcommerceProduct(params: {
     imageCount,
     uiLanguage,
     outputLanguage: uiLanguage,
-    platformStyle: params.platformStyle,
     studioType: 'ecommerce',
     trace_id: params.trace_id,
     clothingMode: undefined,
