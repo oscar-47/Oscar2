@@ -1227,6 +1227,7 @@ async function processImageGenJob(
       endpointOverride: imageRoute.endpoint,
       apiKeyOverride: imageRoute.apiKey,
       size: scaledRequestSize(aspectRatio, imageSize),
+      imageSize,
       aspectRatio,
       timeoutMsOverride: imageGenTimeoutMs,
     });
@@ -1717,6 +1718,7 @@ async function processStyleReplicateJob(
           endpointOverride: imageRoute.endpoint,
           apiKeyOverride: imageRoute.apiKey,
           ...(requestSize ? { size: requestSize } : {}),
+          imageSize,
           aspectRatio,
           timeoutMsOverride: styleTimeoutMs,
         });

@@ -237,6 +237,7 @@ export async function callQnImageAPI(params: {
   n?: number;
   model?: string;
   size?: string;
+  imageSize?: string;
   aspectRatio?: string;
   endpointOverride?: string;
   apiKeyOverride?: string;
@@ -362,9 +363,10 @@ export async function callQnImageAPI(params: {
         messages: [{ role: "user", content: contentParts }],
         modalities: ["image", "text"],
       };
-      if (params.aspectRatio) {
-        orBody.image_config = { aspect_ratio: params.aspectRatio };
-      }
+      const imageConfig: Record<string, string> = {};
+      if (params.aspectRatio) imageConfig.aspect_ratio = params.aspectRatio;
+      if (params.imageSize) imageConfig.image_size = params.imageSize;
+      if (Object.keys(imageConfig).length > 0) orBody.image_config = imageConfig;
 
       res = await fetch(endpoint, {
         method: "POST",

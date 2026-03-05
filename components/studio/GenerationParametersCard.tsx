@@ -63,7 +63,7 @@ const ASPECT_RATIO_LABELS: Record<AspectRatio, { en: string; zh: string }> = {
 
 const DEFAULT_ASPECT_RATIOS: AspectRatio[] = ['1:1', '3:4', '4:3', '4:5', '16:9']
 
-const RESOLUTION_OPTIONS: ImageSize[] = ['1K', '2K', '4K']
+const RESOLUTION_OPTIONS: ImageSize[] = ['1K', '2K']  // 4K removed: Gemini API image_size unreliable for 4K
 
 interface OutputLangOption {
   value: OutputLanguage

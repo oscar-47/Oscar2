@@ -490,7 +490,6 @@ export function AestheticMirrorForm() {
                     <SelectContent>
                       <SelectItem value="1K">1K</SelectItem>
                       <SelectItem value="2K">2K</SelectItem>
-                      <SelectItem value="4K">4K</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
