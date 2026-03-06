@@ -43,6 +43,15 @@
         }
       },
       "additionalProperties": true
+    },
+    "styleConstraint": {
+      "type": "object",
+      "properties": {
+        "selections": { "type": "object", "additionalProperties": { "type": "string" } },
+        "prompt": { "type": "string" },
+        "source": { "type": "string" }
+      },
+      "additionalProperties": true
     }
   },
   "required": ["model", "prompt"],

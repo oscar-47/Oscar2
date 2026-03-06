@@ -1,6 +1,6 @@
 {
   "nav": {
-    "studioGenesis": "组图生成",
+    "studioGenesis": "主图生成",
     "aestheticMirror": "风格复刻",
     "clothingStudio": "服装详情组图",
     "ecomStudio": "一键生图",
@@ -43,7 +43,7 @@
     "hero": {
       "badge": "AI 商务视觉引擎",
       "title": "专业AI视觉解决方案",
-      "subtitle": "组图生成 · 风格复刻 · 详情图制作 · 商业精修，一站式提升电商出片效率",
+      "subtitle": "主图生成 · 风格复刻 · 详情图制作 · 商业精修，一站式提升电商出片效率",
       "cta": "进入我的工作台",
       "platformHint": "已适配国内外30+主流电商风格与尺寸规范",
       "platforms": "淘宝|天猫|京东|拼多多|抖音电商|快手电商|小红书|微信小店|亚马逊|Shopee|Lazada|速卖通|SHEIN|TikTok Shop"
@@ -80,14 +80,14 @@
   },
   "studio": {
     "genesis": {
-      "title": "一键生成详情图组",
-      "description": "上传产品图，AI 智能分析产品特征，自动生成多角度、多场景的电商详情图组",
+      "title": "主图生成",
+      "description": "上传产品图，AI 分析产品特征与核心卖点，快速生成高转化电商主图",
       "designBrief": "设计简报",
       "designBriefPlaceholder": "描述你产品的核心卖点和期望的视觉风格",
       "outputLanguage": "输出语言",
       "outputLanguageNone": "无文字（纯视觉）",
       "analyze": "分析产品",
-      "emptyState": "上传产品图并填写要求后，点击分析产品开始。",
+      "emptyState": "上传产品图并填写主图要求后，点击分析产品开始。",
       "planPreview": "设计规划预览",
       "planPreviewDesc": "请确认设计规范和图片规划",
       "designSpecs": "整体设计规范",
@@ -261,22 +261,22 @@
     },
     "ecomStudio": {
       "title": "一键生图工作室",
-      "description": "上传产品图，AI 先优化卖点和提示词，再一键生成主图与详情图。",
-      "badge": "平台优化",
+      "description": "上传同款商品的多角度参考图，选择详情页模块，AI 先生成详情页规划方案，再按模块出图。",
+      "badge": "详情页规划",
       "productImage": "产品图片",
       "platformStyle": "平台风格",
-      "descriptionLabel": "产品描述",
-      "descriptionPlaceholder": "输入产品信息、目标人群、核心卖点或促销重点...",
-      "analyzeButton": "AI 优化描述",
+      "descriptionLabel": "组图要求",
+      "descriptionPlaceholder": "输入产品信息、目标人群、核心卖点、场景偏好或促销重点...",
+      "analyzeButton": "生成详情页规划方案",
       "settings": "生成参数",
-      "optimizedDesc": "优化后的产品描述",
+      "optimizedDesc": "详情页规划方案",
       "sellingPoints": "核心卖点",
       "detailFocusAreas": "详情图焦点",
       "mainImagePrompt": "主图提示词",
       "detailPrompts": "详情图提示词",
       "confirmGenerate": "确认生成 {count} 张图片 — {cost} 积分",
       "complianceWarning": "亚马逊主图合规提醒：以下规则可能未完全满足，请确认后再上架。",
-      "emptyState": "上传产品图并点击\"AI 优化描述\"，即可预览主图与详情图策略。"
+      "emptyState": "上传同款商品参考图、填写组图要求并选择详情页模块后，点击“生成详情页规划方案”开始。"
     },
     "clothingStudio": {
       "title": "服装工作室",

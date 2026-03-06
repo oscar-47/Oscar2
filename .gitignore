@@ -47,6 +47,7 @@ supabase/functions/.env.local
 
 # Claude Code
 .claude/
+.codex/
 
 # Temp debug/scraping files
 analyze_images.py

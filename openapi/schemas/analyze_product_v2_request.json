@@ -8,6 +8,7 @@
     "requirements": { "type": "string", "default": "" },
     "imageCount": { "type": "integer", "minimum": 1, "default": 1 },
     "targetLanguage": { "type": "string", "default": "en" },
+    "studioType": { "type": "string" },
     "outputLanguage": {
       "type": "string",
       "enum": ["none", "en", "zh", "ja", "ko", "es", "fr", "de", "pt", "ar", "ru"],
@@ -17,6 +18,45 @@
     "clothingMode": { "type": "string" },
     "whiteBackground": { "type": "boolean" },
     "promptConfigKey": { "type": "string" },
+    "ecomDetailModules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "sortOrder": { "type": "integer" },
+          "title": {
+            "type": "object",
+            "properties": {
+              "zh": { "type": "string" },
+              "en": { "type": "string" }
+            },
+            "required": ["zh", "en"],
+            "additionalProperties": false
+          },
+          "subtitle": {
+            "type": "object",
+            "properties": {
+              "zh": { "type": "string" },
+              "en": { "type": "string" }
+            },
+            "required": ["zh", "en"],
+            "additionalProperties": false
+          },
+          "defaultPromptSeed": {
+            "type": "object",
+            "properties": {
+              "zh": { "type": "string" },
+              "en": { "type": "string" }
+            },
+            "required": ["zh", "en"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "sortOrder", "title", "subtitle", "defaultPromptSeed"],
+        "additionalProperties": false
+      }
+    },
     "trace_id": { "type": "string", "format": "uuid" },
     "client_job_id": { "type": "string" },
     "metadata": { "type": "object" }

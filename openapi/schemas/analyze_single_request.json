@@ -28,6 +28,16 @@
     "client_job_id": { "type": "string" },
     "fe_attempt": { "type": "integer", "default": 1 },
     "metadata": { "type": "object" }
+    ,
+    "styleConstraint": {
+      "type": "object",
+      "properties": {
+        "selections": { "type": "object", "additionalProperties": { "type": "string" } },
+        "prompt": { "type": "string" },
+        "source": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
   },
   "required": [],
   "additionalProperties": true

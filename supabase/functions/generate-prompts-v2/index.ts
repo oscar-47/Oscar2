@@ -9,6 +9,13 @@ function sanitizeLanguage(value: unknown): string {
   return "en";
 }
 
+function normalizeStyleConstraintPrompt(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  const prompt = typeof record.prompt === "string" ? record.prompt.trim() : "";
+  return prompt.length > 0 ? prompt : "";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
   if (req.method !== "POST") return err("BAD_REQUEST", "Method not allowed", 405);
@@ -24,19 +31,25 @@ Deno.serve(async (req) => {
     stream?: boolean;
     design_specs?: unknown;
     clothingMode?: string;
+    styleConstraint?: unknown;
+    module?: string;
   } | null;
   if (!body?.analysisJson) return err("BAD_REQUEST", "analysisJson is required");
 
   const language = sanitizeLanguage(body.outputLanguage ?? body.targetLanguage ?? "en");
   const clothingModeVal = typeof body.clothingMode === "string" ? body.clothingMode.trim() : "";
+  const module = typeof body.module === "string" ? body.module.trim() : "";
   const isClothing = clothingModeVal.length > 0;
   const isModelTryOn = clothingModeVal === "model_prompt_generation";
+  const isGenesisModule = module === "genesis";
+  const isEcomDetailModule = module === "ecom-detail";
   const analysisJson = typeof body.analysisJson === "string"
     ? body.analysisJson
     : JSON.stringify(body.analysisJson, null, 2);
   const designSpecs = body.design_specs
     ? (typeof body.design_specs === "string" ? body.design_specs : JSON.stringify(body.design_specs, null, 2))
     : null;
+  const styleConstraintPrompt = normalizeStyleConstraintPrompt(body.styleConstraint);
   const imageCount = Math.max(
     1,
     Math.min(
@@ -119,7 +132,57 @@ Universal requirements:
 
 输出要求：严格 JSON 数组，每个元素包含 prompt, title, negative_prompt, marketing_hook, priority 字段，不含 Markdown，不含解释。`;
 
-  const systemPrompt = isModelTryOn
+  const systemPrompt = isGenesisModule
+    ? language === "zh"
+      ? `你是顶级电商主图提示词工程专家。请基于主图分析结果，为同一款商品生成一组可直接出图的主图提示词。
+
+规则：
+- 用户需求优先级高于产品图分析摘要。
+- 所有提示词必须严格保持上传商品与参考图中的同一款商品，不得改款，不得换商品。
+- 上传的产品图是硬参考，必须保留商品原本的颜色、材质、纹理、版型、轮廓、logo、印花、五金、车线和其他关键设计特征。
+- 只允许变化场景、机位、构图、景别、光线和背景，不允许改色、改材质、改细节、改结构。
+- 如果提供了共享文案，必须把这段共享文案作为画面中的真实文字内容放进每一张图里，不能只表达相近意思，不能省略。
+- 有共享文案时，每条 prompt 都必须明确说明文字内容、文字位置、版式层级、留白区域、可读性要求，以及文字不能遮挡商品主体。
+- 如果共享文案为空，则生成纯图片版，明确写无文字叠加。
+- 如果 outputLanguage 是 none，但用户手动提供了文案，按用户原文使用，不要翻译。
+- 所选风格标签是高优先级视觉约束，但不要机械堆砌标签。
+- 需要生成 exactly ${imageCount} 条提示词，每条提示词既要统一风格，又要在角度、景别、构图或场景上有合理变化。
+- 输出严格 JSON 数组，每项包含 prompt, title, negative_prompt, marketing_hook, priority。`
+      : `You are a top-tier e-commerce hero-image prompt engineer. Based on the compact hero-image analysis, generate a set of production-ready prompts for the same product.
+
+Rules:
+- User requirements have higher priority than image-derived product analysis.
+- All prompts must preserve the exact same product identity from the uploaded reference images.
+- Treat the uploaded product images as hard references for the exact SKU. Do not change color, material, texture, silhouette, logo, print, hardware, stitching, proportions, or any signature design detail.
+- Only scene, camera angle, crop, composition, lighting, and background styling may vary.
+- If shared copy is provided, render that exact shared copy as visible in-image text in every image. Do not paraphrase it and do not omit it.
+- When shared copy exists, every prompt must explicitly define the text content, text placement, hierarchy, safe whitespace, readability, and that the text must not block the product.
+- If shared copy is empty, generate pure visual prompts and explicitly state that there is no text overlay.
+- If outputLanguage is none but the user manually provided copy, use the user's original copy without translation.
+- Selected style tags are high-priority visual constraints, but integrate them naturally.
+- Generate exactly ${imageCount} prompts. Keep them stylistically consistent while varying angle, framing, composition, or scene appropriately.
+- Return a strict JSON array only. Each item must contain prompt, title, negative_prompt, marketing_hook, priority.`
+    : isEcomDetailModule
+    ? language === "zh"
+      ? `你是顶级电商详情页提示词工程专家。请基于详情页规划蓝图，为同一商品的每个模块生成一条可直接出图的高质量提示词。
+
+规则：
+- 每条提示词必须严格对应一个详情页模块，顺序必须与蓝图中的 images 数组一致。
+- 同一批提示词必须保持同一商品身份一致，不能改动产品造型、材质、颜色或结构。
+- 必须充分吸收每个模块的标题、描述和 design_content，将模块目标转成明确的构图、光影、场景、材质和文案排版要求。
+- 如果输出语言为 none，则不得生成任何画面文字要求。
+- 如果某个模块本身更适合信息型版式（如规格表、售后保障、使用建议），也必须保持可视化、可落地的电商详情页表达。
+- 输出严格 JSON 数组，每项包含 prompt, title, negative_prompt, marketing_hook, priority。`
+      : `You are a top-tier e-commerce detail-page prompt engineer. Based on the approved blueprint, generate one production-ready prompt for each detail-page module of the same product.
+
+Rules:
+- Each prompt must map to exactly one module, in the same order as the blueprint images array.
+- Keep the same product identity across the full set without altering shape, color, material, or structure.
+- Turn each module title, description, and design_content into a concrete prompt covering composition, scene, lighting, material, and copy layout when needed.
+- If output language is none, do not introduce any in-image text requirements.
+- Information-heavy modules such as spec tables, after-sales guarantees, or usage tips must still remain visual, commercially styled, and image-generation friendly.
+- Return a strict JSON array only. Each item must contain prompt, title, negative_prompt, marketing_hook, priority.`
+    : isModelTryOn
     ? systemPromptModelTryOn
     : language === "zh"
     ? isClothing
@@ -155,7 +218,57 @@ Color scheme (exact hex values from blueprint) → Text layout (position and cop
 
 Output a strict JSON array only; each element must contain prompt, title, negative_prompt, marketing_hook, priority fields; no Markdown; no explanations.`;
 
-  const userPrompt = `
+  const userPrompt = isGenesisModule
+    ? `
+Generate exactly ${imageCount} prompt objects.
+
+Output schema (v2):
+[{"prompt": "<full detailed prompt text>", "title": "<short purpose title>", "negative_prompt": "<things to avoid, or empty string>", "marketing_hook": "<one-line marketing angle, or empty string>", "priority": <integer 0-10, 0=default>}]
+
+Rules:
+- One prompt object per output image, in stable order.
+- Keep product appearance faithful to the compact analysis summary and the uploaded reference images.
+- Prioritize user requirements over inferred product traits when conflicts appear.
+- The uploaded product images are hard product references of the same item from different angles. Every prompt must explicitly preserve the exact same product colorway, materials, texture, silhouette, logo, print, trims, and key construction details.
+- Never redesign, recolor, swap fabric, simplify details, or replace the product with a similar item.
+- Only vary scene setup, camera angle, framing, composition, and lighting.
+- If shared copy is empty, do not introduce any text overlay.
+- If shared copy is non-empty, use that exact copy text in every prompt as visible typography on the image.
+- For non-empty shared copy, every prompt must explicitly include:
+  1. the exact copy text to render,
+  2. where the text sits in the frame,
+  3. typography hierarchy and readability requirements,
+  4. instruction that the text must not cover or distort the product.
+- Use selected style tags as strong visual guidance.
+- Return JSON array only. No markdown fences. No explanation text.
+
+Compact hero-image analysis:
+${analysisJson}
+
+Style constraints (if provided):
+${styleConstraintPrompt || "(none)"}
+`
+    : isEcomDetailModule
+    ? `
+Generate exactly ${imageCount} prompt objects.
+
+Output schema (v2):
+[{"prompt": "<full detailed prompt text>", "title": "<module title>", "negative_prompt": "<things to avoid, or empty string>", "marketing_hook": "<one-line marketing angle, or empty string>", "priority": <integer 0-10, 0=default>}]
+
+Rules:
+- One prompt object per detail-page module, in the same order as the blueprint.
+- Reuse the module title as the prompt title when possible.
+- Keep all prompts faithful to the same product and the same selected module intent.
+- If design_specs and image plans disagree, follow the image plan first and design_specs second.
+- Return JSON array only. No markdown fences. No explanation text.
+
+Detail-page blueprint:
+${analysisJson}
+
+Design specs override (if provided):
+${designSpecs ?? "(none)"}
+`
+    : `
 Generate exactly ${imageCount} prompt objects.
 
 For each image plan in the blueprint, identify its shot type (white background, 3D ghost mannequin, detail close-up, selling point, or scene/lifestyle) from the title and design_content, then apply the corresponding shot-type rules from your instructions.
@@ -171,6 +284,7 @@ Rules:
 - Extract and use exact hex color codes from the blueprint's color system and product description.
 - If output language is "none", no in-image text of any kind — pure visual composition only.
 - Otherwise, keep any in-image text language as: ${language === "none" ? "none (no text)" : language}.
+- If style constraints are provided, treat them as highest priority visual requirements.
 - Return JSON array only. No markdown fences. No explanation text.
 
 Analysis blueprint:
@@ -178,6 +292,9 @@ ${analysisJson}
 
 Design specs override (if provided):
 ${designSpecs ?? "(none)"}
+
+Style constraints (highest priority, if provided):
+${styleConstraintPrompt || "(none)"}
 `;
 
   const config = getQnChatConfig();

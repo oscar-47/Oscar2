@@ -4,7 +4,7 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Shopix AI — Professional E-Commerce Product Images',
   description:
-    'Generate professional e-commerce product images with AI. Studio Genesis, Aesthetic Mirror, Clothing Studio, and Refinement Studio.',
+    'Generate professional e-commerce product images with AI. Hero Image Generator, Aesthetic Mirror, Clothing Studio, and Refinement Studio.',
 }
 
 // Root layout — no locale-specific logic here.

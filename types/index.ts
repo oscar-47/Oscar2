@@ -135,7 +135,7 @@ export interface AvailableModel {
 export const AVAILABLE_MODELS: ReadonlyArray<AvailableModel> = [
   { value: 'or-gemini-3.1-flash', label: 'Gemini 3.1 Flash', tier: 'high', tierLabel: { en: 'High Quality', zh: '高画质' } },
   { value: 'or-gemini-3-pro', label: 'Gemini 3 Pro', tier: 'balanced', tierLabel: { en: 'Balanced', zh: '均衡' } },
-  { value: 'ta-gemini-3.1-flash', label: 'TA Gemini 3.1 Flash', tier: 'fast', tierLabel: { en: 'Fast', zh: '极速' } },
+  { value: 'or-gemini-2.5-flash', label: 'Gemini 2.5 Flash', tier: 'fast', tierLabel: { en: 'Fast', zh: '极速' } },
 ]
 
 export const DEFAULT_MODEL: GenerationModel = 'or-gemini-3.1-flash'
@@ -236,6 +236,52 @@ export interface AnalysisBlueprint {
   _ai_meta: AnalysisAiMeta
 }
 
+export type EcomDetailModuleId =
+  | 'hero-visual'
+  | 'core-selling-point'
+  | 'usage-scene'
+  | 'multi-angle'
+  | 'scene-atmosphere'
+  | 'product-detail'
+  | 'brand-story'
+  | 'size-capacity-spec'
+  | 'before-after'
+  | 'spec-table'
+  | 'craft-process'
+  | 'accessories-gifts'
+  | 'series-display'
+  | 'ingredients'
+  | 'after-sales'
+  | 'usage-tips'
+
+export interface EcomDetailModuleCopy {
+  zh: string
+  en: string
+}
+
+export interface EcomDetailModuleDefinition {
+  id: EcomDetailModuleId
+  sortOrder: number
+  title: EcomDetailModuleCopy
+  subtitle: EcomDetailModuleCopy
+  defaultPromptSeed: EcomDetailModuleCopy
+}
+
+export type GenesisStyleDirectionKey = 'sceneStyle' | 'lighting' | 'composition'
+
+export interface GenesisStyleDirectionGroup {
+  key: GenesisStyleDirectionKey
+  options: string[]
+  recommended: string | null
+}
+
+export interface GenesisAnalysisResult {
+  product_summary: string
+  style_directions: GenesisStyleDirectionGroup[]
+  copy_plan: string
+  _ai_meta: AnalysisAiMeta
+}
+
 // --- Output Language ---
 
 export type OutputLanguage =
@@ -319,6 +365,23 @@ export interface StyleDimension {
   options: StyleDimensionOption[]
 }
 
+export type StyleDimensionSelections = Partial<Record<StyleDimensionKey, string>>
+
+export type StyleConstraintSource = 'user_selected' | 'ai_suggested' | 'mixed'
+
+export interface StyleConstraintPayload {
+  selections: StyleDimensionSelections
+  prompt: string
+  source: StyleConstraintSource
+}
+
+export interface StyleAnalysisResult {
+  selections: StyleDimensionSelections
+  confidence: number
+  source: 'ai'
+  model?: string
+}
+
 export const STYLE_DIMENSIONS: StyleDimension[] = [
   {
     key: 'sceneStyle',
@@ -377,7 +440,7 @@ export const STYLE_DIMENSIONS: StyleDimension[] = [
   },
 ]
 
-export function buildStylePrefix(selections: Partial<Record<StyleDimensionKey, string>>): string {
+export function buildStylePrefix(selections: StyleDimensionSelections): string {
   const parts: string[] = []
   for (const dim of STYLE_DIMENSIONS) {
     const selected = selections[dim.key]
@@ -386,6 +449,57 @@ export function buildStylePrefix(selections: Partial<Record<StyleDimensionKey, s
     if (opt) parts.push(opt.promptTag)
   }
   return parts.length > 0 ? parts.join(', ') + '. ' : ''
+}
+
+export function countSelectedStyleDimensions(selections: StyleDimensionSelections): number {
+  return STYLE_DIMENSIONS.reduce((count, dim) => count + (selections[dim.key] ? 1 : 0), 0)
+}
+
+export function sanitizeStyleSelections(selections: StyleDimensionSelections): StyleDimensionSelections {
+  const sanitized: StyleDimensionSelections = {}
+  for (const dim of STYLE_DIMENSIONS) {
+    const raw = selections[dim.key]
+    if (!raw) continue
+    if (dim.options.some((opt) => opt.value === raw)) {
+      sanitized[dim.key] = raw
+    }
+  }
+  return sanitized
+}
+
+export function buildStyleConstraintPrompt(selections: StyleDimensionSelections): string {
+  const parts: string[] = []
+
+  for (const dim of STYLE_DIMENSIONS) {
+    const selected = selections[dim.key]
+    if (!selected) continue
+    const opt = dim.options.find((o) => o.value === selected)
+    if (!opt) continue
+    parts.push(`${dim.key}: ${opt.promptTag}`)
+  }
+
+  if (parts.length === 0) return ''
+
+  return [
+    '[STYLE CONSTRAINTS | HIGH PRIORITY]',
+    'Apply the following selected style constraints as explicit visual targets:',
+    ...parts.map((line) => `- ${line}`),
+    'If any default style conflicts with these constraints, these constraints must take precedence.',
+    '[/STYLE CONSTRAINTS]',
+  ].join('\n')
+}
+
+export function buildStyleConstraintPayload(
+  selections: StyleDimensionSelections,
+  source: StyleConstraintSource = 'user_selected',
+): StyleConstraintPayload | undefined {
+  const normalized = sanitizeStyleSelections(selections)
+  if (countSelectedStyleDimensions(normalized) === 0) return undefined
+  return {
+    selections: normalized,
+    prompt: buildStyleConstraintPrompt(normalized),
+    source,
+  }
 }
 
 // --- Public config ---

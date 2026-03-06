@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   description: |
     Contract-first API for Shopix AI compatible workflows.
-    Last updated: 2026-02-24.
+    Last updated: 2026-03-06.
 servers:
   - url: https://{host}
     variables:
@@ -141,6 +141,45 @@ paths:
             application/json:
               schema:
                 $ref: ./schemas/job_ack_response.json
+  /supabase/functions/v1/analyze-style-dimensions:
+    post:
+      summary: Analyze and suggest style dimensions
+      operationId: analyzeStyleDimensions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contextText:
+                  type: string
+                analysisJson:
+                  oneOf:
+                    - type: object
+                    - type: string
+                module:
+                  type: string
+                uiLanguage:
+                  type: string
+      responses:
+        '200':
+          description: Style dimension suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  selections:
+                    type: object
+                    additionalProperties:
+                      type: string
+                  confidence:
+                    type: number
+                  source:
+                    type: string
+                  model:
+                    type: string
   /supabase/functions/v1/create-credit-checkout:
     post:
       summary: Create Stripe subscription checkout session

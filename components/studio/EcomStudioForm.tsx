@@ -1,54 +1,164 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
-import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
-import { useTranslations, useLocale } from 'next-intl'
+import { useCallback, useRef, useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import {
+  ArrowLeft,
+  Image as ImageIcon,
+  Loader2,
+  RefreshCw,
+  Settings2,
   ShoppingBag,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
-  Plus,
-  Trash2,
-  AlertTriangle,
-  X,
-  RotateCcw,
-  Globe,
-  Download,
+  Zap,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { MultiImageUploader, type UploadedImage } from '@/components/upload/MultiImageUploader'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
+import type { ProgressStep } from '@/components/generation/GenerationProgress'
 import { ResultGallery, type ResultImage } from '@/components/generation/ResultGallery'
-import { CreditCostBadge } from '@/components/generation/CreditCostBadge'
 import { CorePageShell } from '@/components/studio/CorePageShell'
-import { GenerationParametersCard } from '@/components/studio/GenerationParametersCard'
+import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
+import { EcomDetailModuleSelector } from '@/components/studio/EcomDetailModuleSelector'
 import { SectionIcon } from '@/components/shared/SectionIcon'
-import { uploadFile } from '@/lib/api/upload'
+import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
+import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
+import { uploadFiles } from '@/lib/api/upload'
 import {
-  analyzeEcommerceProduct,
+  analyzeProductV2,
   generateImage,
+  generatePromptsV2Stream,
   processGenerationJob,
 } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
-import { useCredits } from '@/lib/hooks/useCredits'
-import { refreshCredits } from '@/lib/hooks/useCredits'
-import { cn, friendlyError } from '@/lib/utils'
-import { normalizeEcommerceAnalysisResult } from '@/lib/studio/ecom-analysis'
+import { friendlyError } from '@/lib/utils'
 import {
+  buildEcomDetailAnalysisRequirements,
+  ECOM_DETAIL_MODULES,
+  normalizeEcomDetailBlueprint,
+  resolveEcomDetailModules,
+} from '@/lib/studio/ecom-detail-modules'
+import type {
+  AnalysisBlueprint,
+  AspectRatio,
+  BlueprintImagePlan,
+  EcommercePhase,
+  EcomDetailModuleDefinition,
+  EcomDetailModuleId,
+  GeneratedPrompt,
+  GenerationJob,
+  GenerationModel,
+  ImageSize,
+  OutputLanguage,
+} from '@/types'
+import {
+  AVAILABLE_MODELS,
   DEFAULT_CREDIT_COSTS,
-  type EcommercePhase,
-  type EcommerceAnalysisResult,
-  type GenerationModel,
-  type AspectRatio,
-  type ImageSize,
-  type OutputLanguage,
-  type GenerationJob,
+  IMAGE_SIZE_LABELS,
   isValidModel,
 } from '@/types'
 
+const ASPECT_RATIOS_EN: { value: AspectRatio; label: string }[] = [
+  { value: '1:1', label: '1:1 Square' },
+  { value: '3:4', label: '3:4 Portrait' },
+  { value: '4:3', label: '4:3 Landscape' },
+  { value: '4:5', label: '4:5 Portrait' },
+  { value: '9:16', label: '9:16 Mobile' },
+  { value: '16:9', label: '16:9 Wide' },
+]
+
+const ASPECT_RATIOS_ZH: { value: AspectRatio; label: string }[] = [
+  { value: '1:1', label: '1:1 方图' },
+  { value: '3:4', label: '3:4 竖版' },
+  { value: '4:3', label: '4:3 横版' },
+  { value: '4:5', label: '4:5 竖版' },
+  { value: '9:16', label: '9:16 长图' },
+  { value: '16:9', label: '16:9 宽屏' },
+]
+
+const RESOLUTION_OPTIONS: ImageSize[] = ['1K', '2K']
+
+const OUTPUT_LANGUAGES_EN: { value: OutputLanguage; label: string }[] = [
+  { value: 'none', label: 'No Text (Visual Only)' },
+  { value: 'en', label: 'English' },
+  { value: 'zh', label: '中文' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+  { value: 'es', label: 'Español' },
+  { value: 'fr', label: 'Français' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'pt', label: 'Português' },
+  { value: 'ar', label: 'العربية' },
+  { value: 'ru', label: 'Русский' },
+]
+
+const OUTPUT_LANGUAGES_ZH = OUTPUT_LANGUAGES_EN.map((lang) =>
+  lang.value === 'none'
+    ? { ...lang, label: '无文字(纯视觉)' }
+    : lang
+)
+
+const TURBO_SURCHARGE: Record<string, number> = { '1K': 3, '2K': 7, '4K': 12 }
+const DEFAULT_REQUIREMENTS_ZH = '我的商品是____，主要卖点是____'
+const DEFAULT_REQUIREMENTS_EN = 'My product is ____, key selling point is ____'
+const MODULE_ID_SET = new Set(ECOM_DETAIL_MODULES.map((module) => module.id))
+
+interface AnalysisParamSnapshot {
+  imagesSignature: string
+  requirements: string
+  outputLanguage: OutputLanguage
+  selectedModulesSignature: string
+}
+
 function uid() {
   return crypto.randomUUID()
+}
+
+function buildImagesSignature(images: UploadedImage[]): string {
+  return images
+    .map((img) => `${img.file.name}:${img.file.size}:${img.file.lastModified}`)
+    .join('|')
+}
+
+function modulesSignature(moduleIds: EcomDetailModuleId[]): string {
+  return [...moduleIds].join('|')
+}
+
+function isAnalysisStale(
+  current: AnalysisParamSnapshot,
+  snapshot: AnalysisParamSnapshot | null,
+): boolean {
+  if (!snapshot) return false
+  return (
+    snapshot.imagesSignature !== current.imagesSignature ||
+    snapshot.requirements !== current.requirements ||
+    snapshot.outputLanguage !== current.outputLanguage ||
+    snapshot.selectedModulesSignature !== current.selectedModulesSignature
+  )
+}
+
+function computeCost(
+  model: GenerationModel,
+  turboEnabled: boolean,
+  imageSize: ImageSize,
+  imageCount: number,
+): number {
+  if (imageCount <= 0) return 0
+  const base = DEFAULT_CREDIT_COSTS[model] ?? 5
+  const perImage = turboEnabled
+    ? base + (TURBO_SURCHARGE[imageSize] ?? 12)
+    : base
+  return perImage * imageCount
 }
 
 function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> {
@@ -63,18 +173,21 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
       if (nudgeTimer) clearInterval(nudgeTimer)
       supabase.removeChannel(channel)
     }
+
     function done(job: GenerationJob) {
       if (settled) return
       settled = true
       cleanup()
       resolve(job)
     }
+
     function fail(err: Error) {
       if (settled) return
       settled = true
       cleanup()
       reject(err)
     }
+
     async function checkOnce() {
       const { data } = await supabase
         .from('generation_jobs')
@@ -84,14 +197,15 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
       if (!data) return
       const job = data as GenerationJob
       if (job.status === 'success') done(job)
-      else if (job.status === 'failed')
-        fail(new Error(job.error_message ?? 'Job failed'))
+      else if (job.status === 'failed') fail(new Error(job.error_message ?? 'Job failed'))
     }
+
     signal.addEventListener(
       'abort',
       () => fail(Object.assign(new Error('Aborted'), { name: 'AbortError' })),
-      { once: true }
+      { once: true },
     )
+
     const channel = supabase
       .channel(`wait:${jobId}`)
       .on(
@@ -102,494 +216,493 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
           table: 'generation_jobs',
           filter: `id=eq.${jobId}`,
         },
-        (p) => {
-          const job = p.new as GenerationJob
-          if (job.status === 'success') done(job)
-          else if (job.status === 'failed')
-            fail(new Error(job.error_message ?? 'Job failed'))
-        }
+        () => {
+          void checkOnce()
+        },
       )
       .subscribe()
+
     void checkOnce()
     pollTimer = setInterval(() => {
       void checkOnce()
     }, 2000)
-    // Keep nudging so queued retry tasks can be claimed after run_after windows.
     nudgeTimer = setInterval(() => {
       void processGenerationJob(jobId)
     }, 8000)
   })
 }
 
+function normalizePrompt(item: unknown): GeneratedPrompt | null {
+  if (typeof item === 'string') {
+    const prompt = item.trim()
+    return prompt ? { prompt, title: '', negative_prompt: '', marketing_hook: '', priority: 0 } : null
+  }
+  if (!item || typeof item !== 'object') return null
+  const record = item as Record<string, unknown>
+  const prompt = typeof record.prompt === 'string' ? record.prompt.trim() : ''
+  if (!prompt) return null
 
-const TURBO_SURCHARGE: Record<string, number> = { '1K': 3, '2K': 7, '4K': 12 }
+  return {
+    prompt,
+    title: typeof record.title === 'string' ? record.title : '',
+    negative_prompt: typeof record.negative_prompt === 'string' ? record.negative_prompt : '',
+    marketing_hook: typeof record.marketing_hook === 'string' ? record.marketing_hook : '',
+    priority: Math.round(Math.max(0, Math.min(10, Number(record.priority) || 0))),
+  }
+}
 
-type TranslateLang = 'en' | 'zh' | 'ja' | 'ko' | 'es' | 'fr' | 'de' | ''
+function parsePromptArray(rawText: string, expectedCount: number): GeneratedPrompt[] {
+  const text = rawText.trim()
+  const candidates: string[] = [text]
 
-const TRANSLATE_LANGUAGES: { value: TranslateLang; label: string }[] = [
-  { value: 'en', label: 'English' },
-  { value: 'zh', label: '中文' },
-  { value: 'ja', label: '日本語' },
-  { value: 'ko', label: '한국어' },
-  { value: 'es', label: 'Español' },
-  { value: 'fr', label: 'Français' },
-  { value: 'de', label: 'Deutsch' },
-]
+  const codeFenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (codeFenceMatch?.[1]) candidates.push(codeFenceMatch[1].trim())
+
+  const jsonArrayMatch = text.match(/\[[\s\S]*\]/)
+  if (jsonArrayMatch?.[0]) candidates.push(jsonArrayMatch[0].trim())
+
+  const truncatedMatch = text.match(/\[[\s\S]*\}/)
+  if (truncatedMatch?.[0]) candidates.push(`${truncatedMatch[0]}]`)
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate)
+      if (Array.isArray(parsed)) {
+        const prompts = parsed.map(normalizePrompt).filter((item): item is GeneratedPrompt => item !== null)
+        if (prompts.length > 0) return prompts
+      }
+    } catch {
+      continue
+    }
+  }
+
+  const fallback = text
+    .split(/\n{2,}|\n(?=\d+[\.\)、])/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 20)
+
+  if (fallback.length > 0) {
+    return fallback.map((prompt) => ({
+      prompt,
+      title: '',
+      negative_prompt: '',
+      marketing_hook: '',
+      priority: 0,
+    }))
+  }
+
+  return Array.from({ length: Math.max(1, expectedCount) }, () => ({
+    prompt: text,
+    title: '',
+    negative_prompt: '',
+    marketing_hook: '',
+    priority: 0,
+  }))
+}
 
 export function EcomStudioForm() {
   const t = useTranslations('studio.ecomStudio')
   const tc = useTranslations('studio.common')
   const locale = useLocale()
-  const isZh = locale === 'zh'
-  const { total: credits } = useCredits()
+  const isZh = locale.startsWith('zh')
+  const backendLocale = isZh ? 'zh-CN' : 'en'
+  const defaultRequirements = isZh ? DEFAULT_REQUIREMENTS_ZH : DEFAULT_REQUIREMENTS_EN
+  const aspectRatios = isZh ? ASPECT_RATIOS_ZH : ASPECT_RATIOS_EN
+  const outputLanguages = isZh ? OUTPUT_LANGUAGES_ZH : OUTPUT_LANGUAGES_EN
+  const panelInputClass = 'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px]'
+  const leftCardClass = 'rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6'
 
-  // Phase
   const [phase, setPhase] = useState<EcommercePhase>('input')
-
-  // Input state
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
-  const [description, setDescription] = useState('')
+  const [requirements, setRequirements] = useState(defaultRequirements)
+  const [selectedDetailModules, setSelectedDetailModules] = useState<EcomDetailModuleId[]>([])
   const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4')
   const [imageSize, setImageSize] = useState<ImageSize>('2K')
-  const [turboEnabled, setTurboEnabled] = useState(false)
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>('none')
+  const [turboEnabled, setTurboEnabled] = useState(false)
 
-  // Analysis result (editable in preview)
-  const [analysisResult, setAnalysisResult] = useState<EcommerceAnalysisResult | null>(null)
+  const [analysisBlueprint, setAnalysisBlueprint] = useState<AnalysisBlueprint | null>(null)
+  const [editableDesignSpecs, setEditableDesignSpecs] = useState('')
+  const [editableImagePlans, setEditableImagePlans] = useState<BlueprintImagePlan[]>([])
+  const [analysisParams, setAnalysisParams] = useState<AnalysisParamSnapshot | null>(null)
 
-  // Analysis progress
-  const [analysisProgress, setAnalysisProgress] = useState(0)
-  const [analysisStatus, setAnalysisStatus] = useState('')
+  const [steps, setSteps] = useState<ProgressStep[]>([])
+  const [progress, setProgress] = useState(0)
+  const [results, setResults] = useState<ResultImage[]>([])
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [uploadedUrls, setUploadedUrls] = useState<string[]>([])
 
-  // Generation state — grouped by product image
-  type ImageGroup = {
-    sourceIndex: number
-    sourcePreview: string
-    images: ResultImage[]
-    failed: boolean
-    error?: string
-  }
-  const [imageGroups, setImageGroups] = useState<ImageGroup[]>([])
-  const [generatedImages, setGeneratedImages] = useState<ResultImage[]>([])
-  const [genProgress, setGenProgress] = useState(0)
-  const [genStatus, setGenStatus] = useState('')
-  const [complianceWarnings, setComplianceWarnings] = useState<Record<string, string[]>>({})
-
-  // Error
-  const [error, setError] = useState<string | null>(null)
-
-  // Prompt visibility
-  const [showMainPrompt, setShowMainPrompt] = useState(false)
-  const [showDetailPrompts, setShowDetailPrompts] = useState(false)
-
-  // Tag editing state (Task #3)
-  const [editingTagIndex, setEditingTagIndex] = useState<number | null>(null)
-  const [newTagValue, setNewTagValue] = useState('')
-
-  // Task #16: Translate dropdown
-  const [translateLang, setTranslateLang] = useState<TranslateLang>('')
-  const [showTranslateDropdown, setShowTranslateDropdown] = useState(false)
-
-  // Task #17: Preview lightbox
-  const [previewImage, setPreviewImage] = useState<{ url: string; index: number; groupIndex?: number } | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const { total: credits } = useCredits()
 
   useSessionPersistence(
     'ecom-studio',
     () => ({
-      description, model, aspectRatio, imageSize, turboEnabled, outputLanguage,
-      generatedImages: generatedImages.filter((r) => !r.url.startsWith('data:')),
+      requirements,
+      selectedDetailModules,
+      model,
+      aspectRatio,
+      imageSize,
+      outputLanguage,
+      turboEnabled,
+      results: results.filter((item) => item.url && !item.url.startsWith('data:')),
     }),
-    (s) => {
-      if (typeof s.description === 'string') setDescription(s.description)
-      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
-      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
-      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
-      if (Array.isArray(s.generatedImages)) {
-        const restored = (s.generatedImages as ResultImage[]).filter((r) => r.url && typeof r.url === 'string')
-        if (restored.length > 0) setGeneratedImages(restored)
+    (session) => {
+      if (typeof session.requirements === 'string') setRequirements(session.requirements)
+      if (Array.isArray(session.selectedDetailModules)) {
+        const restored = (session.selectedDetailModules as string[])
+          .filter((id): id is EcomDetailModuleId => MODULE_ID_SET.has(id as EcomDetailModuleId))
+        if (restored.length > 0) setSelectedDetailModules(restored)
       }
-    }
+      if (typeof session.model === 'string' && isValidModel(session.model)) {
+        setModel(session.model as GenerationModel)
+      }
+      if (typeof session.aspectRatio === 'string') setAspectRatio(session.aspectRatio as AspectRatio)
+      if (typeof session.imageSize === 'string') setImageSize(session.imageSize as ImageSize)
+      if (typeof session.outputLanguage === 'string') setOutputLanguage(session.outputLanguage as OutputLanguage)
+      if (typeof session.turboEnabled === 'boolean') setTurboEnabled(session.turboEnabled)
+      if (Array.isArray(session.results)) {
+        const restored = (session.results as ResultImage[])
+          .filter((item) => item.url && typeof item.url === 'string' && !item.url.startsWith('data:'))
+        if (restored.length > 0) setResults(restored)
+      }
+    },
   )
 
-  // Abort
-  const abortRef = useRef<AbortController | null>(null)
+  const selectedModules = resolveEcomDetailModules(selectedDetailModules)
+  const currentImageCount = phase === 'preview' || phase === 'generating' || phase === 'complete'
+    ? editableImagePlans.length
+    : selectedModules.length
+  const totalCost = computeCost(model, turboEnabled, imageSize, currentImageCount)
+  const insufficientCredits = credits !== null && totalCost > 0 && credits < totalCost
+  const currentSnapshot: AnalysisParamSnapshot = {
+    imagesSignature: buildImagesSignature(productImages),
+    requirements,
+    outputLanguage,
+    selectedModulesSignature: modulesSignature(selectedDetailModules),
+  }
+  const needsReanalyze = phase === 'preview' && isAnalysisStale(currentSnapshot, analysisParams)
+  const isProcessing = phase === 'analyzing' || phase === 'generating'
 
-  const traceId = useRef(uid()).current
+  const setStep = useCallback((id: string, patch: Partial<ProgressStep>) => {
+    setSteps((prev) => prev.map((step) => (step.id === id ? { ...step, ...patch } : step)))
+  }, [])
 
-  const defaultDetailCount = 6
-  const promptsPerProduct = analysisResult
-    ? 1 + analysisResult.detail_prompts.length
-    : 1 + defaultDetailCount
-  const productCount = Math.max(productImages.length, 1)
-  const totalImageCount = promptsPerProduct * productCount
-  const baseCost = DEFAULT_CREDIT_COSTS[model] ?? 5
-  const perImageCost = baseCost + (turboEnabled ? (TURBO_SURCHARGE[imageSize] ?? 12) : 0)
-  const totalCost = perImageCost * totalImageCount
+  const handleAddImages = useCallback((files: File[]) => {
+    setProductImages((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        file,
+        previewUrl: URL.createObjectURL(file),
+      })),
+    ])
+    setErrorMessage(null)
+  }, [])
 
-  // ── Analysis ────────────────────────────────────────────────────────────────
+  const handleRemoveImage = useCallback((index: number) => {
+    setProductImages((prev) => {
+      const removed = prev[index]
+      if (removed) URL.revokeObjectURL(removed.previewUrl)
+      return prev.filter((_, currentIndex) => currentIndex !== index)
+    })
+  }, [])
+
+  const handleToggleModule = useCallback((id: EcomDetailModuleId) => {
+    setSelectedDetailModules((prev) => (
+      prev.includes(id)
+        ? prev.filter((currentId) => currentId !== id)
+        : [...prev, id].sort((a, b) => {
+            const moduleA = ECOM_DETAIL_MODULES.find((module) => module.id === a)?.sortOrder ?? 0
+            const moduleB = ECOM_DETAIL_MODULES.find((module) => module.id === b)?.sortOrder ?? 0
+            return moduleA - moduleB
+          })
+    ))
+  }, [])
 
   const handleAnalyze = useCallback(async () => {
-    if (!productImages.length) return
-    setPhase('analyzing')
-    setError(null)
-    setAnalysisProgress(10)
-    setAnalysisStatus(isZh ? '上传图片中...' : 'Uploading image...')
+    if (productImages.length === 0 || selectedModules.length === 0) return
+    const abort = new AbortController()
+    abortRef.current = abort
+    const traceId = uid()
+    const nextSnapshot: AnalysisParamSnapshot = {
+      imagesSignature: buildImagesSignature(productImages),
+      requirements,
+      outputLanguage,
+      selectedModulesSignature: modulesSignature(selectedDetailModules),
+    }
 
-    const ac = new AbortController()
-    abortRef.current = ac
+    setPhase('analyzing')
+    setSteps([
+      { id: 'upload', label: isZh ? '上传图片' : 'Upload Images', status: 'pending' },
+      { id: 'analyze', label: isZh ? '分析产品' : 'Analyze Product', status: 'pending' },
+      { id: 'preview', label: isZh ? '生成详情页规划方案' : 'Build Detail Plan', status: 'pending' },
+    ])
+    setProgress(0)
+    setErrorMessage(null)
 
     try {
-      // Upload
-      const uploaded = await uploadFile(productImages[0].file)
-      if (ac.signal.aborted) return
-      setAnalysisProgress(30)
-      setAnalysisStatus(isZh ? 'AI 分析产品中...' : 'AI analyzing product...')
+      setStep('upload', { status: 'active' })
+      const uploaded = await uploadFiles(productImages.map((item) => item.file))
+      const urls = uploaded.map((item) => item.publicUrl)
+      setUploadedUrls(urls)
+      setStep('upload', { status: 'done' })
+      setProgress(30)
 
-      // Analyze
-      const res = await analyzeEcommerceProduct({
-        productImage: uploaded.publicUrl,
-        userDescription: description,
-        detailCount: defaultDetailCount,
-        trace_id: traceId,
-        uiLanguage: isZh ? 'zh' : 'en',
+      setStep('analyze', { status: 'active' })
+      const { job_id } = await analyzeProductV2({
+        productImage: urls[0],
+        productImages: urls,
+        requirements: buildEcomDetailAnalysisRequirements({
+          requirements,
+          selectedModuleIds: selectedDetailModules,
+          isZh,
+        }),
+        imageCount: selectedModules.length,
+        uiLanguage: backendLocale,
         outputLanguage,
+        studioType: 'ecom-detail',
+        trace_id: traceId,
+        ecomDetailModules: selectedModules as EcomDetailModuleDefinition[],
       })
 
-      setAnalysisProgress(60)
-      setAnalysisStatus(isZh ? '生成策略方案中...' : 'Generating strategy...')
+      const analysisJob = await waitForJob(job_id, abort.signal)
+      setStep('analyze', { status: 'done' })
+      setProgress(72)
 
-      const job = await waitForJob(res.job_id, ac.signal)
-      if (ac.signal.aborted) return
-
-      const result = normalizeEcommerceAnalysisResult(job.result_data, {
-        description: description.trim(),
+      const blueprint = normalizeEcomDetailBlueprint(
+        analysisJob.result_data,
+        selectedDetailModules,
         isZh,
-      })
-      if (!result?.main_image_prompt) {
-        throw new Error('Analysis returned invalid data')
-      }
-      setAnalysisResult(result)
-      setAnalysisProgress(100)
+        outputLanguage,
+      )
+      setAnalysisBlueprint(blueprint)
+      setEditableDesignSpecs(blueprint.design_specs)
+      setEditableImagePlans(blueprint.images)
+      setAnalysisParams(nextSnapshot)
+      setStep('preview', { status: 'done' })
+      setProgress(100)
       setPhase('preview')
-    } catch (e: unknown) {
-      if ((e as Error).name === 'AbortError') return
-      setError(friendlyError((e as Error).message || 'Analysis failed', isZh))
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') return
+      setErrorMessage(friendlyError((error as Error).message ?? 'Analysis failed', isZh))
+      setSteps((prev) => prev.map((step) => (step.status === 'active' ? { ...step, status: 'error' } : step)))
       setPhase('input')
     }
-  }, [productImages, description, defaultDetailCount, traceId, isZh, outputLanguage])
+  }, [
+    backendLocale,
+    isZh,
+    productImages,
+    requirements,
+    selectedDetailModules,
+    selectedModules,
+    setStep,
+    outputLanguage,
+  ])
 
-  // ── Generation ──────────────────────────────────────────────────────────────
-
-  const generateForSingleProduct = useCallback(async (
-    productFile: File,
-    productIndex: number,
-    productPreview: string,
-    analysis: EcommerceAnalysisResult,
-    ac: AbortController,
-    onProgress: (completed: number, total: number, group: ImageGroup) => void,
-  ): Promise<ImageGroup> => {
-    const uploaded = await uploadFile(productFile)
-    if (ac.signal.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' })
-
-    const allPrompts = [analysis.main_image_prompt, ...analysis.detail_prompts]
-    const totalCount = allPrompts.length
-    const images: ResultImage[] = new Array(totalCount).fill(null).map(() => ({ url: '', label: '' }))
-    let completed = 0
-
-    const group: ImageGroup = {
-      sourceIndex: productIndex,
-      sourcePreview: productPreview,
-      images,
-      failed: false,
+  const handleGenerate = useCallback(async () => {
+    if (!analysisBlueprint || editableImagePlans.length === 0) return
+    if (needsReanalyze) {
+      setErrorMessage(isZh ? '输入已变更，请先重新生成详情页规划方案。' : 'Inputs changed. Please re-generate the detail plan first.')
+      return
     }
 
-    const jobs: Promise<void>[] = allPrompts.map(async (prompt, i) => {
-      if (ac.signal.aborted) return
+    const abort = new AbortController()
+    abortRef.current = abort
+    const traceId = uid()
 
-      const isMain = i === 0
-      const imgLabel = productImages.length > 1
-        ? (isMain
-          ? (isZh ? `产品${productIndex + 1} 主图` : `Product ${productIndex + 1} Main`)
-          : (isZh ? `产品${productIndex + 1} 详情${i}` : `Product ${productIndex + 1} Detail ${i}`))
-        : (isMain
-          ? (isZh ? '主图' : 'Main Image')
-          : (isZh ? `详情图 ${i}` : `Detail ${i}`))
+    setPhase('generating')
+    setSteps([
+      { id: 'prompts', label: isZh ? '生成提示词' : 'Generate Prompts', status: 'pending' },
+      { id: 'generate', label: isZh ? '生成图片' : 'Generate Images', status: 'pending' },
+      { id: 'done', label: isZh ? '完成' : 'Done', status: 'pending' },
+    ])
+    setProgress(8)
+    setErrorMessage(null)
 
-      try {
-        const res = await generateImage({
-          productImage: uploaded.publicUrl,
-          prompt,
+    try {
+      const productUrls = uploadedUrls.length > 0
+        ? uploadedUrls
+        : (await uploadFiles(productImages.map((item) => item.file))).map((item) => item.publicUrl)
+      if (uploadedUrls.length === 0) setUploadedUrls(productUrls)
+
+      setStep('prompts', { status: 'active' })
+      let promptText = ''
+      const promptStream = await generatePromptsV2Stream(
+        {
+          analysisJson: {
+            images: editableImagePlans,
+            design_specs: editableDesignSpecs,
+            _ai_meta: analysisBlueprint._ai_meta,
+          },
+          design_specs: editableDesignSpecs,
+          imageCount: editableImagePlans.length,
+          targetLanguage: backendLocale,
+          outputLanguage,
+          stream: true,
+          trace_id: traceId,
+          module: 'ecom-detail',
+        },
+        abort.signal,
+      )
+
+      const reader = promptStream.getReader()
+      const decoder = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        for (const line of decoder.decode(value, { stream: true }).split('\n')) {
+          if (!line.startsWith('data: ')) continue
+          const payload = line.slice(6).trim()
+          if (!payload || payload === '[DONE]' || payload.startsWith('[ERROR]')) continue
+          try {
+            const parsed = JSON.parse(payload) as { fullText?: string }
+            promptText = parsed.fullText ?? promptText
+          } catch {
+            promptText += payload
+          }
+        }
+      }
+
+      const parsedPrompts = parsePromptArray(promptText, editableImagePlans.length)
+      const prompts = editableImagePlans.map((plan, index) => (
+        parsedPrompts[index]?.prompt
+          || parsedPrompts[parsedPrompts.length - 1]?.prompt
+          || `${plan.title}\n${plan.design_content}`
+      ))
+
+      setStep('prompts', { status: 'done' })
+      setStep('generate', { status: 'active' })
+      setProgress(38)
+
+      const jobIds: string[] = []
+      for (let index = 0; index < prompts.length; index += 1) {
+        const { job_id } = await generateImage({
+          productImage: productUrls[0],
+          productImages: productUrls,
+          prompt: prompts[index],
           model,
           aspectRatio,
           imageSize,
           turboEnabled,
-          client_job_id: uid(),
+          client_job_id: `${uid()}_${index}`,
           fe_attempt: 1,
           trace_id: traceId,
           metadata: {
-            ecommerce_image_type: isMain ? 'main' : 'detail',
-            detail_index: isMain ? undefined : i - 1,
-            product_index: productIndex,
+            module_id: editableImagePlans[index]?.id ?? null,
+            module_name: editableImagePlans[index]?.title ?? null,
+            selected_modules: selectedDetailModules,
+            module_count: editableImagePlans.length,
+            module_order: editableImagePlans.map((plan) => plan.id ?? plan.title),
           },
         })
-
-        setTimeout(() => { void processGenerationJob(res.job_id) }, 3000 * (i + 1))
-
-        const job = await waitForJob(res.job_id, ac.signal)
-        if (ac.signal.aborted) return
-
-        const resultData = job.result_data as Record<string, unknown> | null
-        if (resultData?.compliance_warning) {
-          setComplianceWarnings((prev) => ({
-            ...prev,
-            [`${productIndex}_${i}`]: (resultData.compliance_violations as string[]) ?? [],
-          }))
-        }
-
-        images[i] = { url: job.result_url ?? '', label: imgLabel }
-      } catch (e: unknown) {
-        if ((e as Error).name === 'AbortError') return
-        images[i] = { url: '', label: `${imgLabel} (${isZh ? '失败' : 'failed'})` }
+        jobIds.push(job_id)
       }
 
-      completed++
-      group.images = [...images]
-      onProgress(completed, totalCount, group)
-    })
+      const jobs = await Promise.all(jobIds.map((jobId) => waitForJob(jobId, abort.signal)))
+      const nextResults: ResultImage[] = jobs
+        .filter((job) => job.result_url)
+        .map((job, index) => ({
+          url: job.result_url!,
+          label: editableImagePlans[index]?.title ?? `${isZh ? '模块' : 'Module'} ${index + 1}`,
+        }))
 
-    await Promise.all(jobs)
-    group.images = images
-    return group
-  }, [productImages.length, model, aspectRatio, imageSize, turboEnabled, traceId, isZh])
-
-  const handleGenerate = useCallback(async () => {
-    if (!analysisResult || !productImages.length) return
-    setPhase('generating')
-    setError(null)
-    setImageGroups([])
-    setComplianceWarnings({})
-
-
-    const ac = new AbortController()
-    abortRef.current = ac
-
-    const allPrompts = [analysisResult.main_image_prompt, ...analysisResult.detail_prompts]
-    const promptCount = allPrompts.length
-    const totalCount = promptCount * productImages.length
-    let globalCompleted = 0
-
-    setGenProgress(5)
-    setGenStatus(
-      isZh
-        ? `生成中 0/${totalCount}...`
-        : `Generating 0/${totalCount}...`
-    )
-
-    const groups: ImageGroup[] = productImages.map((_, idx) => ({
-      sourceIndex: idx,
-      sourcePreview: productImages[idx].previewUrl,
-      images: [],
-      failed: false,
-    }))
-    setImageGroups([...groups])
-
-    const results = await Promise.allSettled(
-      productImages.map((img, pIdx) =>
-        generateForSingleProduct(
-          img.file,
-          pIdx,
-          img.previewUrl,
-          analysisResult,
-          ac,
-          (completed, _total, group) => {
-            groups[pIdx] = group
-            globalCompleted = groups.reduce(
-              (sum, g) => sum + g.images.filter((ri) => ri.url).length,
-              0
-            )
-            setGenProgress(Math.round((globalCompleted / totalCount) * 100))
-            setGenStatus(
-              isZh
-                ? `生成中 ${globalCompleted}/${totalCount}...`
-                : `Generating ${globalCompleted}/${totalCount}...`
-            )
-            setImageGroups([...groups])
-            setGeneratedImages(groups.flatMap((g) => g.images.filter((ri) => ri.url)))
-          },
-        )
-      )
-    )
-    if (ac.signal.aborted) return
-
-    results.forEach((res, idx) => {
-      if (res.status === 'fulfilled') {
-        groups[idx] = res.value
-      } else {
-        groups[idx].failed = true
-        groups[idx].error = (res.reason as Error)?.message || 'Generation failed'
-      }
-    })
-
-    setImageGroups([...groups])
-    const allImages = groups.flatMap((g) => g.images.filter((img) => img.url))
-    setGeneratedImages((prev) => [...prev, ...allImages])
-    refreshCredits()
-    setPhase('complete')
-  }, [analysisResult, productImages, generateForSingleProduct, isZh])
-
-  // ── Editing helpers ─────────────────────────────────────────────────────────
-
-  const updateSellingPoint = (index: number, value: string) => {
-    if (!analysisResult) return
-    const sp = [...analysisResult.selling_points]
-    sp[index] = value
-    setAnalysisResult({ ...analysisResult, selling_points: sp })
-  }
-
-  const addSellingPoint = (value?: string) => {
-    if (!analysisResult || analysisResult.selling_points.length >= 5) return
-    const v = value?.trim()
-    if (value !== undefined && !v) return
-    setAnalysisResult({
-      ...analysisResult,
-      selling_points: [...analysisResult.selling_points, v ?? ''],
-    })
-  }
-
-  const removeSellingPoint = (index: number) => {
-    if (!analysisResult) return
-    const sp = analysisResult.selling_points.filter((_, i) => i !== index)
-    setAnalysisResult({ ...analysisResult, selling_points: sp })
-  }
-
-  const clearAllSellingPoints = () => {
-    if (!analysisResult) return
-    setAnalysisResult({ ...analysisResult, selling_points: [] })
-  }
-
-  const updateDetailFocus = (index: number, value: string) => {
-    if (!analysisResult) return
-    const df = [...analysisResult.detail_focus_areas]
-    df[index] = value
-    setAnalysisResult({ ...analysisResult, detail_focus_areas: df })
-  }
-
-  const addDetailFocus = () => {
-    if (!analysisResult || analysisResult.detail_focus_areas.length >= 8) return
-    const newPrompt = isZh
-      ? '产品细节展示。8K resolution, commercial photography quality, ultra-sharp'
-      : 'Product detail showcase. 8K resolution, commercial photography quality, ultra-sharp, no visual noise.'
-    setAnalysisResult({
-      ...analysisResult,
-      detail_focus_areas: [...analysisResult.detail_focus_areas, ''],
-      detail_prompts: [...analysisResult.detail_prompts, newPrompt],
-    })
-  }
-
-  const removeDetailFocus = (index: number) => {
-    if (!analysisResult) return
-    setAnalysisResult({
-      ...analysisResult,
-      detail_focus_areas: analysisResult.detail_focus_areas.filter((_, i) => i !== index),
-      detail_prompts: analysisResult.detail_prompts.filter((_, i) => i !== index),
-    })
-  }
-
-  const clearAllDetailFocus = () => {
-    if (!analysisResult) return
-    setAnalysisResult({ ...analysisResult, detail_focus_areas: [], detail_prompts: [] })
-  }
-
-  const updateDetailPrompt = (index: number, value: string) => {
-    if (!analysisResult) return
-    const dp = [...analysisResult.detail_prompts]
-    dp[index] = value
-    setAnalysisResult({ ...analysisResult, detail_prompts: dp })
-  }
-
-  // Task #16: Apply translation instruction to description
-  const handleTranslate = (lang: TranslateLang) => {
-    if (!description.trim() || !lang) return
-    const langName = TRANSLATE_LANGUAGES.find((l) => l.value === lang)?.label ?? lang
-    // Strip any existing translation instruction prefix
-    const cleaned = description.replace(/^\[翻译为[^\]]*\]\n/, '')
-    setDescription(`[翻译为${langName}]\n${cleaned}`)
-    setTranslateLang(lang)
-    setShowTranslateDropdown(false)
-  }
-
-  // Task #16: Close translate dropdown on outside click
-  useEffect(() => {
-    if (!showTranslateDropdown) return
-    const handler = () => setShowTranslateDropdown(false)
-    // Delay to avoid the same click that opened it from closing it
-    const id = setTimeout(() => {
-      window.addEventListener('click', handler, { once: true })
-    }, 0)
-    return () => {
-      clearTimeout(id)
-      window.removeEventListener('click', handler)
+      setStep('generate', { status: 'done' })
+      setStep('done', { status: 'done' })
+      setProgress(100)
+      setResults(nextResults)
+      setPhase('complete')
+      refreshCredits()
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') return
+      setErrorMessage(friendlyError((error as Error).message ?? 'Generation failed', isZh))
+      setSteps((prev) => prev.map((step) => (step.status === 'active' ? { ...step, status: 'error' } : step)))
+      setPhase('preview')
     }
-  }, [showTranslateDropdown])
+  }, [
+    analysisBlueprint,
+    aspectRatio,
+    backendLocale,
+    editableDesignSpecs,
+    editableImagePlans,
+    imageSize,
+    isZh,
+    model,
+    needsReanalyze,
+    outputLanguage,
+    productImages,
+    selectedDetailModules,
+    setStep,
+    turboEnabled,
+    uploadedUrls,
+  ])
 
-  // Task #17: Escape key closes lightbox
-  useEffect(() => {
-    if (!previewImage) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPreviewImage(null)
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [previewImage])
+  const handleBackToInput = useCallback(() => {
+    setPhase('input')
+    setSteps([])
+    setProgress(0)
+    setErrorMessage(null)
+    setAnalysisParams(null)
+  }, [])
 
-  // Task #17: Download helper
-  const handleDownload = (url: string) => {
-    const a = document.createElement('a')
-    a.href = url
-    a.download = ''
-    a.target = '_blank'
-    a.rel = 'noopener noreferrer'
-    a.click()
-  }
+  const handleBackToPreview = useCallback(() => {
+    setPhase('preview')
+    setSteps([])
+    setProgress(0)
+    setErrorMessage(null)
+  }, [])
 
-  const handleReset = () => {
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort()
+    setPhase(analysisBlueprint ? 'preview' : 'input')
+  }, [analysisBlueprint])
+
+  const handleNewGeneration = useCallback(() => {
     abortRef.current?.abort()
     setPhase('input')
-    setAnalysisResult(null)
-    setImageGroups([])
-    setComplianceWarnings({})
-
-    setError(null)
     setProductImages([])
-    setDescription('')
-    setEditingTagIndex(null)
-    setNewTagValue('')
-    setTranslateLang('')
-    setShowTranslateDropdown(false)
-    setPreviewImage(null)
-  }
+    setRequirements(defaultRequirements)
+    setSelectedDetailModules([])
+    setTurboEnabled(false)
+    setAnalysisBlueprint(null)
+    setEditableDesignSpecs('')
+    setEditableImagePlans([])
+    setAnalysisParams(null)
+    setSteps([])
+    setProgress(0)
+    setResults([])
+    setErrorMessage(null)
+    setUploadedUrls([])
+  }, [defaultRequirements])
 
-  const isLocked = phase !== 'input' && phase !== 'preview'
-  const canAnalyze = productImages.length > 0 && phase === 'input'
-  const canGenerate =
-    phase === 'preview' &&
-    analysisResult !== null &&
-    (credits === null || credits >= totalCost)
+  const rightPanelTitle = phase === 'preview'
+    ? (isZh ? '详情页规划方案' : 'Detail Page Plan')
+    : phase === 'complete'
+      ? (isZh ? '生成结果' : 'Results')
+      : phase === 'generating'
+        ? (isZh ? '生成中...' : 'Generating...')
+        : phase === 'analyzing'
+          ? (isZh ? '规划中...' : 'Planning...')
+          : (isZh ? '详情页模块结果区' : 'Detail Page Workspace')
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const rightPanelSubtitle = phase === 'preview'
+    ? (isZh ? '确认并微调每个详情页模块后再生成图片' : 'Review and refine each detail-page module before generating images')
+    : phase === 'complete'
+      ? (isZh ? '每个模块对应 1 张结果图' : 'One generated image per module')
+      : phase === 'generating'
+        ? (isZh ? '正在根据规划生成模块图片' : 'Generating module images from the approved plan')
+        : phase === 'analyzing'
+          ? (isZh ? '正在分析产品并生成详情页规划方案' : 'Analyzing the product and building the detail-page plan')
+          : t('emptyState')
 
   return (
     <CorePageShell maxWidthClass="max-w-[1360px]">
-      {/* Header */}
       <div className="mb-7 flex items-start gap-3">
         <SectionIcon icon={ShoppingBag} className="mt-1" />
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-[#1a1d24]">{t('title')}</h1>
-            <span className="rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+            <span className="rounded-full bg-gradient-to-r from-[#1d5fd0] to-[#4c8ef7] px-2.5 py-0.5 text-[11px] font-semibold text-white">
               {t('badge')}
             </span>
           </div>
@@ -597,607 +710,337 @@ export function EcomStudioForm() {
         </div>
       </div>
 
-      {/* Two-panel layout */}
-      <div className="grid gap-7 xl:grid-cols-[440px_minmax(0,1fr)]">
-        {/* ── Left Panel ──────────────────────────────────────────────────── */}
-        <div className="flex flex-col gap-5">
-          {/* Product Image Upload */}
-          <div className="rounded-[20px] border border-[#e0e2e8] bg-white p-5">
-            <h3 className="mb-3 text-[14px] font-semibold text-[#1a1d24]">
-              {t('productImage')}
-            </h3>
-            <MultiImageUploader
-              images={productImages}
-              onAdd={(files) =>
-                setProductImages((prev) => [
-                  ...prev,
-                  ...files.map((f) => ({
-                    file: f,
-                    previewUrl: URL.createObjectURL(f),
-                  })),
-                ])
-              }
-              onRemove={(i) =>
-                setProductImages((prev) => prev.filter((_, idx) => idx !== i))
-              }
-              maxImages={10}
-              maxSizeMB={10}
-              disabled={isLocked}
-              compactAfterUpload
-            />
-          </div>
+      {errorMessage && phase !== 'complete' && (
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {errorMessage}
+        </div>
+      )}
 
-          {/* Product Description */}
-          <div className="rounded-[20px] border border-[#e0e2e8] bg-white p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <h3 className="text-[14px] font-semibold text-[#1a1d24]">
-                {t('descriptionLabel')}
-              </h3>
-              {/* Task #16: Translate button + dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  disabled={!description.trim() || isLocked}
-                  onClick={() => setShowTranslateDropdown((v) => !v)}
-                  className={cn(
-                    'flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] transition-colors',
-                    description.trim() && !isLocked
-                      ? 'text-[#7d818d] hover:text-[#17191f] hover:bg-[#f1f3f6]'
-                      : 'text-[#d0d2da] cursor-not-allowed'
-                  )}
-                  title={isZh ? '翻译描述' : 'Translate description'}
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                  {translateLang && (
-                    <span className="text-[11px]">
-                      {TRANSLATE_LANGUAGES.find((l) => l.value === translateLang)?.label}
-                    </span>
-                  )}
-                </button>
-                {showTranslateDropdown && (
-                  <div className="absolute left-0 top-full z-50 mt-1 w-[130px] rounded-xl border border-[#e0e2e8] bg-white py-1 shadow-lg">
-                    {TRANSLATE_LANGUAGES.map((lang) => (
-                      <button
-                        key={lang.value}
-                        type="button"
-                        onClick={() => handleTranslate(lang.value)}
-                        className={cn(
-                          'flex w-full items-center px-3 py-1.5 text-left text-[13px] transition-colors hover:bg-[#f1f3f6]',
-                          translateLang === lang.value
-                            ? 'text-[#17191f] font-medium'
-                            : 'text-[#555a67]'
-                        )}
-                      >
-                        {lang.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+      <div className="grid gap-6 xl:grid-cols-[540px_minmax(0,1fr)]">
+        <div className="space-y-5">
+          <fieldset disabled={isProcessing}>
+            <div className={`${leftCardClass} ${isProcessing ? 'opacity-70' : ''}`}>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+                  <ImageIcon className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-[15px] font-semibold text-[#1a1d24]">{t('productImage')}</h3>
+                  <p className="text-[13px] text-[#7d818d]">
+                    {isZh ? '可上传多张，但必须是同一个产品。多角度/细节图效果最好。' : 'You can upload multiple images, but they must be the same product. Multiple angles and detail shots work best.'}
+                  </p>
+                </div>
+                <span className="text-[13px] text-[#6f7380]">{productImages.length}/6</span>
+              </div>
+              <MultiImageUploader
+                images={productImages}
+                onAdd={handleAddImages}
+                onRemove={handleRemoveImage}
+                maxImages={6}
+                compactAfterUpload
+                thumbnailGridCols={3}
+                showIndexBadge
+                label={isZh ? '拖拽或点击上传同款商品参考图' : 'Drop or click to upload same-product reference images'}
+                hideDefaultFooter
+                dropzoneClassName="min-h-[186px] rounded-[20px] border-[#d0d4dc] bg-[#f1f3f6] px-6 py-8 hover:border-[#bcc2ce] hover:bg-[#eef1f4]"
+                labelClassName="text-sm leading-6 text-[#2b2f38]"
+              />
+            </div>
+          </fieldset>
+
+          <div className={leftCardClass}>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+                <Settings2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-[15px] font-semibold text-[#1a1d24]">
+                  {isZh ? '组图要求' : 'Detail Page Brief'}
+                </h3>
+                <p className="text-[13px] text-[#7d818d]">
+                  {isZh ? '复用主图生成的最新输入结构，用户要求优先于图片分析。' : 'Uses the latest Genesis-style brief. User requirements override image inference.'}
+                </p>
               </div>
             </div>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+
+            <Textarea
+              value={requirements}
+              onChange={(event) => setRequirements(event.target.value)}
+              rows={5}
+              disabled={isProcessing}
               placeholder={t('descriptionPlaceholder')}
-              disabled={isLocked}
-              rows={3}
-              className="w-full resize-none rounded-xl border border-[#e0e2e8] bg-[#f8f9fb] px-4 py-3 text-[13px] text-[#1a1d24] placeholder:text-[#b0b3bc] focus:border-[#17191f] focus:outline-none disabled:opacity-60"
+              className="min-h-[128px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] leading-6"
             />
+
+            <div className="mt-4 space-y-1.5">
+              <Label className="text-[13px] font-medium text-[#5a5e6b]">
+                {isZh ? '输出语言' : 'Output Language'}
+              </Label>
+              <Select
+                value={outputLanguage}
+                onValueChange={(value) => setOutputLanguage(value as OutputLanguage)}
+                disabled={isProcessing}
+              >
+                <SelectTrigger className={panelInputClass}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {outputLanguages.map((language) => (
+                    <SelectItem key={language.value} value={language.value}>
+                      {language.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('model')}</Label>
+                <Select
+                  value={model}
+                  onValueChange={(value) => setModel(value as GenerationModel)}
+                  disabled={isProcessing}
+                >
+                  <SelectTrigger className={panelInputClass}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AVAILABLE_MODELS.map((availableModel) => (
+                      <SelectItem key={availableModel.value} value={availableModel.value}>
+                        {isZh ? availableModel.tierLabel.zh : availableModel.tierLabel.en}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('aspectRatio')}</Label>
+                <Select
+                  value={aspectRatio}
+                  onValueChange={(value) => setAspectRatio(value as AspectRatio)}
+                  disabled={isProcessing}
+                >
+                  <SelectTrigger className={panelInputClass}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {aspectRatios.map((ratio) => (
+                      <SelectItem key={ratio.value} value={ratio.value}>
+                        {ratio.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('imageSize')}</Label>
+                <Select
+                  value={imageSize}
+                  onValueChange={(value) => setImageSize(value as ImageSize)}
+                  disabled={isProcessing}
+                >
+                  <SelectTrigger className={panelInputClass}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RESOLUTION_OPTIONS.map((resolution) => (
+                      <SelectItem key={resolution} value={resolution}>
+                        {isZh ? IMAGE_SIZE_LABELS[resolution].zh : IMAGE_SIZE_LABELS[resolution].en}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
 
-          {/* Generation Settings (visible in input & preview) */}
-          {(phase === 'input' || phase === 'preview') && (
-            <GenerationParametersCard
-              model={model}
-              onModelChange={setModel}
-              aspectRatio={aspectRatio}
-              onAspectRatioChange={setAspectRatio}
-              imageSize={imageSize}
-              onImageSizeChange={setImageSize}
-              disabled={isLocked}
-              turboEnabled={turboEnabled}
-              onTurboChange={setTurboEnabled}
-              outputLanguage={outputLanguage}
-              onOutputLanguageChange={setOutputLanguage}
-            />
+          <EcomDetailModuleSelector
+            selectedIds={selectedDetailModules}
+            onToggle={handleToggleModule}
+            disabled={isProcessing}
+            isZh={isZh}
+          />
+
+          {phase === 'preview' && (
+            <div className="rounded-[28px] border border-[#d0d4dc] bg-white px-4 py-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${turboEnabled ? 'bg-[#e7f8ee] text-[#22b968]' : 'bg-[#eceef2] text-[#7a7f8b]'}`}>
+                    <Zap className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? 'Turbo 加速模式' : 'Turbo Mode'}</p>
+                    <p className="text-[13px] text-[#7d818d]">{isZh ? '更快、更稳定' : 'Faster and more stable'}</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={turboEnabled}
+                  onCheckedChange={setTurboEnabled}
+                  className="h-8 w-14 border-0 data-[state=checked]:bg-[#1a1d24] data-[state=unchecked]:bg-[#d8d9dd]"
+                />
+              </div>
+            </div>
           )}
 
-          {/* Analyze Button */}
           {phase === 'input' && (
             <Button
               size="lg"
               onClick={handleAnalyze}
-              disabled={!canAnalyze}
-              className="h-12 w-full rounded-2xl bg-[#17191f] text-[15px] font-semibold text-white hover:bg-[#2a2d36]"
+              disabled={productImages.length === 0 || selectedModules.length === 0}
+              className="h-14 w-full rounded-3xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#13151a] disabled:bg-[#9a9ca3]"
             >
               <Sparkles className="mr-2 h-4 w-4" />
               {t('analyzeButton')}
             </Button>
           )}
 
-          {/* Generate Button */}
+          {phase === 'analyzing' && (
+            <Button
+              size="lg"
+              disabled
+              className="h-14 w-full rounded-3xl bg-[#9a9ca3] text-base font-semibold text-white"
+            >
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {isZh ? '正在生成详情页规划方案' : 'Building detail page plan'}
+            </Button>
+          )}
+
           {phase === 'preview' && (
+            <div className="space-y-4">
+              {needsReanalyze && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  {isZh ? '上传图、组图要求、输出语言或详情页模块已变更，请先重新生成详情页规划方案。' : 'Images, brief, output language, or modules changed. Please rebuild the detail plan first.'}
+                </div>
+              )}
+              {insufficientCredits && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {tc('insufficientCredits')}
+                </div>
+              )}
+              {needsReanalyze ? (
+                <Button
+                  size="lg"
+                  onClick={handleAnalyze}
+                  className="h-14 w-full rounded-3xl bg-amber-600 text-[17px] font-semibold text-white hover:bg-amber-700"
+                >
+                  <RefreshCw className="mr-2 h-5 w-5" />
+                  {isZh ? '重新生成详情页规划方案' : 'Rebuild Detail Page Plan'}
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={handleGenerate}
+                  disabled={editableImagePlans.length === 0 || insufficientCredits}
+                  className="h-14 w-full rounded-3xl bg-[#171a22] text-[17px] font-semibold text-white hover:bg-[#11131a] disabled:bg-[#9ca1ad]"
+                >
+                  {isZh
+                    ? `确认生成 ${editableImagePlans.length} 张图片`
+                    : `Generate ${editableImagePlans.length} ${editableImagePlans.length === 1 ? 'image' : 'images'}`}
+                </Button>
+              )}
+              <p className="text-center text-[14px] text-[#7b808c]">
+                {isZh ? `消耗 ${totalCost} 积分` : `Cost ${totalCost} credits`}
+              </p>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleBackToInput}
+                className="h-14 w-full rounded-3xl border-[#d9dde4] bg-[#f1f3f6] text-[17px] font-semibold text-[#1e2128] hover:bg-[#e8ebf0]"
+              >
+                <ArrowLeft className="mr-2 h-5 w-5" />
+                {isZh ? '返回编辑' : 'Back to Edit'}
+              </Button>
+            </div>
+          )}
+
+          {phase === 'generating' && (
             <div className="space-y-3">
               <Button
                 size="lg"
-                onClick={handleGenerate}
-                disabled={!canGenerate}
-                className="h-12 w-full rounded-2xl bg-[#17191f] text-[15px] font-semibold text-white hover:bg-[#2a2d36]"
+                disabled
+                className="h-14 w-full rounded-3xl bg-[#8f9199] text-[17px] font-semibold text-white"
               >
-                {t('confirmGenerate', {
-                  count: totalImageCount,
-                  cost: totalCost,
-                })}
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {isZh ? '正在生成图片' : 'Generating Images'}
               </Button>
-              <CreditCostBadge cost={totalCost} className="mx-auto flex" />
               <Button
                 variant="outline"
-                size="sm"
-                onClick={() => setPhase('input')}
-                className="w-full"
+                size="lg"
+                onClick={handleStop}
+                className="h-14 w-full rounded-3xl border-[#d9dde4] bg-[#f1f3f6] text-[17px] font-semibold text-[#1e2128] hover:bg-[#e8ebf0]"
               >
-                {isZh ? '返回上一步' : 'Back to Edit'}
+                {tc('stop')}
               </Button>
             </div>
           )}
 
-          {/* New Generation button */}
           {phase === 'complete' && (
-            <Button
-              size="lg"
-              onClick={handleReset}
-              className="h-12 w-full rounded-2xl"
-            >
-              {isZh ? '新建生成' : 'New Generation'}
-            </Button>
+            <div className="space-y-3">
+              <Button
+                size="lg"
+                onClick={handleNewGeneration}
+                className="h-14 w-full rounded-3xl bg-[#111318] text-[17px] font-semibold text-white hover:bg-[#0a0b10]"
+              >
+                {isZh ? '新建生成' : 'New Generation'}
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleBackToPreview}
+                className="h-14 w-full rounded-3xl border-[#d9dde4] bg-[#f1f3f6] text-[17px] font-semibold text-[#1e2128] hover:bg-[#e8ebf0]"
+              >
+                <ArrowLeft className="mr-2 h-5 w-5" />
+                {isZh ? '返回规划方案' : 'Back to Plan'}
+              </Button>
+            </div>
           )}
         </div>
 
-        {/* ── Right Panel ─────────────────────────────────────────────────── */}
         <div className="rounded-[30px] border border-[#e0e2e8] bg-white p-6 xl:p-8">
-          {/* Analyzing phase */}
-          {phase === 'analyzing' && (
+          <div className="mb-6">
+            <h2 className="text-[18px] font-semibold text-[#1a1d24]">{rightPanelTitle}</h2>
+            <p className="mt-1 text-[13px] text-[#7d818d]">{rightPanelSubtitle}</p>
+          </div>
+
+          {phase === 'input' && (
+            <div className="flex min-h-[620px] flex-col items-center justify-center px-4 text-center">
+              <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#ececef] text-[#7f8390]">
+                <Sparkles className="h-8 w-8" />
+              </div>
+              <p className="max-w-[360px] text-base leading-7 text-[#7b808c]">{t('emptyState')}</p>
+            </div>
+          )}
+
+          {(phase === 'analyzing' || phase === 'generating') && (
             <CoreProcessingStatus
-              title={isZh ? '分析中...' : 'Analyzing...'}
-              subtitle={isZh ? 'AI 正在分析产品并生成策略' : 'AI is analyzing your product'}
-              progress={analysisProgress}
-              statusLine={analysisStatus}
-              statusPlacement="center"
+              title={phase === 'analyzing' ? (isZh ? '规划中...' : 'Planning...') : (isZh ? '生成中...' : 'Generating...')}
+              subtitle={phase === 'analyzing'
+                ? (isZh ? '正在分析产品并生成详情页规划方案' : 'Analyzing product and creating detail-page plan')
+                : (isZh ? '正在根据规划逐模块生成图片' : 'Generating one image per approved module')}
+              progress={progress}
+              statusLine={[...steps].reverse().find((step) => step.status === 'active')?.label ?? ''}
+              showHeader={false}
+              statusPlacement="below"
             />
           )}
 
-          {/* Preview phase — editable analysis result */}
-          {phase === 'preview' && analysisResult && (
-            <div className="space-y-6">
-              {/* Optimized Description */}
-              <div>
-                <h3 className="mb-2 text-[14px] font-semibold text-[#1a1d24]">
-                  {t('optimizedDesc')}
-                </h3>
-                <textarea
-                  value={analysisResult.optimized_description}
-                  onChange={(e) =>
-                    setAnalysisResult({
-                      ...analysisResult,
-                      optimized_description: e.target.value,
-                    })
-                  }
-                  rows={3}
-                  className="w-full resize-none rounded-xl border border-[#e0e2e8] bg-[#f8f9fb] px-4 py-3 text-[13px] text-[#1a1d24] focus:border-[#17191f] focus:outline-none"
-                />
-              </div>
-
-              {/* Selling Points — Tag chips */}
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-[14px] font-semibold text-[#1a1d24]">
-                    {t('sellingPoints')} ({analysisResult.selling_points.length})
-                  </h3>
-                  {analysisResult.selling_points.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={clearAllSellingPoints}
-                      className="text-[12px] text-[#7d818d] hover:text-red-500 transition-colors"
-                    >
-                      {isZh ? '清空全部' : 'Clear all'}
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {analysisResult.selling_points.map((sp, i) => (
-                    <div key={i} className="group flex items-center rounded-full bg-[#f1f3f6] border border-[#d0d4dc] px-3 py-1.5">
-                      {editingTagIndex === i ? (
-                        <input
-                          type="text"
-                          autoFocus
-                          value={sp}
-                          onChange={(e) => updateSellingPoint(i, e.target.value)}
-                          onBlur={() => {
-                            if (!sp.trim()) removeSellingPoint(i)
-                            setEditingTagIndex(null)
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              if (!sp.trim()) removeSellingPoint(i)
-                              setEditingTagIndex(null)
-                            }
-                            if (e.key === 'Escape') setEditingTagIndex(null)
-                          }}
-                          className="min-w-[60px] max-w-[200px] bg-transparent text-[13px] text-[#1a1d24] outline-none"
-                        />
-                      ) : (
-                        <span
-                          className="cursor-text text-[13px] text-[#1a1d24]"
-                          onClick={() => setEditingTagIndex(i)}
-                        >
-                          {sp || (isZh ? '(空)' : '(empty)')}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeSellingPoint(i)}
-                        className="ml-1.5 text-[#7d818d] hover:text-red-500 transition-colors"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                  {analysisResult.selling_points.length < 5 && (
-                    <div className="flex items-center rounded-full border border-dashed border-[#d0d4dc] px-3 py-1.5">
-                      <input
-                        type="text"
-                        value={newTagValue}
-                        onChange={(e) => setNewTagValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && newTagValue.trim()) {
-                            addSellingPoint(newTagValue.trim())
-                            setNewTagValue('')
-                          }
-                        }}
-                        placeholder={isZh ? '回车添加...' : 'Enter to add...'}
-                        className="min-w-[80px] max-w-[160px] bg-transparent text-[13px] text-[#1a1d24] placeholder:text-[#b0b3bc] outline-none"
-                      />
-                      <Plus className="ml-1 h-3.5 w-3.5 text-[#7d818d]" />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Detail Focus Areas */}
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-[14px] font-semibold text-[#1a1d24]">
-                    {t('detailFocusAreas')} ({analysisResult.detail_focus_areas.length})
-                  </h3>
-                  <div className="flex items-center gap-3">
-                    {analysisResult.detail_focus_areas.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={clearAllDetailFocus}
-                        className="text-[12px] text-[#7d818d] hover:text-red-500 transition-colors"
-                      >
-                        {isZh ? '清空全部' : 'Clear all'}
-                      </button>
-                    )}
-                    {analysisResult.detail_focus_areas.length < 8 && (
-                      <button
-                        type="button"
-                        onClick={addDetailFocus}
-                        className="flex items-center gap-1 text-[12px] text-[#17191f] hover:underline"
-                      >
-                        <Plus className="h-3 w-3" /> {isZh ? '添加' : 'Add'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  {analysisResult.detail_focus_areas.map((df, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500 text-[11px] font-bold text-white">
-                        {i + 1}
-                      </span>
-                      <input
-                        type="text"
-                        value={df}
-                        onChange={(e) => updateDetailFocus(i, e.target.value)}
-                        className="flex-1 rounded-lg border border-[#e0e2e8] bg-[#f8f9fb] px-3 py-2 text-[13px] focus:border-[#17191f] focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeDetailFocus(i)}
-                        className="text-[#b0b3bc] hover:text-red-500"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Main Image Prompt (collapsible) */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowMainPrompt(!showMainPrompt)}
-                  className="flex w-full items-center justify-between rounded-xl border border-[#e0e2e8] bg-[#f8f9fb] px-4 py-3 text-[13px] font-medium text-[#1a1d24]"
-                >
-                  <span>{t('mainImagePrompt')}</span>
-                  {showMainPrompt ? (
-                    <ChevronUp className="h-4 w-4 text-[#7d818d]" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-[#7d818d]" />
-                  )}
-                </button>
-                {showMainPrompt && (
-                  <textarea
-                    value={analysisResult.main_image_prompt}
-                    onChange={(e) =>
-                      setAnalysisResult({
-                        ...analysisResult,
-                        main_image_prompt: e.target.value,
-                      })
-                    }
-                    rows={5}
-                    className="mt-2 w-full resize-none rounded-xl border border-[#e0e2e8] bg-[#f8f9fb] px-4 py-3 text-[12px] font-mono text-[#1a1d24] focus:border-[#17191f] focus:outline-none"
-                  />
-                )}
-              </div>
-
-              {/* Detail Prompts (collapsible) */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowDetailPrompts(!showDetailPrompts)}
-                  className="flex w-full items-center justify-between rounded-xl border border-[#e0e2e8] bg-[#f8f9fb] px-4 py-3 text-[13px] font-medium text-[#1a1d24]"
-                >
-                  <span>
-                    {t('detailPrompts')} ({analysisResult.detail_prompts.length})
-                  </span>
-                  {showDetailPrompts ? (
-                    <ChevronUp className="h-4 w-4 text-[#7d818d]" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-[#7d818d]" />
-                  )}
-                </button>
-                {showDetailPrompts && (
-                  <div className="mt-2 space-y-2">
-                    {analysisResult.detail_prompts.map((dp, i) => (
-                      <div key={i}>
-                        <label className="mb-1 block text-[11px] text-[#7d818d]">
-                          {isZh ? `详情图 ${i + 1}` : `Detail ${i + 1}`}:{' '}
-                          {analysisResult.detail_focus_areas[i] ?? ''}
-                        </label>
-                        <textarea
-                          value={dp}
-                          onChange={(e) => updateDetailPrompt(i, e.target.value)}
-                          rows={3}
-                          className="w-full resize-none rounded-xl border border-[#e0e2e8] bg-[#f8f9fb] px-4 py-2 text-[12px] font-mono text-[#1a1d24] focus:border-[#17191f] focus:outline-none"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+          {phase === 'preview' && (
+            <DesignBlueprint
+              designSpecs={editableDesignSpecs}
+              onDesignSpecsChange={setEditableDesignSpecs}
+              imagePlans={editableImagePlans}
+              onImagePlanChange={(index, plan) => {
+                setEditableImagePlans((prev) => prev.map((item, currentIndex) => (currentIndex === index ? plan : item)))
+              }}
+            />
           )}
 
-          {/* Generating phase */}
-          {phase === 'generating' && (
-            <div className="space-y-6">
-              <CoreProcessingStatus
-                title={isZh ? '生成中...' : 'Generating...'}
-                subtitle={
-                  productImages.length > 1
-                    ? (isZh
-                        ? `正在为 ${productImages.length} 张产品图生成共 ${totalImageCount} 张电商图片`
-                        : `Generating ${totalImageCount} images for ${productImages.length} products`)
-                    : (isZh
-                        ? `正在生成 ${promptsPerProduct} 张电商图片`
-                        : `Generating ${promptsPerProduct} e-commerce images`)
-                }
-                progress={genProgress}
-                statusLine={genStatus}
-                statusPlacement="below"
-              />
-              {/* Per-product progress during generation */}
-              {productImages.length > 1 && imageGroups.length > 0 && (
-                <div className="space-y-4">
-                  {imageGroups.map((group, gIdx) => {
-                    const groupDone = group.images.filter((img) => img.url).length
-                    const groupTotal = promptsPerProduct
-                    return (
-                      <div key={gIdx} className="rounded-xl border border-[#e0e2e8] bg-[#f8f9fb] p-3">
-                        <div className="mb-2 flex items-center gap-2">
-                          <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-[#e0e2e8]">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={group.sourcePreview} alt="" className="h-full w-full object-cover" />
-                          </div>
-                          <span className="text-[12px] font-medium text-[#1a1d24]">
-                            {isZh ? `产品 ${gIdx + 1}` : `Product ${gIdx + 1}`}
-                          </span>
-                          <span className="text-[11px] text-[#7d818d]">
-                            {groupDone}/{groupTotal}
-                          </span>
-                        </div>
-                        {group.images.some((img) => img.url) && (
-                          <ResultGallery
-                            images={group.images.filter((img) => img.url)}
-                            isLoading
-                            loadingCount={groupTotal - groupDone}
-                            aspectRatio={aspectRatio}
-                          />
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-              {/* Single product — show flat gallery */}
-              {productImages.length <= 1 && generatedImages.some((img) => img.url) && (
-                <ResultGallery
-                  images={generatedImages.filter((img) => img.url)}
-                  isLoading
-                  loadingCount={totalImageCount - generatedImages.filter((img) => img.url).length}
-                  aspectRatio={aspectRatio}
-                />
-              )}
-            </div>
-          )}
-
-          {/* Complete phase */}
           {phase === 'complete' && (
-            <div className="space-y-4">
-              {/* Compliance warnings */}
-              {Object.keys(complianceWarnings).length > 0 && (
-                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                  <div className="text-[13px] text-amber-800">
-                    <p className="font-medium">{t('complianceWarning')}</p>
-                    <ul className="mt-1 list-disc pl-4 text-[12px]">
-                      {Object.entries(complianceWarnings).flatMap(([, violations]) =>
-                        violations.map((v, vi) => <li key={vi}>{v}</li>)
-                      )}
-                    </ul>
-                  </div>
-                </div>
-              )}
-              {/* Grouped results for multi-product */}
-              {imageGroups.length > 1 ? (
-                <div className="space-y-6">
-                  {imageGroups.map((group, gIdx) => (
-                    <div key={gIdx} className="space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-[#e0e2e8]">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={group.sourcePreview} alt="" className="h-full w-full object-cover" />
-                        </div>
-                        <div>
-                          <h4 className="text-[13px] font-semibold text-[#1a1d24]">
-                            {isZh ? `产品 ${gIdx + 1}` : `Product ${gIdx + 1}`}
-                          </h4>
-                          <p className="text-[11px] text-[#7d818d]">
-                            {group.images.filter((img) => img.url).length} {isZh ? '张图片' : 'images'}
-                            {group.failed && (
-                              <span className="ml-2 text-red-500">
-                                {isZh ? '部分失败' : 'Partial failure'}
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                        {group.failed && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              // Retry is handled by starting a new generation
-                              void handleGenerate()
-                            }}
-                            className="ml-auto flex items-center gap-1 text-[12px]"
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                            {isZh ? '重试' : 'Retry'}
-                          </Button>
-                        )}
-                      </div>
-                      {group.images.filter((img) => img.url).length > 0 ? (
-                        <ResultGallery
-                          images={group.images.filter((img) => img.url)}
-                          aspectRatio={aspectRatio}
-                          onImageClick={(img, i) =>
-                            setPreviewImage({ url: img.url, index: i, groupIndex: gIdx })
-                          }
-                        />
-                      ) : (
-                        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-[12px] text-red-600">
-                          <AlertTriangle className="h-3.5 w-3.5" />
-                          {group.error || (isZh ? '该产品图片生成失败' : 'Generation failed for this product')}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <ResultGallery
-                  images={generatedImages}
-                  aspectRatio={aspectRatio}
-                  onClear={() => setGeneratedImages([])}
-                  onImageClick={(img, i) =>
-                    setPreviewImage({ url: img.url, index: i })
-                  }
-                />
-              )}
-            </div>
-          )}
-
-          {/* Input phase — show results or empty state */}
-          {phase === 'input' && generatedImages.length > 0 && (
-            <div className="space-y-4">
-              <ResultGallery
-                images={generatedImages}
-                aspectRatio={aspectRatio}
-                onClear={() => setGeneratedImages([])}
-                onImageClick={(img, i) =>
-                  setPreviewImage({ url: img.url, index: i })
-                }
-              />
-            </div>
-          )}
-          {phase === 'input' && generatedImages.length === 0 && (
-            <div className="flex min-h-[300px] items-center justify-center">
-              <div className="text-center">
-                <ShoppingBag className="mx-auto mb-3 h-12 w-12 text-[#d0d2da]" />
-                <p className="text-[14px] text-[#7d818d]">{t('emptyState')}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Error */}
-          {error && (
-            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-[13px] text-red-700">
-              {error}
-            </div>
+            <ResultGallery images={results} aspectRatio={aspectRatio} />
           )}
         </div>
       </div>
-
-      {/* Task #17: Lightbox preview modal */}
-      {previewImage && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm"
-          onClick={() => setPreviewImage(null)}
-        >
-          {/* Close button */}
-          <button
-            type="button"
-            onClick={() => setPreviewImage(null)}
-            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-          >
-            <X className="h-5 w-5 text-white" />
-          </button>
-
-          <div
-            className="flex max-h-[90vh] max-w-4xl flex-col items-center gap-3 px-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={previewImage.url}
-              alt={`Preview ${previewImage.index + 1}`}
-              className="max-h-[80vh] max-w-full rounded-xl object-contain"
-            />
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleDownload(previewImage.url)}
-                className="flex items-center gap-1.5 rounded-lg bg-white/15 px-4 py-2 text-[13px] font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/25"
-              >
-                <Download className="h-4 w-4" />
-                {isZh ? '下载' : 'Download'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </CorePageShell>
   )
 }

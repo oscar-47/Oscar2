@@ -14,7 +14,20 @@
     },
     "stream": { "type": "boolean", "default": true },
     "clothingMode": { "type": "string" },
-    "uiLanguage": { "type": "string", "default": "en" }
+    "module": {
+      "type": "string",
+      "enum": ["genesis", "default", "clothing", "ecom-detail"]
+    },
+    "uiLanguage": { "type": "string", "default": "en" },
+    "styleConstraint": {
+      "type": "object",
+      "properties": {
+        "selections": { "type": "object", "additionalProperties": { "type": "string" } },
+        "prompt": { "type": "string" },
+        "source": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
   },
   "required": ["analysisJson"],
   "additionalProperties": true

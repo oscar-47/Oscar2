@@ -1,6 +1,6 @@
 {
   "nav": {
-    "studioGenesis": "Image Suite",
+    "studioGenesis": "Hero Image Generator",
     "aestheticMirror": "Aesthetic Mirror",
     "clothingStudio": "Clothing Details Suite",
     "ecomStudio": "One-Click Generate",
@@ -43,7 +43,7 @@
     "hero": {
       "badge": "AI Business Visual Engine",
       "title": "Professional AI Visual Solutions",
-      "subtitle": "Image Suite Generation · Style Replication · Detail-Page Production · Commercial Retouching, all in one workflow for faster e-commerce output.",
+      "subtitle": "Hero Image Generation · Style Replication · Detail-Page Production · Commercial Retouching, all in one workflow for faster e-commerce output.",
       "cta": "Enter Workspace",
       "platformHint": "Compatible with 30+ mainstream domestic and global e-commerce style and size standards.",
       "platforms": "Taobao|Tmall|JD.com|Pinduoduo|Douyin E-Commerce|Kuaishou E-Commerce|Xiaohongshu|WeChat Shop|Amazon|Shopee|Lazada|AliExpress|SHEIN|TikTok Shop"
@@ -80,14 +80,14 @@
   },
   "studio": {
     "genesis": {
-      "title": "Studio Genesis",
-      "description": "One Shot, A Complete Visual Ecosystem. Architect your entire product gallery in seconds.",
+      "title": "Hero Image Generator",
+      "description": "Upload product images, let AI analyze product traits and selling points, and generate high-conversion e-commerce hero images.",
       "designBrief": "Design Brief",
       "designBriefPlaceholder": "Describe your product's USP and desired aesthetic",
       "outputLanguage": "Output Language",
       "outputLanguageNone": "None Text(Visual Only)",
-      "analyze": "Analyze & Blueprint",
-      "emptyState": "Upload your product photo and fill the brief. Click 'Analyze & Blueprint' to start.",
+      "analyze": "Analyze Product",
+      "emptyState": "Upload your product images and fill the hero-image brief. Click 'Analyze Product' to start.",
       "planPreview": "Design Blueprint",
       "planPreviewDesc": "Review the proposed scene logic and asset distribution.",
       "designSpecs": "Design Specifications",
@@ -261,22 +261,22 @@
     },
     "ecomStudio": {
       "title": "One-Click Generate Studio",
-      "description": "Upload a product image, let AI optimize copy and prompts, then generate a full main-image + detail-image set.",
-      "badge": "Platform Ready",
+      "description": "Upload multi-angle references of the same product, choose detail-page modules, let AI build the plan, then generate one image per module.",
+      "badge": "Detail Planning",
       "productImage": "Product Image",
       "platformStyle": "Platform Style",
-      "descriptionLabel": "Product Description",
-      "descriptionPlaceholder": "Describe product specs, target audience, key benefits, or campaign goals...",
-      "analyzeButton": "AI Optimize Description",
+      "descriptionLabel": "Requirements",
+      "descriptionPlaceholder": "Describe the product, audience, key benefits, scene preference, or campaign focus...",
+      "analyzeButton": "Generate Detail Page Plan",
       "settings": "Generation Settings",
-      "optimizedDesc": "Optimized Description",
+      "optimizedDesc": "Detail Page Plan",
       "sellingPoints": "Selling Points",
       "detailFocusAreas": "Detail Focus Areas",
       "mainImagePrompt": "Main Image Prompt",
       "detailPrompts": "Detail Prompts",
       "confirmGenerate": "Confirm Generate {count} images — {cost} credits",
       "complianceWarning": "Amazon compliance warning: some strict main-image rules may still be violated.",
-      "emptyState": "Upload a product image and click \"AI Optimize Description\" to preview your strategy."
+      "emptyState": "Upload reference images of the same product, fill in the brief, choose detail-page modules, and click \"Generate Detail Page Plan\" to start."
     },
     "clothingStudio": {
       "title": "Clothing Studio",
@@ -420,7 +420,7 @@
   },
   "history": {
     "title": "Generation History",
-    "empty": "No generations yet. Start with Studio Genesis!",
+    "empty": "No generations yet. Start with Hero Image Generator!",
     "loading": "Loading history...",
     "loadingMore": "Loading...",
     "loadMore": "Load more",

@@ -39,6 +39,21 @@ type AnalysisBlueprint = {
   _ai_meta: Record<string, unknown>;
 };
 
+type GenesisStyleDirectionKey = "sceneStyle" | "lighting" | "composition";
+
+type GenesisStyleDirectionGroup = {
+  key: GenesisStyleDirectionKey;
+  options: string[];
+  recommended: string | null;
+};
+
+type GenesisAnalysisResult = {
+  product_summary: string;
+  style_directions: GenesisStyleDirectionGroup[];
+  copy_plan: string;
+  _ai_meta: Record<string, unknown>;
+};
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -129,6 +144,20 @@ function parseJsonFromContent(content: string): Record<string, unknown> {
 
 function sanitizeString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function normalizeStyleConstraintPrompt(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  const prompt = typeof record.prompt === "string" ? record.prompt.trim() : "";
+  return prompt.length > 0 ? prompt : "";
+}
+
+function normalizeStyleConstraintSource(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const source = typeof record.source === "string" ? record.source.trim() : "";
+  return source.length > 0 ? source : null;
 }
 
 function outputLanguageLabel(outputLanguage: string): string {
@@ -225,6 +254,170 @@ function normalizeBlueprint(
   return {
     images,
     design_specs: designSpecs,
+    _ai_meta: {},
+  };
+}
+
+function limitLabelLength(value: string, isZh: boolean): string {
+  const chars = Array.from(value.trim());
+  return chars.slice(0, isZh ? 5 : 24).join("");
+}
+
+function fallbackGenesisDirectionOptions(
+  key: GenesisStyleDirectionKey,
+  isZh: boolean,
+): string[] {
+  if (isZh) {
+    if (key === "sceneStyle") return ["极简", "生活感", "高级感"];
+    if (key === "lighting") return ["柔光", "自然光", "层次光"];
+    return ["正视角", "微俯拍", "特写"];
+  }
+
+  if (key === "sceneStyle") return ["minimal", "lifestyle", "premium"];
+  if (key === "lighting") return ["soft light", "daylight", "contrast"];
+  return ["front", "overhead", "close-up"];
+}
+
+function extractGenesisDirectionRecord(
+  raw: unknown,
+  key: GenesisStyleDirectionKey,
+): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object") return null;
+  if (Array.isArray(raw)) {
+    const match = raw.find((item) =>
+      item &&
+      typeof item === "object" &&
+      (item as Record<string, unknown>).key === key
+    );
+    return match && typeof match === "object" ? match as Record<string, unknown> : null;
+  }
+  const obj = raw as Record<string, unknown>;
+  const direct = obj[key];
+  return direct && typeof direct === "object" ? direct as Record<string, unknown> : null;
+}
+
+function normalizeGenesisStyleDirections(
+  parsed: Record<string, unknown>,
+  uiLanguage?: string,
+): GenesisStyleDirectionGroup[] {
+  const isZh = (uiLanguage ?? "en").startsWith("zh");
+  const rawDirections = parsed.style_directions ?? parsed.styleDirections ?? null;
+  const keys: GenesisStyleDirectionKey[] = ["sceneStyle", "lighting", "composition"];
+
+  return keys.map((key) => {
+    const record = extractGenesisDirectionRecord(rawDirections, key);
+    const rawOptions = Array.isArray(record?.options) ? record?.options : [];
+    const options = Array.from(new Set(
+      rawOptions
+        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .map((item) => limitLabelLength(item, isZh))
+        .filter((item) => item.length > 0),
+    )).slice(0, 3);
+    const fallbackOptions = fallbackGenesisDirectionOptions(key, isZh);
+    const finalOptions = options.length > 0 ? options : fallbackOptions;
+    const rawRecommended = typeof record?.recommended === "string"
+      ? limitLabelLength(record.recommended, isZh)
+      : "";
+    const recommended = rawRecommended && finalOptions.includes(rawRecommended)
+      ? rawRecommended
+      : finalOptions[0] ?? null;
+    return {
+      key,
+      options: finalOptions,
+      recommended,
+    };
+  });
+}
+
+function extractGenesisBriefHints(requirements: string, isZh: boolean): { product: string; sellingPoints: string[] } {
+  const cleaned = requirements.trim();
+  if (!cleaned) return { product: "", sellingPoints: [] };
+
+  if (isZh) {
+    const normalized = cleaned.replace(/\s+/g, " ").replace(/[：:]/g, "是");
+    const productMatch = normalized.match(/(?:我的商品|商品|产品)\s*是\s*([^，,。；;\n]+)/);
+    const sellingMatch = normalized.match(/(?:主要卖点|卖点)\s*是\s*([^。;\n]+)/);
+
+    return {
+      product: (productMatch?.[1] ?? "").trim(),
+      sellingPoints: (sellingMatch?.[1] ?? "")
+        .split(/[，,、/|；;\s]+/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 4),
+    };
+  }
+
+  const normalized = cleaned.replace(/\s+/g, " ");
+  const productMatch = normalized.match(/(?:my product is|product is)\s+([^,.;\n]+)/i);
+  const sellingMatch = normalized.match(/(?:key selling points? are|key selling point is|selling points? are|selling point is)\s+([^.;\n]+)/i);
+
+  return {
+    product: (productMatch?.[1] ?? "").trim(),
+    sellingPoints: (sellingMatch?.[1] ?? "")
+      .split(/[,/|;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 4),
+  };
+}
+
+function buildGenesisCopyFallback(requirements: string, outputLanguage: string, uiLanguage: string): string {
+  if (outputLanguage === "none") return "";
+
+  const isZh = uiLanguage.startsWith("zh");
+  const { product, sellingPoints } = extractGenesisBriefHints(requirements, isZh);
+
+  if (isZh) {
+    if (product && sellingPoints.length > 0) return `${product}，${sellingPoints.join("，")}`;
+    if (product) return `${product}，突出核心卖点`;
+    if (sellingPoints.length > 0) return `主打${sellingPoints.join("，")}`;
+    return requirements.trim();
+  }
+
+  if (product && sellingPoints.length > 0) return `${product}: ${sellingPoints.join(", ")}`;
+  if (product) return `${product} with standout selling points`;
+  if (sellingPoints.length > 0) return `Highlight ${sellingPoints.join(", ")}`;
+  return requirements.trim();
+}
+
+function copyPlanMatchesBrief(copyPlan: string, requirements: string, uiLanguage: string): boolean {
+  const { product, sellingPoints } = extractGenesisBriefHints(requirements, uiLanguage.startsWith("zh"));
+  const keywords = [product, ...sellingPoints]
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+  if (keywords.length === 0) return true;
+
+  const normalizedCopy = copyPlan.replace(/\s+/g, "").toLowerCase();
+  return keywords.some((keyword) => normalizedCopy.includes(keyword.replace(/\s+/g, "").toLowerCase()));
+}
+
+function normalizeGenesisAnalysis(
+  parsed: Record<string, unknown>,
+  outputLanguage: string,
+  uiLanguage: string,
+  requirements: string,
+): GenesisAnalysisResult {
+  const isZh = uiLanguage.startsWith("zh");
+  const fallbackSummary = requirements
+    || (isZh
+      ? "根据产品图分析产品特征，并围绕核心卖点生成主图。"
+      : "Analyze the product images and generate hero images around the key selling points.");
+  const rawCopyPlan = sanitizeString(parsed.copy_plan ?? parsed.copyPlan, "");
+  const fallbackCopyPlan = buildGenesisCopyFallback(requirements, outputLanguage, uiLanguage);
+
+  return {
+    product_summary: sanitizeString(
+      parsed.product_summary ?? parsed.productSummary,
+      fallbackSummary,
+    ),
+    style_directions: normalizeGenesisStyleDirections(parsed, uiLanguage),
+    copy_plan: outputLanguage === "none"
+      ? ""
+      : rawCopyPlan && copyPlanMatchesBrief(rawCopyPlan, requirements, uiLanguage)
+        ? rawCopyPlan
+        : fallbackCopyPlan,
     _ai_meta: {},
   };
 }
@@ -384,10 +577,34 @@ function resolveImageRoute(modelFromRequest: string): ImageRoute {
 
   // ToAPIs models (ta-*)
   if (TA_MODEL_MAP[model]) {
+    const toApisEndpoint = Deno.env.get("TOAPIS_API_ENDPOINT") ?? "";
+    const toApisApiKey = Deno.env.get("TOAPIS_API_KEY") ?? "";
+    if (toApisEndpoint && toApisApiKey) {
+      return {
+        provider: "toapis",
+        endpoint: toApisEndpoint,
+        apiKey: toApisApiKey,
+        model: TA_MODEL_MAP[model],
+      };
+    }
+
+    // Fallback for environments without ToAPIs credentials:
+    // map ta-* aliases back to equivalent OpenRouter models.
+    const openRouterAlias = model.replace(/^ta-/, "or-");
+    if (OR_MODEL_MAP[openRouterAlias]) {
+      console.warn(`TOAPIS_NOT_CONFIGURED fallback_to_openrouter model=${model} alias=${openRouterAlias}`);
+      return {
+        provider: "openrouter",
+        endpoint: Deno.env.get("OPENROUTER_API_ENDPOINT") ?? "https://openrouter.ai/api/v1/chat/completions",
+        apiKey: Deno.env.get("OPENROUTER_API_KEY") ?? "",
+        model: OR_MODEL_MAP[openRouterAlias],
+      };
+    }
+
     return {
       provider: "toapis",
-      endpoint: Deno.env.get("TOAPIS_API_ENDPOINT") ?? "",
-      apiKey: Deno.env.get("TOAPIS_API_KEY") ?? "",
+      endpoint: toApisEndpoint,
+      apiKey: toApisApiKey,
       model: TA_MODEL_MAP[model],
     };
   }
@@ -701,7 +918,7 @@ Return valid JSON only (no markdown, no explanation):
     ocrData = [];
   }
 
-  await supabase
+  const { error: ocrUpdateError } = await supabase
     .from("generation_jobs")
     .update({
       status: "success",
@@ -712,6 +929,9 @@ Return valid JSON only (no markdown, no explanation):
       duration_ms: Date.now() - startedAt,
     })
     .eq("id", job.id);
+  if (ocrUpdateError) {
+    throw new Error(`OCR_JOB_UPDATE_FAILED: ${ocrUpdateError.message}`);
+  }
 }
 
 async function processAnalysisJob(
@@ -729,6 +949,7 @@ async function processAnalysisJob(
   const outputLanguage = String(payload.outputLanguage ?? payload.targetLanguage ?? uiLanguage ?? "en");
   const imageCount = Math.max(1, Math.min(15, Number(payload.imageCount ?? 1)));
   const requirements = sanitizeString(payload.requirements, "");
+  const studioType = sanitizeString(payload.studioType, "");
   const clothingMode = sanitizeString(payload.clothingMode, "");
   const promptConfigKey = sanitizeString(payload.promptConfigKey, "batch_analysis_prompt_en");
   const mannequinEnabled = Boolean(payload.mannequinEnabled ?? (payload.mannequin as Record<string, unknown>)?.enabled ?? false);
@@ -800,6 +1021,331 @@ async function processAnalysisJob(
 
   const isClothingMode = Boolean(clothingMode);
   const isModelStrategy = clothingMode === "model_strategy";
+  const isGenesisStudio = studioType === "genesis";
+  const isEcomDetailStudio = studioType === "ecom-detail";
+
+  if (isGenesisStudio) {
+    const isZhGenesis = uiLanguage.startsWith("zh");
+    const genesisSystemPrompt = isZhGenesis
+      ? `你是顶级电商主图策划专家。请基于产品图和用户填写的主图要求，输出一个紧凑的 JSON 分析结果，用于后续主图生成。
+
+强规则：
+1. 用户填写的“组图要求/主图要求”优先级高于产品图分析。
+2. 只输出风格方向与共享文案，不要输出图片规划，不要输出整体设计规范。
+3. 风格方向只保留三个维度：sceneStyle、lighting、composition。
+4. 每个维度返回 1 到 3 个中文动态标签，每个标签不超过 5 个字。
+5. 每个维度必须给出一个 recommended 标签，且 recommended 必须来自 options。
+6. 如果输出语言不是纯视觉，copy_plan 必须是一段可直接用于电商主图的共享文案，必须明确吸收用户填写的商品名称和主要卖点，不能泛化，不能忽略卖点关键词。
+7. 如果输出语言为纯视觉，copy_plan 才能返回空字符串。
+8. 所有输出必须是合法 JSON，不要 Markdown，不要解释。`
+      : `You are a top-tier e-commerce hero image strategist. Based on the product images and the user's hero-image brief, return a compact JSON analysis result for downstream hero image generation.
+
+Hard rules:
+1. The user's brief has higher priority than inferred product-image analysis.
+2. Output only style directions and shared copy. Do not output image plans. Do not output design specs.
+3. Style directions must contain only sceneStyle, lighting, and composition.
+4. Each dimension returns 1 to 3 dynamic tags.
+5. Each dimension must provide one recommended tag from its own options.
+6. If the output is not visual-only, copy_plan must be a usable e-commerce hero-image copy block that directly reflects the product description and key selling points from the user's brief.
+7. copy_plan may be empty only in visual-only mode.
+8. Return valid JSON only. No markdown. No explanations.`;
+
+    const genesisUserPrompt = isZhGenesis
+      ? `请严格输出如下 JSON：
+{
+  "product_summary": "一句简洁总结，概括产品特点与用户卖点要求",
+  "style_directions": {
+    "sceneStyle": { "options": ["标签1","标签2","标签3"], "recommended": "标签1" },
+    "lighting": { "options": ["标签1","标签2","标签3"], "recommended": "标签1" },
+    "composition": { "options": ["标签1","标签2","标签3"], "recommended": "标签1" }
+  },
+  "copy_plan": "一段共享文案，非纯视觉模式下必须直接体现商品名称和主要卖点"
+}
+
+分析依据：
+- 优先依据用户要求，尤其是商品描述和主要卖点。
+- 再结合产品图补足真实材质、结构、拍摄角度与商业表现方式。
+- 用户要求与图片冲突时，优先遵循用户要求。
+- 输出语言：${outputLanguageLabel(outputLanguage)}
+- 如果输出语言不是无文字（纯视觉），copy_plan 必须是电商可用文案，直接覆盖用户填写的商品和卖点，不要写空话套话。
+- 如果输出语言为无文字（纯视觉），copy_plan 可以为空；但风格方向仍要正常输出。
+
+用户要求：
+${requirements || "（用户未填写额外要求，仅根据产品图分析）"}
+`
+      : `Return strict JSON in this shape:
+{
+  "product_summary": "One concise summary of product traits and the user's key selling-point brief",
+  "style_directions": {
+    "sceneStyle": { "options": ["tag1","tag2","tag3"], "recommended": "tag1" },
+    "lighting": { "options": ["tag1","tag2","tag3"], "recommended": "tag1" },
+    "composition": { "options": ["tag1","tag2","tag3"], "recommended": "tag1" }
+  },
+  "copy_plan": "One shared copy block that must directly reflect the product and key selling points unless this is visual-only mode"
+}
+
+Analysis rules:
+- Prioritize the user's brief, especially the product description and key selling points.
+- Use the product images only to refine real product traits, structure, angle cues, and commercial presentation.
+- If the brief conflicts with the images, the brief wins.
+- Output language: ${outputLanguageLabel(outputLanguage)}
+- If output language is not visual-only, copy_plan must be usable e-commerce copy that explicitly reflects the product and selling points from the user's brief.
+- If output language is visual-only, copy_plan may be empty, but style directions must still be returned.
+
+User brief:
+${requirements || "(No extra brief provided. Analyze from product images only.)"}
+`;
+
+    const genesisMessages: Array<Record<string, unknown>> = [
+      { role: "system", content: genesisSystemPrompt },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: genesisUserPrompt },
+          { type: "text", text: "Product reference images:" },
+          ...imageDataUrls.map((url) => ({ type: "image_url", image_url: { url } })),
+        ],
+      },
+    ];
+
+    const chatConfig = getQnChatConfig();
+    const analysisTimeoutMs = Math.max(chatConfig.timeoutMs, 90_000);
+    let genesisChatResponse: Record<string, unknown>;
+    try {
+      genesisChatResponse = await callQnChatAPI({
+        model: chatConfig.model,
+        messages: genesisMessages,
+        maxTokens: 900,
+        timeoutMsOverride: analysisTimeoutMs,
+      });
+    } catch (primaryErr) {
+      const fallbackModel = Deno.env.get("QN_IMAGE_MODEL");
+      if (!fallbackModel || fallbackModel === chatConfig.model) throw primaryErr;
+      genesisChatResponse = await callQnChatAPI({
+        model: fallbackModel,
+        messages: genesisMessages,
+        maxTokens: 900,
+        timeoutMsOverride: analysisTimeoutMs,
+      });
+    }
+
+    const content = String((genesisChatResponse as Record<string, unknown>)?.choices?.[0]?.message?.content ?? "");
+    const parsed = parseJsonFromContent(content);
+    const parseFailed = parsed.__parse_failed === true;
+    const parseRawPreview = typeof parsed.__raw_preview === "string" ? parsed.__raw_preview : null;
+    const genesisResult = normalizeGenesisAnalysis(parsed, outputLanguage, uiLanguage, requirements);
+
+    genesisResult._ai_meta = {
+      model: String((genesisChatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
+      usage: ((genesisChatResponse as Record<string, unknown>)?.usage as Record<string, unknown>) ?? {},
+      provider: "qnaigc",
+      image_count: imageCount,
+      target_language: outputLanguage,
+      studio_type: studioType,
+      parse_failed: parseFailed,
+      parse_warning: parseFailed ? "ANALYSIS_JSON_PARSE_FAILED_FALLBACK_USED" : null,
+      parse_raw_preview: parseFailed ? parseRawPreview : null,
+    };
+
+    const aiRequest = {
+      model: String((genesisChatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
+      messages: genesisMessages,
+      max_tokens: 900,
+    };
+
+    const { error: genesisUpdateError } = await supabase
+      .from("generation_jobs")
+      .update({
+        status: "success",
+        payload: { ...payload, ai_request: aiRequest },
+        result_data: genesisResult,
+        result_url: null,
+        error_code: null,
+        error_message: null,
+        duration_ms: Date.now() - startedAt,
+      })
+      .eq("id", job.id);
+    if (genesisUpdateError) {
+      throw new Error(`ANALYSIS_JOB_UPDATE_FAILED: ${genesisUpdateError.message}`);
+    }
+    return;
+  }
+
+  if (isEcomDetailStudio) {
+    const isZhDetail = uiLanguage.startsWith("zh");
+    const rawModules = Array.isArray(payload.ecomDetailModules)
+      ? payload.ecomDetailModules
+      : [];
+    const modules = rawModules
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+      .map((item, index) => {
+        const titleRecord = item.title && typeof item.title === "object"
+          ? item.title as Record<string, unknown>
+          : {};
+        const subtitleRecord = item.subtitle && typeof item.subtitle === "object"
+          ? item.subtitle as Record<string, unknown>
+          : {};
+        const seedRecord = item.defaultPromptSeed && typeof item.defaultPromptSeed === "object"
+          ? item.defaultPromptSeed as Record<string, unknown>
+          : {};
+        return {
+          id: typeof item.id === "string" ? item.id : `module-${index + 1}`,
+          title: String((isZhDetail ? titleRecord.zh : titleRecord.en) ?? titleRecord.zh ?? titleRecord.en ?? `Module ${index + 1}`),
+          subtitle: String((isZhDetail ? subtitleRecord.zh : subtitleRecord.en) ?? subtitleRecord.zh ?? subtitleRecord.en ?? ""),
+          seed: String((isZhDetail ? seedRecord.zh : seedRecord.en) ?? seedRecord.zh ?? seedRecord.en ?? ""),
+        };
+      })
+      .slice(0, imageCount);
+
+    const moduleBlock = modules.map((module, index) =>
+      isZhDetail
+        ? `${index + 1}. ${module.title}\n定位：${module.subtitle}\n内部重点：${module.seed}`
+        : `${index + 1}. ${module.title}\nPositioning: ${module.subtitle}\nInternal focus: ${module.seed}`
+    ).join("\n\n");
+
+    const ecomDetailSystemPrompt = isZhDetail
+      ? `你是顶级电商详情页视觉策划专家。请基于同一商品的参考图、用户组图要求和所选详情页模块，输出一个严格可编辑的详情页规划蓝图 JSON。
+
+强规则：
+1. 所有图片都必须是同一个商品，不允许把多张参考图理解为多个商品。
+2. images 数组必须严格等于所选模块数量，且顺序与用户提供的模块顺序一致。
+3. 每个 images[i].title 必须直接使用对应模块名称，不要改写。
+4. 每个模块的 description 和 design_content 必须围绕该模块的职责展开，且要结合用户组图要求。
+5. design_specs 只输出整组详情页共享的视觉规范。
+6. 只输出合法 JSON，不要 Markdown，不要解释。`
+      : `You are a top-tier e-commerce detail-page visual strategist. Based on the same product reference images, the user's brief, and the selected detail-page modules, return a strict editable JSON blueprint.
+
+Hard rules:
+1. All images must represent the same product; never treat multiple references as multiple products.
+2. The images array must exactly match the selected module count and stay in the same order as the provided modules.
+3. Each images[i].title must use the corresponding module title exactly as provided.
+4. Each description and design_content must stay faithful to that module's purpose and the user's brief.
+5. design_specs should contain only the shared detail-page visual system.
+6. Return valid JSON only. No markdown. No explanations.`;
+
+    const ecomDetailUserPrompt = isZhDetail
+      ? `请严格输出如下 JSON 结构：
+{
+  "design_specs": "整组详情页共享规范",
+  "images": [
+    {
+      "title": "模块名称",
+      "description": "该模块的定位描述",
+      "design_content": "该模块的详细内容规划"
+    }
+  ]
+}
+
+要求：
+- images 数组返回正好 ${imageCount} 个对象。
+- 模块顺序和名称必须严格对应如下列表，不得改名，不得打乱顺序：
+${moduleBlock || "1. 首屏主视觉"}
+- 每个 design_content 都要明确该模块要表达的内容、构图方式、信息层级、场景或材质重点、文案表达方式。
+- 输出语言：${outputLanguageLabel(outputLanguage)}
+- 如果输出语言为纯视觉，请避免依赖大段文案，优先用视觉信息组织画面。
+
+用户组图要求：
+${requirements || "（未提供额外要求，请根据参考图和所选模块自动规划）"}
+`
+      : `Return strict JSON with this shape:
+{
+  "design_specs": "shared detail-page visual rules",
+  "images": [
+    {
+      "title": "module title",
+      "description": "module positioning",
+      "design_content": "detailed module planning content"
+    }
+  ]
+}
+
+Requirements:
+- Return exactly ${imageCount} objects in images.
+- Module order and titles must exactly match this list:
+${moduleBlock || "1. Hero Visual"}
+- Each design_content must clearly define the message hierarchy, composition, scene or material focus, and copy treatment of that module.
+- Output language: ${outputLanguageLabel(outputLanguage)}
+- If output language is visual-only, avoid relying on long copy and prioritize visual communication.
+
+User brief:
+${requirements || "(No extra brief provided. Infer the plan from the references and selected modules.)"}
+`;
+
+    const detailMessages: Array<Record<string, unknown>> = [
+      { role: "system", content: ecomDetailSystemPrompt },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: ecomDetailUserPrompt },
+          { type: "text", text: "Product reference images:" },
+          ...imageDataUrls.map((url) => ({ type: "image_url", image_url: { url } })),
+        ],
+      },
+    ];
+
+    const chatConfig = getQnChatConfig();
+    const analysisTimeoutMs = Math.max(chatConfig.timeoutMs, 90_000);
+    let detailChatResponse: Record<string, unknown>;
+    try {
+      detailChatResponse = await callQnChatAPI({
+        model: chatConfig.model,
+        messages: detailMessages,
+        maxTokens: 2048,
+        timeoutMsOverride: analysisTimeoutMs,
+      });
+    } catch (primaryErr) {
+      const fallbackModel = Deno.env.get("QN_IMAGE_MODEL");
+      if (!fallbackModel || fallbackModel === chatConfig.model) throw primaryErr;
+      detailChatResponse = await callQnChatAPI({
+        model: fallbackModel,
+        messages: detailMessages,
+        maxTokens: 2048,
+        timeoutMsOverride: analysisTimeoutMs,
+      });
+    }
+
+    const content = String((detailChatResponse as Record<string, unknown>)?.choices?.[0]?.message?.content ?? "");
+    const parsed = parseJsonFromContent(content);
+    const parseFailed = parsed.__parse_failed === true;
+    const parseRawPreview = typeof parsed.__raw_preview === "string" ? parsed.__raw_preview : null;
+    const blueprint = normalizeBlueprint(parsed, imageCount, outputLanguage, uiLanguage);
+
+    blueprint._ai_meta = {
+      model: String((detailChatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
+      usage: ((detailChatResponse as Record<string, unknown>)?.usage as Record<string, unknown>) ?? {},
+      provider: "qnaigc",
+      image_count: imageCount,
+      target_language: outputLanguage,
+      studio_type: studioType,
+      module_count: modules.length,
+      parse_failed: parseFailed,
+      parse_warning: parseFailed ? "ANALYSIS_JSON_PARSE_FAILED_FALLBACK_USED" : null,
+      parse_raw_preview: parseFailed ? parseRawPreview : null,
+    };
+
+    const aiRequest = {
+      model: String((detailChatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
+      messages: detailMessages,
+      max_tokens: 2048,
+    };
+
+    const { error: detailUpdateError } = await supabase
+      .from("generation_jobs")
+      .update({
+        status: "success",
+        payload: { ...payload, ai_request: aiRequest },
+        result_data: blueprint,
+        result_url: null,
+        error_code: null,
+        error_message: null,
+        duration_ms: Date.now() - startedAt,
+      })
+      .eq("id", job.id);
+    if (detailUpdateError) {
+      throw new Error(`ANALYSIS_JOB_UPDATE_FAILED: ${detailUpdateError.message}`);
+    }
+    return;
+  }
 
   const defaultSystemPrompt = isModelStrategy
     ? "你是一位顶级电商视觉导演。你的任务是分析上传的服装图片和模特参考图，并根据用户的设计需求，为一次模特拍摄活动制定一套完整的视觉指南。你需要先定义全局的视觉调性，然后针对每一张照片（镜头）制定极具营销感的构图、卖点展示方案。必须且仅输出一个合法的 JSON 对象，不要包含 Markdown 代码块标签或任何说明文字。"
@@ -1088,7 +1634,7 @@ ${requirements || "(no extra brief provided)"}
     max_tokens: 4096,
   };
 
-  await supabase
+  const { error: analysisUpdateError } = await supabase
     .from("generation_jobs")
     .update({
       status: "success",
@@ -1100,6 +1646,9 @@ ${requirements || "(no extra brief provided)"}
       duration_ms: Date.now() - startedAt,
     })
     .eq("id", job.id);
+  if (analysisUpdateError) {
+    throw new Error(`ANALYSIS_JOB_UPDATE_FAILED: ${analysisUpdateError.message}`);
+  }
 }
 
 async function processImageGenJob(
@@ -1128,7 +1677,7 @@ async function processImageGenJob(
       p_amount: cost,
     });
     if (deductError) {
-      await supabase
+      const { error: insufficientCreditsUpdateError } = await supabase
         .from("generation_jobs")
         .update({
           status: "failed",
@@ -1137,6 +1686,9 @@ async function processImageGenJob(
           duration_ms: Date.now() - startedAt,
         })
         .eq("id", job.id);
+      if (insufficientCreditsUpdateError) {
+        throw new Error(`INSUFFICIENT_CREDITS_UPDATE_FAILED: ${insufficientCreditsUpdateError.message}`);
+      }
       await syncModelHistoryStatus(supabase, job.id, job.user_id, {
         status: "failed",
         result_url: null,
@@ -1187,6 +1739,8 @@ async function processImageGenJob(
     const allDataUrls = await Promise.all(allImagePaths.map(toDataUrl));
 
     // Build prompt
+    const styleConstraintPrompt = normalizeStyleConstraintPrompt(payload.styleConstraint);
+    const styleConstraintSource = normalizeStyleConstraintSource(payload.styleConstraint);
     let finalPrompt = String(payload.prompt);
     if (isTextEdit) {
       // Text Edit mode: build bilingual replacement prompt from textEdits
@@ -1215,9 +1769,17 @@ async function processImageGenJob(
     } else {
       // Standard mode: e-commerce photography prefix
       const ecomPrefix = "Professional e-commerce product photography. High-end commercial catalog quality. " +
-        "Studio lighting with soft shadows. Clean, premium aesthetic. Product is the hero — sharp focus, " +
-        "realistic materials and textures. White or contextual lifestyle background. 4K ultra-detailed rendering. ";
-      finalPrompt = ecomPrefix + finalPrompt;
+        "Clean, premium aesthetic. Product is the hero — sharp focus, realistic materials and textures. " +
+        "Use the uploaded product images as hard references for the exact same SKU. " +
+        "Preserve the exact same product identity, colorway, material, texture, silhouette, proportions, logo, print, hardware, stitching, trims, and all key design details. " +
+        "Do not recolor, redesign, simplify, replace, or invent new product features. " +
+        "Only scene, composition, camera angle, crop, lighting, and background styling may change. " +
+        "4K ultra-detailed rendering. ";
+      if (styleConstraintPrompt) {
+        finalPrompt = `${ecomPrefix}${styleConstraintPrompt}\n${finalPrompt}`;
+      } else {
+        finalPrompt = ecomPrefix + finalPrompt;
+      }
     }
     const imageGenTimeoutMs = (isQuickEdit || isTextEdit)
       ? Number(Deno.env.get("QUICK_EDIT_IMAGE_TIMEOUT_MS") ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "120000")
@@ -1283,26 +1845,35 @@ async function processImageGenJob(
 
     const requestedSize = scaledRequestSize(aspectRatio, imageSize);
 
-    await supabase
+    const resultDataBase = {
+      provider: imageRoute.provider,
+      model: imageRoute.model ?? model,
+      image_size: imageSize,
+      style_constraint_applied: Boolean(styleConstraintPrompt),
+      style_constraint_source: styleConstraintSource,
+      requested_size: requestedSize,
+      actual_size: actualDims,
+      mime_type: actualMime,
+      object_path: objectPath ? `${outputBucket}/${objectPath}` : null,
+    };
+
+    const resultData: Record<string, unknown> = resultDataBase;
+
+    const { error: finalizeError } = await supabase
       .from("generation_jobs")
       .update({
         status: "success",
         result_url: resultUrl,
-        result_data: {
-          provider: imageRoute.provider,
-          model: imageRoute.model ?? model,
-          image_size: imageSize,
-          requested_size: requestedSize,
-          actual_size: actualDims,
-          mime_type: actualMime,
-          object_path: objectPath ? `${outputBucket}/${objectPath}` : null,
-          b64_json: generatedBase64,
-        },
+        result_data: resultData,
         error_code: null,
         error_message: null,
         duration_ms: Date.now() - startedAt,
       })
       .eq("id", job.id);
+
+    if (finalizeError) {
+      throw new Error(`GENERATION_JOB_FINALIZE_FAILED: ${finalizeError.message}`);
+    }
     await syncModelHistoryStatus(supabase, job.id, job.user_id, {
       status: "success",
       result_url: resultUrl,
@@ -1483,6 +2054,8 @@ async function processStyleReplicateJob(
   }
 
   const userPrompt = typeof payload.userPrompt === "string" ? payload.userPrompt.trim() : "";
+  const styleConstraintPrompt = normalizeStyleConstraintPrompt(payload.styleConstraint);
+  const styleConstraintSource = normalizeStyleConstraintSource(payload.styleConstraint);
   const refinementBasePrompt =
     "作为专业电商图片精修模型,在不改变产品本体的前提下，对单张产品图进行商业级精修。仅做精修优化,允许进行瑕疵清理、边缘优化、光影校正、色彩与清晰度增强。";
   const refinementWhiteBackgroundPrompt = "除产品主体外的背景与非主体元素统一为纯白背景干净无杂物。";
@@ -1580,6 +2153,8 @@ async function processStyleReplicateJob(
         metadata: {
           requested_aspect_ratio: aspectRatio,
           reference_style_summary: mode === "refinement" ? null : "Style transfer from reference image",
+          style_constraint_applied: Boolean(styleConstraintPrompt),
+          style_constraint_source: styleConstraintSource,
           background_mode: mode === "refinement" ? backgroundMode : null,
           group_count: mode === "batch" ? groupCount : 1,
           single_product_count: mode === "single"
@@ -1623,6 +2198,7 @@ async function processStyleReplicateJob(
       if (refinementAnalysisPrompt) {
         // Two-stage: use vision-model-generated product-specific refinement prompt
         const parts = [refinementAnalysisPrompt];
+        if (styleConstraintPrompt) parts.push(styleConstraintPrompt);
         if (userPrompt) parts.push(userPrompt);
         return parts.join("\n");
       }
@@ -1632,6 +2208,9 @@ async function processStyleReplicateJob(
         promptParts.push(refinementWhiteBackgroundPrompt);
       }
       promptParts.push(`输出比例为 ${aspectRatio}，参考尺寸为 ${requestSize}。`);
+      if (styleConstraintPrompt) {
+        promptParts.push(styleConstraintPrompt);
+      }
       if (userPrompt) {
         promptParts.push(userPrompt);
       }
@@ -1643,24 +2222,26 @@ async function processStyleReplicateJob(
       // Image 1 = reference style, Image 2 = product to preserve.
       const parts = [
         analysisPrompt,
+        styleConstraintPrompt,
         "Image 1 is the reference style image only — do not copy its products or subjects.",
         "Image 2 contains the product to preserve — maintain its exact shape, material, color, texture, logo, and all key design details.",
         "Do not simply return Image 2 unchanged or make only a minimal edit.",
         `Output aspect ratio: ${aspectRatio}, size: ${requestSize}.`,
-      ];
+      ].filter((v): v is string => Boolean(v && v.trim()));
       if (userPrompt) parts.push(`Additional instructions: ${userPrompt}`);
       return parts.join(" ");
     }
 
     // Fallback single-stage prompt (used if vision analysis fails)
     const promptParts = [
+      styleConstraintPrompt,
       "Image 1 is style reference only. Image 2 contains the product to preserve.",
       "Create a brand-new high-quality e-commerce image: adopt the visual style, composition, background, lighting direction, color palette, and layout rhythm of Image 1.",
       "Preserve only the product identity from Image 2 — its shape, material, color, texture, logo, and key design details.",
       "Do not copy the original composition, pose, or scene from Image 2. Do not simply return Image 2 unchanged.",
       "Do not copy any product subjects from Image 1 — only borrow its style and presentation.",
       `Output aspect ratio: ${aspectRatio}, size: ${requestSize}.`,
-    ];
+    ].filter((v): v is string => Boolean(v && v.trim()));
     if (userPrompt) {
       promptParts.push(`Additional instructions: ${userPrompt}`);
     }
@@ -1849,7 +2430,7 @@ async function processStyleReplicateJob(
   const failedCount = finalSnapshot.failedCount;
   const status: "success" | "failed" = successCount > 0 ? "success" : "failed";
 
-  await supabase
+  const { error: styleReplicateUpdateError } = await supabase
     .from("generation_jobs")
     .update({
       status,
@@ -1864,6 +2445,9 @@ async function processStyleReplicateJob(
       duration_ms: Date.now() - startedAt,
     })
     .eq("id", job.id);
+  if (styleReplicateUpdateError) {
+    throw new Error(`STYLE_REPLICATE_JOB_UPDATE_FAILED: ${styleReplicateUpdateError.message}`);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -1907,7 +2491,7 @@ Deno.serve(async (req) => {
       throw new Error(`UNSUPPORTED_TASK_TYPE ${task.task_type}`);
     }
 
-    await supabase
+    const { error: taskSuccessError } = await supabase
       .from("generation_job_tasks")
       .update({
         status: "success",
@@ -1915,6 +2499,9 @@ Deno.serve(async (req) => {
         last_error: null,
       })
       .eq("id", task.id);
+    if (taskSuccessError) {
+      throw new Error(`TASK_SUCCESS_UPDATE_FAILED: ${taskSuccessError.message}`);
+    }
 
     return ok({ ok: true, status: "processed", job_id: job.id, task_type: task.task_type });
   } catch (e) {
@@ -1922,12 +2509,15 @@ Deno.serve(async (req) => {
     const retryable = attempts < 3;
     const runAfter = new Date(Date.now() + 10_000).toISOString();
 
-    await supabase
+    const { error: taskRetryUpdateError } = await supabase
       .from("generation_job_tasks")
       .update(retryable
         ? { status: "queued", locked_at: null, run_after: runAfter, last_error: String(e) }
         : { status: "failed", locked_at: null, last_error: String(e) })
       .eq("id", task.id);
+    if (taskRetryUpdateError) {
+      return err("TASK_UPDATE_FAILED", "Failed to update generation task status", 500, taskRetryUpdateError);
+    }
 
     if (!retryable) {
       let errorCode = "UPSTREAM_ERROR";
@@ -1940,7 +2530,7 @@ Deno.serve(async (req) => {
         errorCode = styleReplicateErrorCode(e);
         errorMessage = styleReplicateErrorMessage(e);
       }
-      await supabase
+      const { error: jobFailedUpdateError } = await supabase
         .from("generation_jobs")
         .update({
           status: "failed",
@@ -1949,6 +2539,9 @@ Deno.serve(async (req) => {
         })
         .eq("id", job.id)
         .eq("status", "processing");
+      if (jobFailedUpdateError) {
+        return err("JOB_UPDATE_FAILED", "Failed to update generation job status", 500, jobFailedUpdateError);
+      }
       if (task.task_type === "IMAGE_GEN") {
         await syncModelHistoryStatus(supabase, job.id, job.user_id, {
           status: "failed",

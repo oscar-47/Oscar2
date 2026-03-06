@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { generateModelImage } from '@/lib/api/edge-functions'
+import { generateModelImage, processGenerationJob } from '@/lib/api/edge-functions'
 import { uploadFile } from '@/lib/api/upload'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationJob } from '@/types'
@@ -115,9 +115,11 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
     const supabase = createClient()
     let settled = false
     let pollTimer: ReturnType<typeof setInterval> | null = null
+    let nudgeTimer: ReturnType<typeof setInterval> | null = null
 
     function cleanup() {
       if (pollTimer) clearInterval(pollTimer)
+      if (nudgeTimer) clearInterval(nudgeTimer)
       supabase.removeChannel(channel)
     }
 
@@ -141,6 +143,7 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
       const job = data as GenerationJob
       if (job.status === 'success') done(job)
       else if (job.status === 'failed') fail(new Error(job.error_message ?? 'Job failed'))
+      else void processGenerationJob(jobId).catch(() => {})
     }
 
     signal.addEventListener(
@@ -162,10 +165,14 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
       )
       .subscribe()
 
+    void processGenerationJob(jobId).catch(() => {})
     void checkOnce()
     pollTimer = setInterval(() => {
       void checkOnce()
     }, 1500)
+    nudgeTimer = setInterval(() => {
+      void processGenerationJob(jobId).catch(() => {})
+    }, 8000)
   })
 }
 

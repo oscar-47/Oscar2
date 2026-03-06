@@ -17,11 +17,10 @@ import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { uploadFile, uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
-import type { GenerationModel, AspectRatio, ImageSize, GenerationJob, StyleDimensionKey } from '@/types'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel, STYLE_DIMENSIONS, buildStylePrefix } from '@/types'
+import type { GenerationModel, AspectRatio, ImageSize, GenerationJob } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel } from '@/types'
 import { friendlyError } from '@/lib/utils'
-import { StyleDimensionRadio } from '@/components/studio/StyleDimensionRadio'
-import { Loader2, Sparkles, Wand2, X, Plus, Download, Image as ImageIcon, ShieldCheck, Zap, Pencil } from 'lucide-react'
+import { Loader2, Sparkles, X, Plus, Download, Image as ImageIcon, ShieldCheck, Zap, Pencil } from 'lucide-react'
 import { createEditorSession } from '@/lib/utils/editor-session'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
@@ -94,7 +93,6 @@ export function AestheticMirrorForm() {
   const [imageCount, setImageCount] = useState(1)
   const [groupCount, setGroupCount] = useState(1)
   const [turboEnabled, setTurboEnabled] = useState(false)
-  const [styleDimensions, setStyleDimensions] = useState<Partial<Record<StyleDimensionKey, string>>>({})
   const [phase, setPhase] = useState<Phase>('idle')
   const [progress, setProgress] = useState(0)
   const [statusLine, setStatusLine] = useState('')
@@ -118,7 +116,7 @@ export function AestheticMirrorForm() {
   useSessionPersistence(
     'aesthetic-mirror',
     () => ({
-      mode, userPrompt, model, aspectRatio, imageSize, imageCount, groupCount, turboEnabled, styleDimensions,
+      mode, userPrompt, model, aspectRatio, imageSize, imageCount, groupCount, turboEnabled,
       cards: cards.filter((c) => c.status === 'success' && c.url),
     }),
     (s) => {
@@ -130,19 +128,6 @@ export function AestheticMirrorForm() {
       if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
       if (typeof s.groupCount === 'number') setGroupCount(s.groupCount)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (s.styleDimensions && typeof s.styleDimensions === 'object') {
-        const restored: Partial<Record<StyleDimensionKey, string>> = {}
-        const validKeys = new Set(STYLE_DIMENSIONS.map(d => d.key))
-        for (const [k, v] of Object.entries(s.styleDimensions as Record<string, string>)) {
-          if (validKeys.has(k as StyleDimensionKey) && typeof v === 'string') {
-            const dim = STYLE_DIMENSIONS.find(d => d.key === k)
-            if (dim?.options.some(o => o.value === v)) {
-              restored[k as StyleDimensionKey] = v
-            }
-          }
-        }
-        if (Object.keys(restored).length > 0) setStyleDimensions(restored)
-      }
       if (Array.isArray(s.cards)) {
         const restored = (s.cards as Card[]).filter((c) => c.status === 'success' && c.url && typeof c.url === 'string')
         if (restored.length > 0) setCards(restored)
@@ -154,7 +139,11 @@ export function AestheticMirrorForm() {
   const productInputRef = useRef<HTMLInputElement | null>(null)
   const batchRefInputRef = useRef<HTMLInputElement | null>(null)
   const batchProductInputRef = useRef<HTMLInputElement | null>(null)
-  const lastRequestRef = useRef<{ refs: string[]; product: string; prompt: string | undefined } | null>(null)
+  const lastRequestRef = useRef<{
+    refs: string[]
+    product: string
+    prompt: string | undefined
+  } | null>(null)
 
   const expectedCount = mode === 'batch' ? batchRefs.length * groupCount : singleProducts.length * imageCount
   const baseCost = DEFAULT_CREDIT_COSTS[model] ?? 5
@@ -235,8 +224,7 @@ export function AestheticMirrorForm() {
     // Set running state immediately so the button disables on click
     setPhase('running'); setProgress(5); setStatusLine(t('runningText1')); setErrorMessage(null)
     try {
-      const stylePrefix = buildStylePrefix(styleDimensions)
-      const finalPrompt = (stylePrefix + (userPrompt.trim())).trim() || undefined
+      const finalPrompt = userPrompt.trim() || undefined
       if (mode === 'single') {
         if (!singleRefFile || !singleProducts.length) { setPhase('idle'); return }
         const [{ publicUrl: referenceImage }, products] = await Promise.all([uploadFile(singleRefFile), uploadFiles(singleProducts.map((x) => x.file))])
@@ -260,11 +248,20 @@ export function AestheticMirrorForm() {
       const [refs, product] = await Promise.all([uploadFiles(batchRefs.map((x) => x.file)), uploadFile(batchProduct.file)])
       const refUrls = refs.map((x) => x.publicUrl)
       lastRequestRef.current = { refs: refUrls, product: product.publicUrl, prompt: finalPrompt }
-      await runRequest({ mode: 'batch', referenceImages: refUrls, productImage: product.publicUrl, groupCount, model, aspectRatio, imageSize, userPrompt: finalPrompt }, refUrls.length * groupCount)
+      await runRequest({
+        mode: 'batch',
+        referenceImages: refUrls,
+        productImage: product.publicUrl,
+        groupCount,
+        model,
+        aspectRatio,
+        imageSize,
+        userPrompt: finalPrompt,
+      }, refUrls.length * groupCount)
     } catch (e: unknown) {
       if ((e as Error).name !== 'AbortError') { setErrorMessage(friendlyError(e instanceof Error ? e.message : 'Upload failed', isZh)); setPhase('failed'); setProgress(0) }
     }
-  }, [mode, singleRefFile, singleProducts, batchRefs, batchProduct, model, aspectRatio, imageSize, imageCount, groupCount, userPrompt, styleDimensions, runRequest, t])
+  }, [mode, singleRefFile, singleProducts, batchRefs, batchProduct, model, aspectRatio, imageSize, imageCount, groupCount, userPrompt, runRequest, t])
 
   const retryFailed = useCallback(async () => {
     const ctx = lastRequestRef.current
@@ -272,7 +269,16 @@ export function AestheticMirrorForm() {
     const failed = cards.map((c, i) => ({ c, i })).filter((x) => x.c.status === 'failed')
     if (!failed.length) return
     const refs = failed.map(({ c }) => ctx.refs[Math.max(0, c.referenceIndex)] ?? ctx.refs[0])
-    await runRequest({ mode: 'batch', referenceImages: refs, productImage: ctx.product, groupCount: 1, model, aspectRatio, imageSize, userPrompt: ctx.prompt }, refs.length, failed.map((x) => x.i))
+    await runRequest({
+      mode: 'batch',
+      referenceImages: refs,
+      productImage: ctx.product,
+      groupCount: 1,
+      model,
+      aspectRatio,
+      imageSize,
+      userPrompt: ctx.prompt,
+    }, refs.length, failed.map((x) => x.i))
   }, [cards, runRequest, model, aspectRatio, imageSize])
 
   const downloadOne = async (url: string, index: number) => {
@@ -553,22 +559,6 @@ export function AestheticMirrorForm() {
                   className="h-8 w-14 border-0 data-[state=checked]:bg-[#1a1d24] data-[state=unchecked]:bg-[#d8d9dd]"
                 />
               </div>
-
-              <StyleDimensionRadio
-                values={styleDimensions}
-                onChange={(key, value) => {
-                  setStyleDimensions(prev => {
-                    const next = { ...prev }
-                    if (value === null) {
-                      delete next[key]
-                    } else {
-                      next[key] = value
-                    }
-                    return next
-                  })
-                }}
-                disabled={isRunning}
-              />
 
               {isRunning ? (
                 <Button className="h-12 w-full rounded-2xl bg-[#111318]" disabled>

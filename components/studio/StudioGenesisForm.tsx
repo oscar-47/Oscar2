@@ -18,8 +18,6 @@ import { MultiImageUploader, type UploadedImage } from '@/components/upload/Mult
 import type { ProgressStep } from '@/components/generation/GenerationProgress'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
 import { ResultGallery, type ResultImage } from '@/components/generation/ResultGallery'
-import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
-import { StyleDimensionRadio } from '@/components/studio/StyleDimensionRadio'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
@@ -31,7 +29,7 @@ import {
   processGenerationJob,
 } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, ArrowRight, Loader2, ImageIcon, AlertTriangle, RefreshCw, Sparkles, Zap } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, ImageIcon, AlertTriangle, RefreshCw, Sparkles, Zap, Plus, X } from 'lucide-react'
 import type {
   GenerationModel,
   AspectRatio,
@@ -43,10 +41,11 @@ import type {
   BlueprintImagePlan,
   PromptSseChunk,
   GeneratedPrompt,
+  GenesisAnalysisResult,
+  GenesisStyleDirectionKey,
 } from '@/types'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel, STYLE_DIMENSIONS, buildStylePrefix } from '@/types'
+import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel } from '@/types'
 import { friendlyError } from '@/lib/utils'
-import type { StyleDimensionKey } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -77,6 +76,9 @@ const ASPECT_RATIOS_ZH: { value: AspectRatio; label: string }[] = [
 ]
 
 const IMAGE_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+const GENESIS_DEFAULT_REQUIREMENTS_ZH = '我的商品是____，主要卖点是____'
+const GENESIS_DEFAULT_REQUIREMENTS_EN = 'My product is ____, key selling point is ____'
+const GENESIS_STYLE_KEYS: GenesisStyleDirectionKey[] = ['sceneStyle', 'lighting', 'composition']
 
 const RESOLUTION_OPTIONS_EN: { value: ImageSize; label: string; proOnly: boolean }[] = [
   { value: '1K', label: '1K (1024px)', proOnly: false },
@@ -159,6 +161,9 @@ interface ImageSlot {
   result?: ResultImage
   error?: string
 }
+
+type GenesisStyleSelections = Partial<Record<GenesisStyleDirectionKey, string>>
+type GenesisCustomStyleTags = Partial<Record<GenesisStyleDirectionKey, string>>
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -267,6 +272,171 @@ function extractResultFromJob(job: GenerationJob, index: number, batchId?: strin
 
 function hasCjkText(value: string): boolean {
   return /[\u3400-\u9fff]/.test(value)
+}
+
+function clipDynamicTag(value: string, isZh: boolean): string {
+  return Array.from(value.trim()).slice(0, isZh ? 5 : 24).join('')
+}
+
+function extractGenesisBriefHints(requirements: string, isZh: boolean): { product: string; sellingPoints: string[] } {
+  const cleaned = requirements.trim()
+  if (!cleaned) return { product: '', sellingPoints: [] }
+
+  if (isZh) {
+    const normalized = cleaned.replace(/\s+/g, ' ').replace(/[：:]/g, '是')
+    const productMatch = normalized.match(/(?:我的商品|商品|产品)\s*是\s*([^，,。；;\n]+)/)
+    const sellingMatch = normalized.match(/(?:主要卖点|卖点)\s*是\s*([^。;\n]+)/)
+
+    return {
+      product: (productMatch?.[1] ?? '').trim(),
+      sellingPoints: (sellingMatch?.[1] ?? '')
+        .split(/[，,、/|；;\s]+/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 4),
+    }
+  }
+
+  const normalized = cleaned.replace(/\s+/g, ' ')
+  const productMatch = normalized.match(/(?:my product is|product is)\s+([^,.;\n]+)/i)
+  const sellingMatch = normalized.match(/(?:key selling points? are|key selling point is|selling points? are|selling point is)\s+([^.;\n]+)/i)
+
+  return {
+    product: (productMatch?.[1] ?? '').trim(),
+    sellingPoints: (sellingMatch?.[1] ?? '')
+      .split(/[,/|;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 4),
+  }
+}
+
+function buildGenesisCopyFallback(requirements: string, outputLanguage: OutputLanguage, isZh: boolean): string {
+  if (outputLanguage === 'none') return ''
+
+  const { product, sellingPoints } = extractGenesisBriefHints(requirements, isZh)
+  if (isZh) {
+    if (product && sellingPoints.length > 0) return `${product}，${sellingPoints.join('，')}`
+    if (product) return `${product}，突出核心卖点`
+    if (sellingPoints.length > 0) return `主打${sellingPoints.join('，')}`
+    return requirements.trim()
+  }
+
+  if (product && sellingPoints.length > 0) return `${product}: ${sellingPoints.join(', ')}`
+  if (product) return `${product} with standout selling points`
+  if (sellingPoints.length > 0) return `Highlight ${sellingPoints.join(', ')}`
+  return requirements.trim()
+}
+
+function copyPlanMatchesBrief(copyPlan: string, requirements: string, isZh: boolean): boolean {
+  const { product, sellingPoints } = extractGenesisBriefHints(requirements, isZh)
+  const keywords = [product, ...sellingPoints]
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+
+  if (keywords.length === 0) return true
+
+  const normalizedCopy = copyPlan.replace(/\s+/g, '').toLowerCase()
+  return keywords.some((keyword) => normalizedCopy.includes(keyword.replace(/\s+/g, '').toLowerCase()))
+}
+
+function getGenesisDefaultRequirements(isZh: boolean): string {
+  return isZh ? GENESIS_DEFAULT_REQUIREMENTS_ZH : GENESIS_DEFAULT_REQUIREMENTS_EN
+}
+
+function getGenesisDimensionLabel(key: GenesisStyleDirectionKey, isZh: boolean): string {
+  if (key === 'sceneStyle') return isZh ? '场景风格' : 'Scene Style'
+  if (key === 'lighting') return isZh ? '光影氛围' : 'Lighting'
+  return isZh ? '构图视角' : 'Composition'
+}
+
+function getGenesisFallbackOptions(key: GenesisStyleDirectionKey, isZh: boolean): string[] {
+  if (isZh) {
+    if (key === 'sceneStyle') return ['极简', '生活感', '高级感']
+    if (key === 'lighting') return ['柔光', '自然光', '层次光']
+    return ['正视角', '微俯拍', '特写']
+  }
+  if (key === 'sceneStyle') return ['minimal', 'lifestyle', 'premium']
+  if (key === 'lighting') return ['soft light', 'daylight', 'contrast']
+  return ['front', 'overhead', 'close-up']
+}
+
+function normalizeGenesisAnalysisResult(
+  resultData: unknown,
+  isZh: boolean,
+  requirements: string,
+  outputLanguage: OutputLanguage,
+): GenesisAnalysisResult {
+  const fallbackSummary = requirements.trim()
+    || (isZh
+      ? '根据产品图分析产品特征，并围绕核心卖点生成主图。'
+      : 'Analyze the product images and generate hero images around the key selling points.')
+
+  let parsed: Record<string, unknown> | null = null
+  if (resultData && typeof resultData === 'object') {
+    parsed = resultData as Record<string, unknown>
+  } else if (typeof resultData === 'string') {
+    try {
+      const json = JSON.parse(resultData)
+      if (json && typeof json === 'object') parsed = json as Record<string, unknown>
+    } catch {
+      parsed = null
+    }
+  }
+
+  const rawDirections = parsed?.style_directions ?? parsed?.styleDirections ?? {}
+  const styleDirections = GENESIS_STYLE_KEYS.map((key) => {
+    const rawRecord = Array.isArray(rawDirections)
+      ? rawDirections.find((item) => item && typeof item === 'object' && (item as Record<string, unknown>).key === key) as Record<string, unknown> | undefined
+      : rawDirections && typeof rawDirections === 'object'
+        ? (rawDirections as Record<string, unknown>)[key] as Record<string, unknown> | undefined
+        : undefined
+    const options = Array.from(new Set(
+      (Array.isArray(rawRecord?.options) ? rawRecord.options : [])
+        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        .map((item) => clipDynamicTag(item, isZh))
+        .filter(Boolean)
+    )).slice(0, 3)
+    const finalOptions = options.length > 0 ? options : getGenesisFallbackOptions(key, isZh)
+    const recommendedRaw = typeof rawRecord?.recommended === 'string'
+      ? clipDynamicTag(rawRecord.recommended, isZh)
+      : ''
+    return {
+      key,
+      options: finalOptions,
+      recommended: finalOptions.includes(recommendedRaw) ? recommendedRaw : (finalOptions[0] ?? null),
+    }
+  })
+
+  const rawCopyPlan = typeof parsed?.copy_plan === 'string' && parsed.copy_plan.trim()
+    ? parsed.copy_plan
+    : typeof parsed?.copyPlan === 'string' && parsed.copyPlan.trim()
+      ? parsed.copyPlan
+      : ''
+  const fallbackCopyPlan = buildGenesisCopyFallback(requirements, outputLanguage, isZh)
+
+  return {
+    product_summary: typeof parsed?.product_summary === 'string' && parsed.product_summary.trim()
+      ? parsed.product_summary
+      : typeof parsed?.productSummary === 'string' && parsed.productSummary.trim()
+        ? parsed.productSummary
+        : fallbackSummary,
+    style_directions: styleDirections,
+    copy_plan: outputLanguage === 'none'
+      ? ''
+      : rawCopyPlan && copyPlanMatchesBrief(rawCopyPlan, requirements, isZh)
+        ? rawCopyPlan
+        : fallbackCopyPlan,
+    _ai_meta: (parsed?._ai_meta && typeof parsed._ai_meta === 'object'
+      ? parsed._ai_meta
+      : { model: 'unknown', usage: {}, provider: 'fallback', image_count: 1, target_language: isZh ? 'zh' : 'en' }) as GenesisAnalysisResult['_ai_meta'],
+  }
+}
+
+function buildImagesSignature(images: UploadedImage[]): string {
+  return images
+    .map((img) => `${img.file.name}:${img.file.size}:${img.file.lastModified}`)
+    .join('|')
 }
 
 function localizeImagePlansForZh(imagePlans: BlueprintImagePlan[]): BlueprintImagePlan[] {
@@ -629,19 +799,34 @@ function ImageSlotCard({
 // ─── Reanalyze helper ─────────────────────────────────────────────────────────
 
 interface AnalysisParamSnapshot {
+  imagesSignature: string
+  requirements: string
   imageCount: number
   outputLanguage: OutputLanguage
 }
 
 function isAnalysisStale(
-  current: { imageCount: number; outputLanguage: OutputLanguage },
+  current: { imagesSignature: string; requirements: string; imageCount: number; outputLanguage: OutputLanguage },
   snapshot: AnalysisParamSnapshot | null,
 ): boolean {
   if (!snapshot) return false
   return (
+    snapshot.imagesSignature !== current.imagesSignature ||
+    snapshot.requirements !== current.requirements ||
     snapshot.imageCount !== current.imageCount ||
     snapshot.outputLanguage !== current.outputLanguage
   )
+}
+
+function promptBlueprintPreview(
+  blueprint: AnalysisBlueprint,
+  images: BlueprintImagePlan[],
+): AnalysisBlueprint {
+  return {
+    images,
+    design_specs: blueprint.design_specs ?? '',
+    _ai_meta: blueprint._ai_meta,
+  }
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -651,15 +836,17 @@ export function StudioGenesisForm() {
   const tc = useTranslations('studio.common')
   const locale = useLocale()
   const router = useRouter()
+  const isZh = locale.startsWith('zh')
+  const defaultRequirements = getGenesisDefaultRequirements(isZh)
 
   // ── Input state ──
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
-  const [requirements, setRequirements] = useState('')
+  const [requirements, setRequirements] = useState(defaultRequirements)
   const [imageCount, setImageCount] = useState(1)
   const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [imageSize, setImageSize] = useState<ImageSize>('1K')
-  const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>('none')
+  const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>(isZh ? 'zh' : 'en')
   // Locale-aware constants
   const ASPECT_RATIOS = locale === 'zh' ? ASPECT_RATIOS_ZH : ASPECT_RATIOS_EN
   const RESOLUTION_OPTIONS = locale === 'zh' ? RESOLUTION_OPTIONS_ZH : RESOLUTION_OPTIONS_EN
@@ -667,11 +854,12 @@ export function StudioGenesisForm() {
 
   // ── Preview state ──
   const [turboEnabled, setTurboEnabled] = useState(false)
-  const [styleDimensions, setStyleDimensions] = useState<Partial<Record<StyleDimensionKey, string>>>({})
-  const [analysisBlueprint, setAnalysisBlueprint] = useState<AnalysisBlueprint | null>(null)
-  const [editableDesignSpecs, setEditableDesignSpecs] = useState('')
-  const [editableImagePlans, setEditableImagePlans] = useState<BlueprintImagePlan[]>([])
-  const [selectedPlanIds, setSelectedPlanIds] = useState<Set<string>>(new Set())
+  const [genesisAnalysis, setGenesisAnalysis] = useState<GenesisAnalysisResult | null>(null)
+  const [styleSelections, setStyleSelections] = useState<GenesisStyleSelections>({})
+  const [customStyleTags, setCustomStyleTags] = useState<GenesisCustomStyleTags>({})
+  const [customTagInputs, setCustomTagInputs] = useState<GenesisCustomStyleTags>({})
+  const [activeCustomInputKey, setActiveCustomInputKey] = useState<GenesisStyleDirectionKey | null>(null)
+  const [copyPlan, setCopyPlan] = useState('')
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([])
   const [analysisParams, setAnalysisParams] = useState<AnalysisParamSnapshot | null>(null)
 
@@ -685,37 +873,25 @@ export function StudioGenesisForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [analyzingMessageIndex, setAnalyzingMessageIndex] = useState(0)
   const [retryContext, setRetryContext] = useState<RetryContext | null>(null)
-  const [generatedPrompts, setGeneratedPrompts] = useState<GeneratedPrompt[]>([])
   const abortRef = useRef<AbortController | null>(null)
 
   // ── Session persistence ──
   useSessionPersistence(
-    'studio-genesis',
+    'studio-genesis-v2',
     () => ({
-      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, turboEnabled, styleDimensions,
+      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, turboEnabled,
       results: results.filter((r) => !r.url.startsWith('data:')),
     }),
     (s) => {
-      if (typeof s.requirements === 'string') setRequirements(s.requirements)
+      if (typeof s.requirements === 'string') {
+        setRequirements(s.requirements.trim().length > 0 ? s.requirements : defaultRequirements)
+      }
       if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
       if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
       if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (s.styleDimensions && typeof s.styleDimensions === 'object') {
-        const restored: Partial<Record<StyleDimensionKey, string>> = {}
-        const validKeys = new Set(STYLE_DIMENSIONS.map(d => d.key))
-        for (const [k, v] of Object.entries(s.styleDimensions as Record<string, string>)) {
-          if (validKeys.has(k as StyleDimensionKey) && typeof v === 'string') {
-            const dim = STYLE_DIMENSIONS.find(d => d.key === k)
-            if (dim?.options.some(o => o.value === v)) {
-              restored[k as StyleDimensionKey] = v
-            }
-          }
-        }
-        if (Object.keys(restored).length > 0) setStyleDimensions(restored)
-      }
       if (Array.isArray(s.results)) {
         const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string')
         if (restored.length > 0) setResults(restored)
@@ -724,8 +900,7 @@ export function StudioGenesisForm() {
   )
 
   const { total } = useCredits()
-  const selectedCount = selectedPlanIds.size
-  const totalCost = computeCost(model, turboEnabled, imageSize, phase === 'preview' ? selectedCount : imageCount)
+  const totalCost = computeCost(model, turboEnabled, imageSize, imageCount)
   const insufficientCredits = total !== null && total < totalCost
   const analyzingMessages = [
     t('analyzingStep1'),
@@ -733,25 +908,24 @@ export function StudioGenesisForm() {
     t('analyzingStep3'),
     t('analyzingStep4'),
   ]
-  const isZh = locale.startsWith('zh')
   const backendLocale = isZh ? 'zh-CN' : 'en'
   const leftCardClass = 'rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6'
   const panelInputClass = 'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px]'
   const rightPanelTitle = phase === 'analyzing'
     ? (isZh ? '分析中...' : 'Analyzing...')
     : phase === 'preview'
-      ? t('planPreview')
+      ? (isZh ? '风格与文案' : 'Style & Copy')
     : phase === 'generating'
       ? (isZh ? '生成中...' : 'Generating...')
       : isZh
         ? '生成结果'
         : tc('results')
   const rightPanelSubtitle = phase === 'analyzing'
-    ? (isZh ? '正在分析产品并生成设计规范' : 'Analyzing product and generating design specs')
+    ? (isZh ? '正在分析产品并生成风格与文案' : 'Analyzing product and preparing style and copy')
     : phase === 'preview'
-      ? t('planPreviewDesc')
+      ? (isZh ? '确认风格方向与共享文案后生成主图' : 'Review style directions and shared copy before generation')
     : phase === 'generating'
-      ? (isZh ? '正在根据规划生成图片' : 'Generating images from the approved blueprint')
+      ? (isZh ? '正在根据风格与文案生成主图' : 'Generating hero images from approved style and copy')
       : isZh
         ? '上传产品图并点击分析开始'
         : "Upload product images and click 'Analyze' to start."
@@ -760,7 +934,12 @@ export function StudioGenesisForm() {
   const leftPanelDisabled = phase === 'analyzing' || phase === 'generating'
   const keyParamsDisabled = phase === 'analyzing' || phase === 'generating' || phase === 'complete'
   const genParamsDisabled = leftPanelDisabled || phase === 'preview' || phase === 'complete'
-  const needsReanalyze = phase === 'preview' && isAnalysisStale({ imageCount, outputLanguage }, analysisParams)
+  const needsReanalyze = phase === 'preview' && isAnalysisStale({
+    imagesSignature: buildImagesSignature(productImages),
+    requirements,
+    imageCount,
+    outputLanguage,
+  }, analysisParams)
 
   useEffect(() => {
     if (phase !== 'analyzing' || analyzingMessages.length === 0) return
@@ -791,9 +970,11 @@ export function StudioGenesisForm() {
   const handleStop = useCallback(() => {
     abortRef.current?.abort()
     setPhase('input')
-    setSelectedPlanIds(new Set())
     setAnalysisParams(null)
-    setStyleDimensions({})
+    setStyleSelections({})
+    setCustomStyleTags({})
+    setCustomTagInputs({})
+    setActiveCustomInputKey(null)
   }, [])
 
   // ── Phase 1: Analyze & Blueprint ──
@@ -802,13 +983,12 @@ export function StudioGenesisForm() {
     const trace_id = uid()
     const abort = new AbortController()
     abortRef.current = abort
-    const fallbackPhase: GenesisPhase = analysisBlueprint ? 'preview' : 'input'
+    const fallbackPhase: GenesisPhase = genesisAnalysis ? 'preview' : 'input'
 
     setPhase('analyzing')
     setSteps([
       { id: 'upload', label: t('steps.upload'), status: 'pending' },
       { id: 'analyze', label: t('steps.analyze'), status: 'pending' },
-      { id: 'prompts', label: t('steps.prompts'), status: 'pending' },
     ])
     setProgress(0)
     setErrorMessage(null)
@@ -833,8 +1013,8 @@ export function StudioGenesisForm() {
         requirements: requirements || undefined,
         imageCount,
         uiLanguage: backendLocale,
-        targetLanguage: backendLocale,
         outputLanguage,
+        studioType: 'genesis',
         trace_id,
       })
 
@@ -842,113 +1022,47 @@ export function StudioGenesisForm() {
       processGenerationJob(analysisJobId).catch(() => {})
 
       const analysisJob = await waitForJob(analysisJobId, abort.signal)
-      const normalizedBlueprint = normalizeAnalysisBlueprintResult(analysisJob.result_data, imageCount, isZh)
-      if (!normalizedBlueprint) {
-        throw new Error(isZh ? '分析结果格式异常，请重试。' : 'Analysis output format mismatch')
-      }
-      const blueprint: AnalysisBlueprint = isZh
-        ? { ...normalizedBlueprint, images: localizeImagePlansForZh(normalizedBlueprint.images ?? []) }
-        : normalizedBlueprint
-
       set('analyze', { status: 'done' })
-      setProgress(70)
-
-      // 3. Enter Plan Preview
-      setAnalysisBlueprint(blueprint)
-      setEditableDesignSpecs(blueprint.design_specs ?? '')
-      const plansWithIds = (blueprint.images ?? []).map(p => ({ ...p, id: crypto.randomUUID() }))
-
-      // Safety fallback: ensure at least one plan is available
-      if (plansWithIds.length === 0) {
-        plansWithIds.push({
-          id: crypto.randomUUID(),
-          title: isZh ? '图片方案 1' : 'Image Plan 1',
-          description: isZh ? '请编辑该图片方案的描述。' : 'Edit this image plan description.',
-          design_content: fallbackPlanDesignContent(isZh),
-        })
-      }
-      setEditableImagePlans(plansWithIds)
-      setSelectedPlanIds(new Set(plansWithIds.map(p => p.id!)))
-
-      // 4. Generate prompts for all plans
-      set('prompts', { status: 'active' })
-      setProgress(85)
-      const promptBlueprint: AnalysisBlueprint = {
-        images: plansWithIds,
-        design_specs: blueprint.design_specs ?? '',
-        _ai_meta: blueprint._ai_meta,
-      }
-      let finalPrompts = buildFallbackPrompts(plansWithIds, isZh)
-      try {
-        let promptText = ''
-        const stream = await generatePromptsV2Stream(
-          {
-            analysisJson: promptBlueprint,
-            design_specs: blueprint.design_specs ?? '',
-            imageCount: plansWithIds.length,
-            targetLanguage: backendLocale,
-            outputLanguage,
-            stream: true,
-            trace_id,
-          },
-          abort.signal,
-        )
-        const reader = stream.getReader()
-        const decoder = new TextDecoder()
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          for (const line of decoder.decode(value, { stream: true }).split('\n')) {
-            if (line.startsWith('data: ')) {
-              const payload = line.slice(6).trim()
-              if (payload && payload !== '[DONE]' && !payload.startsWith('[ERROR]')) {
-                try {
-                  const chunk = JSON.parse(payload) as PromptSseChunk
-                  if (chunk.fullText) {
-                    promptText = chunk.fullText
-                  }
-                } catch {
-                  promptText += payload
-                }
-              }
-            }
-          }
-        }
-        const parsedPrompts = parsePromptArray(promptText, plansWithIds.length)
-        finalPrompts = mergePromptsWithFallback(parsedPrompts, plansWithIds, isZh)
-      } catch (promptErr: unknown) {
-        const msg = friendlyError(promptErr instanceof Error ? promptErr.message : String(promptErr), isZh)
-        setErrorMessage(
-          isZh
-            ? `提示词生成失败，已使用默认提示词。(${msg})`
-            : `Prompt generation failed. Using fallback prompts. (${msg})`
-        )
-      }
-
-      setGeneratedPrompts(finalPrompts)
-      set('prompts', { status: 'done' })
       setProgress(100)
-
+      const analysis = normalizeGenesisAnalysisResult(analysisJob.result_data, isZh, requirements, outputLanguage)
+      setGenesisAnalysis(analysis)
+      setCopyPlan(analysis.copy_plan ?? '')
+      setStyleSelections(
+        analysis.style_directions.reduce<GenesisStyleSelections>((acc, group) => {
+          if (group.recommended) acc[group.key] = group.recommended
+          return acc
+        }, {})
+      )
+      setCustomStyleTags({})
+      setCustomTagInputs({})
+      setActiveCustomInputKey(null)
       setPhase('preview')
-      setAnalysisParams({ imageCount, outputLanguage })
+      setAnalysisParams({
+        imagesSignature: buildImagesSignature(productImages),
+        requirements,
+        imageCount,
+        outputLanguage,
+      })
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') return
       setErrorMessage(friendlyError(err instanceof Error ? err.message : tc('error'), isZh))
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase(fallbackPhase)
-      if (fallbackPhase === 'input') {
-        setSelectedPlanIds(new Set())
-      }
     }
-  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, t, tc, analysisBlueprint])
+  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, t, tc, genesisAnalysis])
 
   // ── Phase 2: Confirm & Generate ──
   const handleGenerate = useCallback(async () => {
-    if (isAnalysisStale({ imageCount, outputLanguage }, analysisParams)) {
+    if (isAnalysisStale({
+      imagesSignature: buildImagesSignature(productImages),
+      requirements,
+      imageCount,
+      outputLanguage,
+    }, analysisParams)) {
       setErrorMessage(t('reanalyzeWarning'))
       return
     }
-    if (!analysisBlueprint) return
+    if (!genesisAnalysis) return
     const trace_id = uid()
     const client_job_id = uid()
     const batchId = uid()
@@ -958,6 +1072,7 @@ export function StudioGenesisForm() {
 
     setPhase('generating')
     setSteps([
+      { id: 'prompts', label: t('steps.prompts'), status: 'pending' },
       { id: 'generate', label: t('steps.generate'), status: 'pending' },
       { id: 'done', label: t('steps.done'), status: 'pending' },
     ])
@@ -970,33 +1085,72 @@ export function StudioGenesisForm() {
       setSteps((prev) => patchStep(prev, id, patch))
 
     try {
-      // Use pre-generated prompts from analysis phase (user may have edited them)
-      const selectedPlans = editableImagePlans.filter(p => p.id && selectedPlanIds.has(p.id))
-      const prompts = Array.from({ length: selectedPlans.length }, (_, i) => {
-        const gp = generatedPrompts[i] ?? generatedPrompts[i % Math.max(1, generatedPrompts.length)]
-        return gp?.prompt ?? ''
-      }).filter(p => p.length > 0)
-      if (prompts.length === 0) {
-        throw new Error('No prompts available — please re-analyze')
-      }
+      set('prompts', { status: 'active' })
+      setProgress(10)
 
-      // Prepend style dimension prefix to each prompt
-      const stylePrefix = buildStylePrefix(styleDimensions)
-      const prefixedPrompts = prompts.map(p => stylePrefix + p)
+      let promptText = ''
+      const promptStream = await generatePromptsV2Stream(
+        {
+          module: 'genesis',
+          analysisJson: {
+            product_summary: genesisAnalysis.product_summary,
+            requirements,
+            image_count: imageCount,
+            output_language: outputLanguage,
+            copy_plan: copyPlan.trim(),
+            style_directions: genesisAnalysis.style_directions,
+            selected_styles: GENESIS_STYLE_KEYS.reduce<Record<string, string>>((acc, key) => {
+              const selected = styleSelections[key]
+              if (selected) acc[key] = selected
+              return acc
+            }, {}),
+          },
+          imageCount,
+          targetLanguage: backendLocale,
+          outputLanguage,
+          stream: true,
+          trace_id,
+        },
+        abort.signal,
+      )
+      const reader = promptStream.getReader()
+      const decoder = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        for (const line of decoder.decode(value, { stream: true }).split('\n')) {
+          if (!line.startsWith('data: ')) continue
+          const payload = line.slice(6).trim()
+          if (!payload || payload === '[DONE]' || payload.startsWith('[ERROR]')) continue
+          try {
+            const chunk = JSON.parse(payload) as PromptSseChunk
+            if (chunk.fullText) promptText = chunk.fullText
+          } catch {
+            promptText += payload
+          }
+        }
+      }
+      const promptObjects = parsePromptArray(promptText, imageCount)
+      const prompts = Array.from({ length: imageCount }, (_, i) =>
+        promptObjects[i]?.prompt ?? promptObjects[promptObjects.length - 1]?.prompt ?? ''
+      ).filter((prompt) => prompt.trim().length > 0)
+      if (prompts.length === 0) throw new Error('No prompts available — please re-analyze')
+      setRetryContext({ prompts, trace_id })
+      set('prompts', { status: 'done' })
 
       // Generate images — one per prompt
       set('generate', { status: 'active' })
-      setProgress(10)
+      setProgress(25)
 
       // Create initial slots
-      const initialSlots: ImageSlot[] = prefixedPrompts.map(() => ({
+      const initialSlots: ImageSlot[] = prompts.map(() => ({
         jobId: '',
         status: 'pending' as const,
       }))
       setImageSlots(initialSlots)
 
       const submissionResults = await runWithConcurrency(
-        prefixedPrompts.map((prompt, i) => () =>
+        prompts.map((prompt, i) => () =>
           generateImage({
             productImage: uploadedUrls[0],
             productImages: uploadedUrls,
@@ -1087,7 +1241,6 @@ export function StudioGenesisForm() {
         setErrorMessage(t('allImagesFailed'))
       }
 
-      setRetryContext({ prompts: prefixedPrompts, trace_id })
       setPhase('complete')
       refreshCredits()
     } catch (err: unknown) {
@@ -1097,18 +1250,19 @@ export function StudioGenesisForm() {
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
     }
-  }, [analysisBlueprint, editableImagePlans, editableDesignSpecs, selectedPlanIds, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, outputLanguage, backendLocale, imageCount, analysisParams, generatedPrompts, styleDimensions, t, tc])
+  }, [analysisParams, aspectRatio, backendLocale, copyPlan, genesisAnalysis, imageCount, imageSize, isZh, model, outputLanguage, productImages, requirements, styleSelections, t, tc, turboEnabled, uploadedUrls])
 
   const handleBackToInput = useCallback(() => {
     setPhase('input')
     setSteps([])
     setProgress(0)
     setErrorMessage(null)
-    setSelectedPlanIds(new Set())
     setAnalysisParams(null)
     setRetryContext(null)
-    setGeneratedPrompts([])
-    setStyleDimensions({})
+    setStyleSelections({})
+    setCustomStyleTags({})
+    setCustomTagInputs({})
+    setActiveCustomInputKey(null)
   }, [])
 
   const handleBackToPreview = useCallback(() => {
@@ -1125,48 +1279,17 @@ export function StudioGenesisForm() {
     setImageSlots([])
     setFailedSlotIndices([])
     setErrorMessage(null)
-    setAnalysisBlueprint(null)
-    setEditableDesignSpecs('')
-    setEditableImagePlans([])
-    setSelectedPlanIds(new Set())
+    setGenesisAnalysis(null)
+    setCopyPlan('')
     setUploadedUrls([])
     setAnalysisParams(null)
     setRetryContext(null)
-    setGeneratedPrompts([])
-    setStyleDimensions({})
-  }, [])
-
-  // ─── handleAddPlan / handleDuplicatePlan ──────────────────────────────────
-
-  const handleAddPlan = useCallback(() => {
-    const newId = `user-${Date.now()}`
-    const newPlan: BlueprintImagePlan = {
-      id: newId,
-      title: isZh ? `自定义方案 ${editableImagePlans.length + 1}` : `Custom Plan ${editableImagePlans.length + 1}`,
-      description: '',
-      design_content: '',
-    }
-    setEditableImagePlans((prev) => [...prev, newPlan])
-    setSelectedPlanIds((prev) => { const next = new Set(prev); next.add(newId); return next })
-  }, [editableImagePlans.length, isZh])
-
-  const handleDuplicatePlan = useCallback((id: string) => {
-    const source = editableImagePlans.find((p) => p.id === id)
-    if (!source) return
-    const newId = `dup-${Date.now()}`
-    const newPlan: BlueprintImagePlan = {
-      ...source,
-      id: newId,
-      title: `${source.title} (copy)`,
-    }
-    setEditableImagePlans((prev) => {
-      const idx = prev.findIndex((p) => p.id === id)
-      const next = [...prev]
-      next.splice(idx + 1, 0, newPlan)
-      return next
-    })
-    setSelectedPlanIds((prev) => { const next = new Set(prev); next.add(newId); return next })
-  }, [editableImagePlans])
+    setStyleSelections({})
+    setCustomStyleTags({})
+    setCustomTagInputs({})
+    setActiveCustomInputKey(null)
+    setRequirements(defaultRequirements)
+  }, [defaultRequirements])
 
   // ─── handleRetryFailed ────────────────────────────────────────────────────
 
@@ -1278,6 +1401,40 @@ export function StudioGenesisForm() {
     }
   }, [retryContext, failedSlotIndices, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, t])
 
+  const handleStyleSelect = useCallback((key: GenesisStyleDirectionKey, value: string) => {
+    setStyleSelections((prev) => ({
+      ...prev,
+      [key]: prev[key] === value ? undefined : value,
+    }))
+  }, [])
+
+  const handleAddCustomTag = useCallback((key: GenesisStyleDirectionKey) => {
+    const raw = (customTagInputs[key] ?? '').trim()
+    if (!raw) return
+    setErrorMessage(null)
+    setCustomStyleTags((prev) => ({ ...prev, [key]: raw }))
+    setStyleSelections((prev) => ({ ...prev, [key]: raw }))
+    setCustomTagInputs((prev) => ({ ...prev, [key]: '' }))
+    setActiveCustomInputKey(null)
+  }, [customTagInputs])
+
+  const handleRemoveCustomTag = useCallback((key: GenesisStyleDirectionKey) => {
+    setCustomStyleTags((prev) => {
+      const next = { ...prev }
+      const removed = next[key]
+      delete next[key]
+      setStyleSelections((prevSelections) => {
+        if (prevSelections[key] !== removed) return prevSelections
+        const nextSelections = { ...prevSelections }
+        delete nextSelections[key]
+        return nextSelections
+      })
+      return next
+    })
+    setCustomTagInputs((prev) => ({ ...prev, [key]: '' }))
+    setActiveCustomInputKey(null)
+  }, [])
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   // Determine button state
@@ -1348,23 +1505,19 @@ export function StudioGenesisForm() {
             <Button
               size="lg"
               onClick={handleGenerate}
-              disabled={insufficientCredits || selectedCount === 0}
+              disabled={insufficientCredits}
               className="h-14 w-full rounded-3xl bg-[#171a22] text-[17px] font-semibold text-white hover:bg-[#11131a] disabled:bg-[#9ca1ad]"
             >
               <ArrowRight className="mr-2 h-5 w-5" />
               {isZh
-                ? `确认生成 ${selectedCount} 张图片`
-                : `Generate ${selectedCount} ${selectedCount > 1 ? 'images' : 'image'}`}
+                ? `确认生成 ${imageCount} 张主图`
+                : `Generate ${imageCount} ${imageCount > 1 ? 'hero images' : 'hero image'}`}
             </Button>
           )}
 
           <p className="text-center text-[14px] text-[#7b808c]">
             {isZh ? `消耗 ${totalCost} 积分` : `Cost ${totalCost} credits`}
           </p>
-
-          {selectedCount === 0 && (
-            <p className="text-center text-sm text-destructive">{t('noCardsSelected')}</p>
-          )}
 
           {insufficientCredits && (
             <div className="text-center">
@@ -1425,7 +1578,7 @@ export function StudioGenesisForm() {
         >
           {t('newGeneration')}
         </Button>
-        {analysisBlueprint && (
+        {genesisAnalysis && (
           <Button
             variant="outline"
             size="lg"
@@ -1475,60 +1628,112 @@ export function StudioGenesisForm() {
 
     if (phase === 'preview') {
       return (
-        <>
-        <StyleDimensionRadio
-          values={styleDimensions}
-          onChange={(key, value) => {
-            setStyleDimensions(prev => {
-              const next = { ...prev }
-              if (value === null) {
-                delete next[key]
-              } else {
-                next[key] = value
-              }
-              return next
-            })
-          }}
-        />
-        <DesignBlueprint
-          designSpecs={editableDesignSpecs}
-          onDesignSpecsChange={setEditableDesignSpecs}
-          imagePlans={editableImagePlans}
-          aspectRatio={aspectRatio}
-          onImagePlanChange={(i, plan) => {
-            setEditableImagePlans((prev) => prev.map((p, idx) => (idx === i ? plan : p)))
-          }}
-          selectedIds={selectedPlanIds}
-          onToggleSelect={(id) => {
-            setSelectedPlanIds((prev) => {
-              const next = new Set(prev)
-              if (next.has(id)) next.delete(id)
-              else next.add(id)
-              return next
-            })
-          }}
-          onDeletePlan={(id) => {
-            setEditableImagePlans((prev) => prev.filter((p) => p.id !== id))
-            setSelectedPlanIds((prev) => {
-              const next = new Set(prev)
-              next.delete(id)
-              return next
-            })
-          }}
-          onAddPlan={handleAddPlan}
-          onDuplicatePlan={handleDuplicatePlan}
-          generatedPrompts={generatedPrompts}
-          onPromptChange={(i, prompt) => {
-            setGeneratedPrompts((prev) => prev.map((gp, idx) => idx === i ? { ...gp, prompt } : gp))
-          }}
-          onSelectAll={() => {
-            setSelectedPlanIds(new Set(editableImagePlans.map((p) => p.id!)))
-          }}
-          onDeselectAll={() => {
-            setSelectedPlanIds(new Set())
-          }}
-        />
-        </>
+        <div className="space-y-6">
+          <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? '风格方向' : 'Style Direction'}</h3>
+                <p className="text-[13px] text-[#7d818d]">{isZh ? 'AI 已生成动态标签，可取消或新增自定义标签。用户自定义标签不限制字数。' : 'AI generated dynamic tags. You can deselect or add one custom tag per dimension. Custom tags are not length-limited.'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {genesisAnalysis?.style_directions.map((group) => {
+                const selectedValue = styleSelections[group.key]
+                const customTag = customStyleTags[group.key]
+                const isAdding = activeCustomInputKey === group.key
+                return (
+                  <div key={group.key}>
+                    <p className="mb-2 text-[13px] font-medium text-[#5a5e6b]">
+                      {getGenesisDimensionLabel(group.key, isZh)}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {group.options.map((option) => {
+                        const isActive = selectedValue === option
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => handleStyleSelect(group.key, option)}
+                            className={isActive
+                              ? 'rounded-full bg-[#191b22] px-3 py-1.5 text-[13px] font-medium text-white transition-colors'
+                              : 'rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-1.5 text-[13px] font-medium text-[#5a5e6b] transition-colors hover:border-[#191b22]'}
+                          >
+                            {option}
+                          </button>
+                        )
+                      })}
+                      {customTag && (
+                        <span className={selectedValue === customTag
+                          ? 'inline-flex items-center gap-1 rounded-full bg-[#171a22] px-3 py-1.5 text-[13px] font-medium text-white'
+                          : 'inline-flex items-center gap-1 rounded-full border border-[#171a22] bg-white px-3 py-1.5 text-[13px] font-medium text-[#171a22]'}>
+                          <button type="button" onClick={() => handleStyleSelect(group.key, customTag)}>
+                            {customTag}
+                          </button>
+                          <button type="button" onClick={() => handleRemoveCustomTag(group.key)}>
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </span>
+                      )}
+                      {!customTag && !isAdding && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveCustomInputKey(group.key)}
+                          className="inline-flex items-center gap-1 rounded-full border border-dashed border-[#d0d4dc] bg-white px-3 py-1.5 text-[13px] font-medium text-[#5a5e6b] hover:border-[#191b22]"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          {isZh ? '新增' : 'Add'}
+                        </button>
+                      )}
+                    </div>
+                    {isAdding && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          value={customTagInputs[group.key] ?? ''}
+                          onChange={(e) => setCustomTagInputs((prev) => ({ ...prev, [group.key]: e.target.value }))}
+                          placeholder={isZh ? '输入自定义标签' : 'Enter a custom tag'}
+                          className="h-10 flex-1 rounded-2xl border border-[#d0d4dc] bg-[#f1f3f6] px-3 text-[13px] text-[#1a1d24] outline-none"
+                        />
+                        <Button type="button" size="sm" onClick={() => handleAddCustomTag(group.key)}>
+                          {isZh ? '确认' : 'Add'}
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setActiveCustomInputKey(null)}>
+                          {isZh ? '取消' : 'Cancel'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+                <ImageIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? '文案规划' : 'Copy Plan'}</h3>
+                <p className="text-[13px] text-[#7d818d]">
+                  {outputLanguage === 'none'
+                    ? (isZh ? '当前为纯视觉语言，AI 默认不写文案；你仍可手动输入。' : 'Visual-only language is selected. AI leaves copy empty by default, but you can still type your own copy.')
+                    : (isZh ? '同一份文案会应用到所有生成图片；清空即生成纯图片版。' : 'The same copy will be applied to all generated images. Clear it for a pure visual version.')}
+                </p>
+              </div>
+            </div>
+            <Textarea
+              value={copyPlan}
+              onChange={(e) => setCopyPlan(e.target.value)}
+              rows={6}
+              className="min-h-[180px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] leading-6"
+              placeholder={isZh ? '输入共享文案，所有图片共用；留空则生成纯图片版。' : 'Enter shared copy for all images. Leave empty for a pure visual version.'}
+            />
+          </div>
+        </div>
       )
     }
 
@@ -1615,7 +1820,7 @@ export function StudioGenesisForm() {
         <div className="text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-4 py-1.5 text-xs font-medium text-[#202227]">
             <Sparkles className="h-4 w-4" />
-            <span>{isZh ? 'AI 组图生成' : 'AI Product Gallery'}</span>
+            <span>{isZh ? 'AI 主图生成' : 'AI Hero Image Generator'}</span>
           </div>
           <h1 className="mt-5 text-3xl font-semibold tracking-tight text-[#17181d] sm:text-4xl">{t('title')}</h1>
           <p className="mx-auto mt-3 max-w-4xl text-sm leading-relaxed text-[#70727a] sm:text-base">{t('description')}</p>
@@ -1671,43 +1876,18 @@ export function StudioGenesisForm() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? '组图要求' : 'Requirements'}</h3>
-                  <p className="text-[13px] text-[#7d818d]">{isZh ? '描述您的产品信息和期望的图片风格' : 'Describe your product and desired image style'}</p>
+                  <h3 className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? '主图要求' : 'Hero Image Brief'}</h3>
+                  <p className="text-[13px] text-[#7d818d]">{isZh ? '默认文案可直接修改或删除，用户要求优先于产品图分析。' : 'Edit or remove the default brief. The user brief takes priority over image inference.'}</p>
                 </div>
               </div>
 
-              {phase === 'input' && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => setRequirements(isZh
-                      ? '我的商品是____，主要卖点是____，目标客群是____'
-                      : 'My product is ____, key features are ____, target audience is ____'
-                    )}
-                    className="rounded-full border border-[#d0d4dc] bg-white px-3 py-1 text-xs text-[#5a5e6b] hover:bg-[#f1f3f6] transition-colors"
-                  >
-                    {t('templateStructured')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRequirements('')}
-                    className="rounded-full border border-[#d0d4dc] bg-white px-3 py-1 text-xs text-[#5a5e6b] hover:bg-[#f1f3f6] transition-colors"
-                  >
-                    {t('templateFree')}
-                  </button>
-                </div>
-              )}
-
               <Textarea
                 id="sg-req"
-                placeholder={isZh
-                  ? '支持三种输入方式：\n1. 固定句式：我的商品是____，卖点是____\n2. 自由描述：任意文字描述产品和需求\n3. 留空：仅通过产品图进行AI分析'
-                  : 'Three input styles supported:\n1. Template: My product is ____, features are ____\n2. Free text: Describe your product freely\n3. Empty: Let AI analyze from images alone'}
                 value={requirements}
                 onChange={(e) => setRequirements(e.target.value)}
                 rows={5}
                 disabled={leftPanelDisabled}
-                className="min-h-[128px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] leading-6"
+                className="min-h-[128px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] leading-6 text-[#1a1d24]"
               />
 
               <div className="mt-4 space-y-1.5">

@@ -11,6 +11,9 @@ import type {
   GenerationModel,
   AspectRatio,
   ImageSize,
+  StyleConstraintPayload,
+  StyleAnalysisResult,
+  EcomDetailModuleDefinition,
 } from '@/types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -152,6 +155,7 @@ export interface AnalyzeProductParams {
   mannequinEnabled?: boolean
   mannequin?: { enabled: boolean; whiteBackground: boolean }
   mannequinWhiteBackground?: boolean
+  ecomDetailModules?: EcomDetailModuleDefinition[]
 }
 
 export async function analyzeProductV2(
@@ -199,6 +203,8 @@ export interface GeneratePromptsParams {
   stream?: boolean
   trace_id: string
   clothingMode?: 'prompt_generation' | 'model_prompt_generation'
+  styleConstraint?: StyleConstraintPayload
+  module?: 'genesis' | 'default' | 'clothing' | 'ecom-detail'
 }
 
 /**
@@ -257,6 +263,7 @@ export interface GenerateImageParams {
   originalImage?: string
   referenceImages?: string[]
   textEdits?: Record<string, string>
+  styleConstraint?: StyleConstraintPayload
 }
 
 export async function generateImage(
@@ -337,6 +344,7 @@ export interface AnalyzeSingleParams {
   client_job_id: string
   fe_attempt: number
   metadata?: Record<string, unknown>
+  styleConstraint?: StyleConstraintPayload
 }
 
 export async function analyzeSingle(
@@ -345,6 +353,21 @@ export async function analyzeSingle(
   const res = await invokeFunction<JobResponse>('analyze-single', params)
   void processGenerationJob(res.job_id)
   return res
+}
+
+// ── Style Dimensions Analysis ────────────────────────────────────────────────
+
+export interface AnalyzeStyleDimensionsParams {
+  contextText?: string
+  analysisJson?: unknown
+  module: 'genesis' | 'aesthetic' | 'clothing-basic' | 'clothing-model'
+  uiLanguage?: string
+}
+
+export async function analyzeStyleDimensions(
+  params: AnalyzeStyleDimensionsParams
+): Promise<StyleAnalysisResult> {
+  return invokeFunction<StyleAnalysisResult>('analyze-style-dimensions', params)
 }
 
 // ── Payment ───────────────────────────────────────────────────────────────────

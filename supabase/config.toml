@@ -21,6 +21,9 @@ verify_jwt = false
 [functions.analyze-single]
 verify_jwt = false
 
+[functions.analyze-style-dimensions]
+verify_jwt = false
+
 [functions.create-credit-checkout]
 verify_jwt = false
 

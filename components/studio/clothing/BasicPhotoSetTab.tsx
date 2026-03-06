@@ -26,10 +26,8 @@ import type {
   BlueprintImagePlan,
   GeneratedPrompt,
 } from '@/types'
-import { isValidModel, STYLE_DIMENSIONS, buildStylePrefix } from '@/types'
-import type { StyleDimensionKey } from '@/types'
+import { isValidModel } from '@/types'
 import { friendlyError } from '@/lib/utils'
-import { StyleDimensionRadio } from '@/components/studio/StyleDimensionRadio'
 
 function uid() {
   return crypto.randomUUID()
@@ -298,7 +296,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4')
   const [resolution, setResolution] = useState<ImageSize>('2K')
   const [turboEnabled, setTurboEnabled] = useState(false)
-  const [styleDimensions, setStyleDimensions] = useState<Partial<Record<StyleDimensionKey, string>>>({})
 
   const [steps, setSteps] = useState<ProgressStep[]>([])
   const [progress, setProgress] = useState(0)
@@ -312,7 +309,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   useSessionPersistence(
     'clothing-basic-photo',
     () => ({
-      requirements, language, model, aspectRatio, resolution, turboEnabled, styleDimensions,
+      requirements, language, model, aspectRatio, resolution, turboEnabled,
       results: results.filter((r) => r.url && !r.url.startsWith('data:')),
     }),
     (s) => {
@@ -322,19 +319,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
       if (typeof s.resolution === 'string') setResolution(s.resolution as ImageSize)
       if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (s.styleDimensions && typeof s.styleDimensions === 'object') {
-        const restored: Partial<Record<StyleDimensionKey, string>> = {}
-        const validKeys = new Set(STYLE_DIMENSIONS.map(d => d.key))
-        for (const [k, v] of Object.entries(s.styleDimensions as Record<string, string>)) {
-          if (validKeys.has(k as StyleDimensionKey) && typeof v === 'string') {
-            const dim = STYLE_DIMENSIONS.find(d => d.key === k)
-            if (dim?.options.some(o => o.value === v)) {
-              restored[k as StyleDimensionKey] = v
-            }
-          }
-        }
-        if (Object.keys(restored).length > 0) setStyleDimensions(restored)
-      }
       if (Array.isArray(s.results)) {
         const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string' && !r.url.startsWith('data:'))
         if (restored.length > 0) setResults(restored)
@@ -408,6 +392,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       setAnalysisBlueprint(blueprint)
       setEditableDesignSpecs(blueprint.design_specs)
       setEditableImagePlans(blueprint.images)
+
       set('preview', { status: 'done' })
       setProgress(100)
       setPhase('preview')
@@ -485,12 +470,11 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       }
 
       const parsedPrompts = parsePromptArray(promptText, editableImagePlans.length)
-      const stylePrefix = buildStylePrefix(styleDimensions)
       const prompts = Array.from({ length: editableImagePlans.length }, (_, i) => {
         const gp = parsedPrompts[i] ?? parsedPrompts[i % Math.max(parsedPrompts.length, 1)]
         // Use || so empty prompt strings also fall back to design_content
         const basePrompt = gp?.prompt || editableImagePlans[i].design_content
-        return stylePrefix + basePrompt
+        return basePrompt
       })
 
       set('prompts', { status: 'done' })
@@ -544,7 +528,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     aspectRatio,
     resolution,
     turboEnabled,
-    styleDimensions,
     backendLocale,
     language,
     traceId,
@@ -562,7 +545,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     setEditableDesignSpecs('')
     setEditableImagePlans([])
     setUploadedUrls([])
-    setStyleDimensions({})
   }, [])
 
   const handleCancel = useCallback(() => {
@@ -625,22 +607,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
         <GenerationTypeSelector
           typeState={typeState}
           onTypeStateChange={setTypeState}
-          disabled={isProcessing}
-        />
-
-        <StyleDimensionRadio
-          values={styleDimensions}
-          onChange={(key, value) => {
-            setStyleDimensions(prev => {
-              const next = { ...prev }
-              if (value === null) {
-                delete next[key]
-              } else {
-                next[key] = value
-              }
-              return next
-            })
-          }}
           disabled={isProcessing}
         />
       </fieldset>
