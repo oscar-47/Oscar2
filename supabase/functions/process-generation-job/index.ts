@@ -16,6 +16,7 @@ import {
   OPENROUTER_MODEL_MAP,
 } from "../_shared/generation-config.ts";
 import Jimp from "npm:jimp@0.22.12";
+import { Buffer } from "node:buffer";
 
 type GenerationJobRow = {
   id: string;
@@ -1011,6 +1012,62 @@ function getSourceImageFromPayload(payload: Record<string, unknown>): string | n
   return null;
 }
 
+function normalizeProductVisualIdentityMetadata(value: unknown): ProductVisualIdentity | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const secondaryColors = Array.isArray(record.secondary_colors)
+    ? record.secondary_colors
+    : Array.isArray(record.secondaryColors)
+    ? record.secondaryColors
+    : [];
+  const keyFeatures = Array.isArray(record.key_features)
+    ? record.key_features
+    : Array.isArray(record.keyFeatures)
+    ? record.keyFeatures
+    : [];
+
+  return {
+    primary_color: sanitizeString(record.primary_color ?? record.primaryColor, ""),
+    secondary_colors: secondaryColors.map(String).map((item) => item.trim()).filter(Boolean),
+    material: sanitizeString(record.material, ""),
+    key_features: keyFeatures.map(String).map((item) => item.trim()).filter(Boolean),
+  };
+}
+
+function buildIdentityLockPromptParts(params: {
+  identity: ProductVisualIdentity | null;
+  heroPlanTitle: string;
+  heroPlanDescription: string;
+}): string[] {
+  const { identity, heroPlanTitle, heroPlanDescription } = params;
+  const parts: string[] = [];
+  if (heroPlanTitle) parts.push(`Hero plan title: ${heroPlanTitle}.`);
+  if (heroPlanDescription) parts.push(`Hero plan objective: ${heroPlanDescription}.`);
+  if (identity?.primary_color) {
+    parts.push(`Exact color anchor: ${identity.primary_color}. Keep this true product color unchanged.`);
+  } else {
+    parts.push("Exact color anchor: keep the real product color from the uploaded reference images unchanged.");
+  }
+  if (identity?.material) {
+    parts.push(`Exact material anchor: ${identity.material}. Do not replace or restyle the material.`);
+  } else {
+    parts.push("Exact material anchor: preserve the original material from the uploaded reference images.");
+  }
+  if (identity && identity.key_features.length > 0) {
+    parts.push(`Immutable product features: ${identity.key_features.join(", ")}.`);
+  } else {
+    parts.push("Immutable product features: preserve the visible logo, hardware, texture, stitching, silhouette, proportions, and structure from the uploaded reference images.");
+  }
+  parts.push("Hard identity lock: exact same SKU, exact same product, exact same design. Do not recolor, redesign, simplify, replace, remove logo, change hardware, alter texture, adjust silhouette, distort proportions, or modify structure.");
+  return parts;
+}
+
+function buildAvoidInstruction(negativePrompt: string): string {
+  const normalized = negativePrompt.trim();
+  if (!normalized) return "";
+  return `Avoid these drift outcomes: ${normalized}.`;
+}
+
 async function syncModelHistoryStatus(
   supabase: ReturnType<typeof createServiceClient>,
   jobId: string,
@@ -1957,6 +2014,13 @@ async function processImageGenJob(
     // Build prompt
     const styleConstraintPrompt = normalizeStyleConstraintPrompt(payload.styleConstraint);
     const styleConstraintSource = normalizeStyleConstraintSource(payload.styleConstraint);
+    const metadata = payload.metadata && typeof payload.metadata === "object"
+      ? payload.metadata as Record<string, unknown>
+      : {};
+    const negativePrompt = typeof payload.negativePrompt === "string" ? payload.negativePrompt.trim() : "";
+    const productIdentity = normalizeProductVisualIdentityMetadata(metadata.product_visual_identity);
+    const heroPlanTitle = sanitizeString(metadata.hero_plan_title, "");
+    const heroPlanDescription = sanitizeString(metadata.hero_plan_description, "");
     let finalPrompt = String(payload.prompt);
     if (isTextEdit) {
       // Text Edit mode: build bilingual replacement prompt from textEdits
@@ -1991,11 +2055,19 @@ async function processImageGenJob(
         "Do not recolor, redesign, simplify, replace, or invent new product features. " +
         "Only scene, composition, camera angle, crop, lighting, and background styling may change. " +
         "4K ultra-detailed rendering. ";
-      if (styleConstraintPrompt) {
-        finalPrompt = `${ecomPrefix}${styleConstraintPrompt}\n${finalPrompt}`;
-      } else {
-        finalPrompt = ecomPrefix + finalPrompt;
-      }
+      const identityLockPrompt = buildIdentityLockPromptParts({
+        identity: productIdentity,
+        heroPlanTitle,
+        heroPlanDescription,
+      }).join(" ");
+      const avoidInstruction = buildAvoidInstruction(negativePrompt);
+      const prefixParts = [
+        ecomPrefix.trim(),
+        identityLockPrompt,
+        styleConstraintPrompt,
+        avoidInstruction,
+      ].filter((item) => item && item.trim().length > 0);
+      finalPrompt = `${prefixParts.join("\n")}\n${finalPrompt}`;
     }
     const imageGenTimeoutMs = (isQuickEdit || isTextEdit)
       ? Number(Deno.env.get("QUICK_EDIT_IMAGE_TIMEOUT_MS") ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "120000")
