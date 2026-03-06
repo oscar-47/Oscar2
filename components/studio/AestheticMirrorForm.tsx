@@ -4,7 +4,6 @@ import { useState, useRef, useCallback } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { ResultGallery } from '@/components/generation/ResultGallery'
-import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -113,28 +112,7 @@ export function AestheticMirrorForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [downloadingAll, setDownloadingAll] = useState(false)
 
-  // Persist all form state to sessionStorage
-  useSessionPersistence(
-    'aesthetic-mirror',
-    () => ({
-      mode, userPrompt, model, aspectRatio, imageSize, imageCount, groupCount,
-    }),
-    (s) => {
-      if (s.mode === 'single' || s.mode === 'batch') setMode(s.mode)
-      if (typeof s.userPrompt === 'string') setUserPrompt(s.userPrompt)
-      if (typeof s.model === 'string' && isValidModel(s.model)) {
-        const nextModel = normalizeGenerationModel(s.model) as GenerationModel
-        setModel(nextModel)
-      }
-      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.imageSize === 'string') {
-        const restoredModel = typeof s.model === 'string' ? normalizeGenerationModel(s.model) : DEFAULT_MODEL
-        setImageSize(sanitizeImageSizeForModel(restoredModel, s.imageSize as ImageSize))
-      }
-      if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
-      if (typeof s.groupCount === 'number') setGroupCount(s.groupCount)
-    }
-  )
+  // Session persistence removed: text persisted but images didn't on refresh.
 
   const abortRef = useRef<AbortController | null>(null)
   const productInputRef = useRef<HTMLInputElement | null>(null)

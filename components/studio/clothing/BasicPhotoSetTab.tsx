@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
-import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useLocale } from 'next-intl'
 import { Image as ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -311,24 +310,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const [editableImagePlans, setEditableImagePlans] = useState<BlueprintImagePlan[]>([])
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([])
 
-  useSessionPersistence(
-    'clothing-basic-photo',
-    () => ({
-      requirements, language, model, aspectRatio, resolution,
-    }),
-    (s) => {
-      if (typeof s.requirements === 'string') setRequirements(s.requirements)
-      if (typeof s.language === 'string') setLanguage(s.language)
-      if (typeof s.model === 'string' && isValidModel(s.model)) {
-        setModel(normalizeGenerationModel(s.model) as GenerationModel)
-      }
-      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.resolution === 'string') {
-        const restoredModel = typeof s.model === 'string' ? normalizeGenerationModel(s.model) : DEFAULT_MODEL
-        setResolution(sanitizeImageSizeForModel(restoredModel, s.resolution as ImageSize))
-      }
-    }
-  )
+  // Session persistence removed: text persisted but images didn't on refresh.
 
   const abortRef = useRef<AbortController | null>(null)
 

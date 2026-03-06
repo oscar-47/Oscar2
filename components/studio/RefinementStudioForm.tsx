@@ -3,7 +3,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { ResultGallery } from '@/components/generation/ResultGallery'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
-import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useTranslations, useLocale } from 'next-intl'
 import { useDropzone, type FileRejection } from 'react-dropzone'
 import { Loader2, Plus, Download, Sparkles, FileText, Upload, ImageIcon } from 'lucide-react'
@@ -209,24 +208,7 @@ export function RefinementStudioForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [downloadingAll, setDownloadingAll] = useState(false)
 
-  useSessionPersistence(
-    'refinement-studio',
-    () => ({
-      userPrompt, backgroundMode, model, aspectRatio, imageSize,
-    }),
-    (s) => {
-      if (typeof s.userPrompt === 'string') setUserPrompt(s.userPrompt)
-      if (typeof s.backgroundMode === 'string') setBackgroundMode(s.backgroundMode as BackgroundMode)
-      if (typeof s.model === 'string' && isValidModel(s.model)) {
-        setModel(normalizeGenerationModel(s.model) as GenerationModel)
-      }
-      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.imageSize === 'string') {
-        const restoredModel = typeof s.model === 'string' ? normalizeGenerationModel(s.model) : DEFAULT_MODEL
-        setImageSize(sanitizeImageSizeForModel(restoredModel, s.imageSize as ImageSize))
-      }
-    }
-  )
+  // Session persistence removed: text persisted but images didn't on refresh.
 
   const abortRef = useRef<AbortController | null>(null)
   const uploadedUrlsRef = useRef<string[]>([])

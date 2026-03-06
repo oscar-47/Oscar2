@@ -31,7 +31,6 @@ import { EcomDetailModuleSelector } from '@/components/studio/EcomDetailModuleSe
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
-import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { uploadFiles } from '@/lib/api/upload'
 import {
   analyzeProductV2,
@@ -336,34 +335,7 @@ export function EcomStudioForm() {
   const abortRef = useRef<AbortController | null>(null)
   const { total: credits } = useCredits()
 
-  useSessionPersistence(
-    'ecom-studio',
-    () => ({
-      requirements,
-      selectedDetailModules,
-      model,
-      aspectRatio,
-      imageSize,
-      outputLanguage,
-    }),
-    (session) => {
-      if (typeof session.requirements === 'string') setRequirements(session.requirements)
-      if (Array.isArray(session.selectedDetailModules)) {
-        const restored = (session.selectedDetailModules as string[])
-          .filter((id): id is EcomDetailModuleId => MODULE_ID_SET.has(id as EcomDetailModuleId))
-        if (restored.length > 0) setSelectedDetailModules(restored)
-      }
-      if (typeof session.model === 'string' && isValidModel(session.model)) {
-        setModel(normalizeGenerationModel(session.model) as GenerationModel)
-      }
-      if (typeof session.aspectRatio === 'string') setAspectRatio(session.aspectRatio as AspectRatio)
-      if (typeof session.imageSize === 'string') {
-        const restoredModel = typeof session.model === 'string' ? normalizeGenerationModel(session.model) : DEFAULT_MODEL
-        setImageSize(sanitizeImageSizeForModel(restoredModel, session.imageSize as ImageSize))
-      }
-      if (typeof session.outputLanguage === 'string') setOutputLanguage(session.outputLanguage as OutputLanguage)
-    },
-  )
+  // Session persistence removed: text persisted but images didn't on refresh.
 
   const selectedModules = resolveEcomDetailModules(selectedDetailModules)
   const currentImageCount = phase === 'preview' || phase === 'generating' || phase === 'complete'
