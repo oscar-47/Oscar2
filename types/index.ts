@@ -124,6 +124,7 @@ export type GenerationModel =
   | 'ideogram-3'
 
 export type ModelTier = 'high' | 'balanced' | 'fast'
+export type ModelRolloutStage = 'public' | 'internal_only' | 'disabled'
 
 export interface AvailableModel {
   value: GenerationModel
@@ -133,21 +134,151 @@ export interface AvailableModel {
 }
 
 export const AVAILABLE_MODELS: ReadonlyArray<AvailableModel> = [
-  { value: 'or-gemini-3.1-flash', label: 'Gemini 3.1 Flash', tier: 'high', tierLabel: { en: 'High Quality', zh: '高画质' } },
-  { value: 'or-gemini-3-pro', label: 'Gemini 3 Pro', tier: 'balanced', tierLabel: { en: 'Balanced', zh: '均衡' } },
-  { value: 'or-gemini-2.5-flash', label: 'Gemini 2.5 Flash', tier: 'fast', tierLabel: { en: 'Fast', zh: '极速' } },
+  { value: 'or-gemini-3-pro', label: 'Nano Banana Pro', tier: 'high', tierLabel: { en: 'High Quality (Nano Banana Pro)', zh: '高质 (Nano Banana Pro)' } },
+  { value: 'or-gemini-3.1-flash', label: 'Nano Banana 2', tier: 'balanced', tierLabel: { en: 'Balanced (Nano Banana 2)', zh: '均衡 (Nano Banana 2)' } },
+  { value: 'or-gemini-2.5-flash', label: 'Nano Banana', tier: 'fast', tierLabel: { en: 'Fast (Nano Banana)', zh: '极速 (Nano Banana)' } },
 ]
 
 export const DEFAULT_MODEL: GenerationModel = 'or-gemini-3.1-flash'
-
-export function isValidModel(m: string): boolean {
-  return AVAILABLE_MODELS.some((x) => x.value === m)
-}
 
 export type AspectRatio =
   | '1:1' | '2:3' | '3:2' | '3:4' | '4:3'
   | '4:5' | '5:4' | '9:16' | '16:9' | '21:9'
 export type ImageSize = '1K' | '2K' | '4K'
+
+export interface ModelCapability {
+  supportedSizes: ImageSize[]
+  publicSizes: ImageSize[]
+  defaultSize: ImageSize
+  rolloutStage: ModelRolloutStage
+  migrateTo?: GenerationModel
+}
+
+export const MODEL_CAPABILITIES: Partial<Record<GenerationModel, ModelCapability>> = {
+  'or-gemini-2.5-flash': {
+    supportedSizes: ['1K', '2K'],
+    publicSizes: ['1K', '2K'],
+    defaultSize: '2K',
+    rolloutStage: 'public',
+  },
+  'or-gemini-3.1-flash': {
+    supportedSizes: ['1K', '2K', '4K'],
+    publicSizes: ['1K', '2K'],
+    defaultSize: '2K',
+    rolloutStage: 'public',
+  },
+  'or-gemini-3-pro': {
+    supportedSizes: ['1K'],
+    publicSizes: ['1K'],
+    defaultSize: '1K',
+    rolloutStage: 'public',
+  },
+  'ta-gemini-3.1-flash': {
+    supportedSizes: [],
+    publicSizes: [],
+    defaultSize: '2K',
+    rolloutStage: 'disabled',
+    migrateTo: 'or-gemini-2.5-flash',
+  },
+}
+
+export const MODEL_CREDIT_COSTS: Partial<Record<GenerationModel, Partial<Record<ImageSize, number>>>> = {
+  'or-gemini-2.5-flash': { '1K': 3, '2K': 5 },
+  'or-gemini-3.1-flash': { '1K': 5, '2K': 8, '4K': 15 },
+  'or-gemini-3-pro': { '1K': 10 },
+  'ta-gemini-3.1-flash': { '1K': 3, '2K': 5 },
+}
+
+function knownModelValues(): GenerationModel[] {
+  return [
+    'azure-flux',
+    'gpt-image',
+    'qiniu-gemini-pro',
+    'qiniu-gemini-flash',
+    'volc-seedream-4.5',
+    'volc-seedream-5.0-lite',
+    'flux-kontext-pro',
+    'gemini-pro-image',
+    'gemini-flash-image',
+    'or-gemini-2.5-flash',
+    'or-gemini-3.1-flash',
+    'or-gemini-3-pro',
+    'ta-gemini-2.5-flash',
+    'ta-gemini-3.1-flash',
+    'ta-gemini-3-pro',
+    'midjourney',
+    'sd-3.5-ultra',
+    'dall-e-4',
+    'ideogram-3',
+  ]
+}
+
+export function normalizeGenerationModel(model: string | null | undefined): GenerationModel {
+  const raw = String(model ?? '').trim()
+  if (!raw) return DEFAULT_MODEL
+
+  const capability = MODEL_CAPABILITIES[raw as GenerationModel]
+  if (capability?.migrateTo) return capability.migrateTo
+
+  if (knownModelValues().includes(raw as GenerationModel)) {
+    return raw as GenerationModel
+  }
+
+  return DEFAULT_MODEL
+}
+
+export function getModelCapability(model: GenerationModel | string): ModelCapability | null {
+  return MODEL_CAPABILITIES[normalizeGenerationModel(model)] ?? null
+}
+
+export function getSupportedImageSizes(
+  model: GenerationModel | string,
+  opts?: { includeInternal?: boolean }
+): ImageSize[] {
+  const capability = getModelCapability(model)
+  if (!capability) return ['1K', '2K']
+  return (opts?.includeInternal ? capability.supportedSizes : capability.publicSizes).slice()
+}
+
+export function getDefaultImageSize(model: GenerationModel | string): ImageSize {
+  const capability = getModelCapability(model)
+  return capability?.defaultSize ?? '2K'
+}
+
+export function isImageSizeSupportedForModel(
+  model: GenerationModel | string,
+  imageSize: ImageSize,
+  opts?: { includeInternal?: boolean }
+): boolean {
+  return getSupportedImageSizes(model, opts).includes(imageSize)
+}
+
+export function sanitizeImageSizeForModel(
+  model: GenerationModel | string,
+  imageSize: ImageSize,
+  opts?: { includeInternal?: boolean }
+): ImageSize {
+  return isImageSizeSupportedForModel(model, imageSize, opts)
+    ? imageSize
+    : getDefaultImageSize(model)
+}
+
+export function getGenerationCreditCost(
+  model: GenerationModel | string,
+  imageSize: ImageSize
+): number {
+  const normalizedModel = normalizeGenerationModel(model)
+  const normalizedSize = sanitizeImageSizeForModel(normalizedModel, imageSize, { includeInternal: true })
+  const costs = MODEL_CREDIT_COSTS[normalizedModel]
+  return costs?.[normalizedSize] ?? 5
+}
+
+export function isValidModel(m: string): boolean {
+  const raw = String(m ?? '').trim()
+  if (!raw) return false
+  if (MODEL_CAPABILITIES[raw as GenerationModel]?.migrateTo) return true
+  return knownModelValues().includes(raw as GenerationModel)
+}
 
 export const IMAGE_SIZE_LABELS: Record<ImageSize, { en: string; zh: string }> = {
   '1K': { en: '1K (1024px)', zh: '1K 标清 (1024px)' },
@@ -167,11 +298,11 @@ export const DEFAULT_CREDIT_COSTS: Record<string, number> = {
   'flux-kontext-pro': 5,
   'gemini-pro-image': 5,
   'gemini-flash-image': 5,
-  'or-gemini-2.5-flash': 3,
-  'or-gemini-3.1-flash': 5,
-  'or-gemini-3-pro': 10,
+  'or-gemini-2.5-flash': getGenerationCreditCost('or-gemini-2.5-flash', getDefaultImageSize('or-gemini-2.5-flash')),
+  'or-gemini-3.1-flash': getGenerationCreditCost('or-gemini-3.1-flash', getDefaultImageSize('or-gemini-3.1-flash')),
+  'or-gemini-3-pro': getGenerationCreditCost('or-gemini-3-pro', getDefaultImageSize('or-gemini-3-pro')),
   'ta-gemini-2.5-flash': 3,
-  'ta-gemini-3.1-flash': 3,
+  'ta-gemini-3.1-flash': getGenerationCreditCost('ta-gemini-3.1-flash', '2K'),
   'ta-gemini-3-pro': 5,
   'midjourney': 15,
   'sd-3.5-ultra': 8,
@@ -275,8 +406,16 @@ export interface GenesisStyleDirectionGroup {
   recommended: string | null
 }
 
+export interface ProductVisualIdentity {
+  primary_color: string
+  secondary_colors: string[]
+  material: string
+  key_features: string[]
+}
+
 export interface GenesisAnalysisResult {
   product_summary: string
+  product_visual_identity?: ProductVisualIdentity
   style_directions: GenesisStyleDirectionGroup[]
   copy_plan: string
   _ai_meta: AnalysisAiMeta
@@ -325,6 +464,39 @@ export interface GeneratedPrompt {
   negative_prompt: string // default ""
   marketing_hook: string  // default ""
   priority: number        // default 0, clamped 0-10
+}
+
+// --- Result assets ---
+
+export type ResultAssetSection = 'original' | 'edited'
+
+export type ResultAssetOrigin =
+  | 'studio-genesis'
+  | 'ecom-studio'
+  | 'clothing-model-tryon'
+  | 'clothing-basic-photo'
+  | 'aesthetic-mirror'
+  | 'refinement-studio'
+  | 'history'
+  | 'image-editor'
+  | 'unknown'
+
+export interface ResultAsset {
+  id: string
+  url: string
+  label?: string
+  section: ResultAssetSection
+  sourceAssetId?: string
+  batchId?: string
+  batchTimestamp?: number
+  requestedSize?: string
+  providerSize?: string
+  actualSize?: string
+  deliveredSize?: string
+  sizeStatus?: 'exact' | 'normalized_down' | 'too_small' | 'unknown'
+  normalizedByServer?: boolean
+  createdAt: number
+  originModule: ResultAssetOrigin
 }
 
 // --- Studio Genesis phases ---
@@ -505,7 +677,7 @@ export function buildStyleConstraintPayload(
 // --- Public config ---
 
 export interface PublicConfig {
-  credit_costs: Record<string, number>
+  credit_costs: Record<string, number | Record<string, number>>
   signup_bonus_credits: number
   batch_concurrency: number
   release_notes?: {

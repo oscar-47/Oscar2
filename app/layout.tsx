@@ -1,5 +1,13 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { Noto_Sans_SC } from 'next/font/google'
+
+const notoSansSc = Noto_Sans_SC({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+  fallback: ['Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
+})
 
 export const metadata: Metadata = {
   title: 'Shopix AI — Professional E-Commerce Product Images',
@@ -14,5 +22,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  return children
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={notoSansSc.className}>{children}</body>
+    </html>
+  )
 }

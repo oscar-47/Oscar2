@@ -1,15 +1,18 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
+import { useTranslations } from 'next-intl'
 import { ArrowLeft, Minus, Plus } from 'lucide-react'
 import { useEditorStore } from '@/lib/stores/editor-store'
 
 const ZOOM_STEPS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0]
 
-export function EditorHeader() {
+interface EditorHeaderProps {
+  onBack?: () => void
+}
+
+export function EditorHeader({ onBack }: EditorHeaderProps) {
   const t = useTranslations('studio.editor')
-  const locale = useLocale()
   const router = useRouter()
   const zoom = useEditorStore((s) => s.zoom)
   const setZoom = useEditorStore((s) => s.setZoom)
@@ -28,7 +31,10 @@ export function EditorHeader() {
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-[#e5e7eb] bg-white px-4">
       <button
         type="button"
-        onClick={() => router.back()}
+        onClick={() => {
+          onBack?.()
+          router.back()
+        }}
         className="flex items-center gap-2 text-sm text-[#6b7280] hover:text-[#111827] transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />

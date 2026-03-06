@@ -8,6 +8,14 @@ import {
   getQnChatConfig,
   aspectRatioToSize,
 } from "../_shared/qn-image.ts";
+import {
+  getCreditCostForModel,
+  getDefaultImageSizeForModel,
+  isImageSizeSupportedForModel,
+  normalizeRequestedModel,
+  OPENROUTER_MODEL_MAP,
+} from "../_shared/generation-config.ts";
+import Jimp from "npm:jimp@0.22.12";
 
 type GenerationJobRow = {
   id: string;
@@ -47,8 +55,16 @@ type GenesisStyleDirectionGroup = {
   recommended: string | null;
 };
 
+type ProductVisualIdentity = {
+  primary_color: string;
+  secondary_colors: string[];
+  material: string;
+  key_features: string[];
+};
+
 type GenesisAnalysisResult = {
   product_summary: string;
+  product_visual_identity?: ProductVisualIdentity;
   style_directions: GenesisStyleDirectionGroup[];
   copy_plan: string;
   _ai_meta: Record<string, unknown>;
@@ -163,9 +179,9 @@ function normalizeStyleConstraintSource(value: unknown): string | null {
 function outputLanguageLabel(outputLanguage: string): string {
   switch (outputLanguage) {
     case "none":
-      return "None Text(Visual Only)";
+      return "No Text (Visual Only)";
     case "zh":
-      return "Chinese";
+      return "Simplified Chinese";
     case "ja":
       return "Japanese";
     case "ko":
@@ -185,6 +201,25 @@ function outputLanguageLabel(outputLanguage: string): string {
     default:
       return "English";
   }
+}
+
+function buildVisibleCopyLanguageRule(outputLanguage: string, isZh: boolean): string {
+  if (outputLanguage === "none") {
+    return isZh
+      ? "新增设计文案必须为空，禁止添加任何额外画面文字。"
+      : "All added design copy must be omitted. Do not add any extra visible text.";
+  }
+
+  if (outputLanguage === "zh") {
+    return isZh
+      ? "所有新增设计文案必须使用简体中文，禁止英文、拼音、双语混排，以及 Title、Subtitle、Description、Selling Point、Feature 等英文占位词。规格表、售后保障、使用建议、成分说明、前后对比、核心卖点等信息型模块如有新增可见文字，也必须全部使用简体中文。产品自身已有的 logo、包装原文、型号、成分表、技术单位不属于新增设计文案，无需擦除或翻译。"
+      : "All added visible design copy must be Simplified Chinese only. Do not use English words, pinyin, bilingual mixing, or placeholder labels such as Title, Subtitle, Description, Selling Point, or Feature. This also applies to spec tables, after-sales guarantees, usage tips, ingredient callouts, before/after labels, and selling-point modules. Existing product text such as logos, original packaging text, model numbers, ingredient tables, and technical units is not considered added design copy and should be preserved.";
+  }
+
+  const languageLabel = outputLanguageLabel(outputLanguage);
+  return isZh
+    ? `所有新增设计文案必须只使用${languageLabel}，禁止混入其他语言；产品自身已有的 logo、包装原文、型号、成分表、技术单位不属于新增设计文案。`
+    : `All added visible design copy must use ${languageLabel} only and must not mix in other languages. Existing product text such as logos, original packaging text, model numbers, ingredient tables, and technical units is not considered added design copy.`;
 }
 
 function normalizeBlueprint(
@@ -247,8 +282,8 @@ function normalizeBlueprint(
   const designSpecs = sanitizeString(
     parsed.design_specs,
     isZh
-      ? "# 整体设计规范\n\n## 色彩体系\n- 主色调：以产品为主导\n- 辅助色：基于品牌调性的点缀色\n- 背景色：干净的中性色\n\n## 字体体系\n- 标题字体：无衬线商业展示字体\n- 正文字体：无衬线易读字体\n- 层级关系：标题:副标题:正文 = 3:1.8:1\n\n## 视觉语言\n- 装饰元素：极简几何点缀\n- 图标风格：细线图标\n- 留白原则：高留白率\n\n## 摄影风格\n- 照明：柔光箱漫射光配合轮廓光\n- 景深：产品聚焦、背景柔化\n- 相机参考参数：ISO 100, 85mm 定焦\n\n## 品质要求\n- 分辨率：4K/高清\n- 风格：专业电商摄影\n- 真实度：超写实"
-      : "# Overall Design Specifications\n\n## Color System\n- Primary color: Product-led\n- Secondary color: Accent based on brand tone\n- Background color: Clean neutral\n\n## Font System\n- Heading Font: Sans-serif commercial display\n- Body Font: Sans-serif readability\n- Hierarchy: Heading:Subtitle:Body = 3:1.8:1\n\n## Visual Language\n- Decorative Elements: Minimal geometric accents\n- Icon Style: Thin-line icons when needed\n- Negative Space Principle: High whitespace utilization\n\n## Photography Style\n- Lighting: Soft-box diffused light with rim highlights\n- Depth of Field: Product-focused with soft background blur\n- Camera Parameter Reference: ISO 100, 85mm prime\n\n## Quality Requirements\n- Resolution: 4K/HD\n- Style: Professional e-commerce photography\n- Realism: Hyper-realistic",
+      ? `# 整体设计规范\n\n## 色彩体系\n- 主色调：以产品为主导\n- 辅助色：基于品牌调性的点缀色\n- 背景色：干净的中性色\n\n## 字体体系\n- 标题字体：无衬线商业展示字体\n- 正文字体：无衬线易读字体\n- 层级关系：标题:副标题:正文 = 3:1.8:1\n\n## 视觉语言\n- 装饰元素：极简几何点缀\n- 图标风格：细线图标\n- 留白原则：高留白率\n\n## 文案语言约束\n- ${buildVisibleCopyLanguageRule(outputLanguage, true)}\n- 若需要示例文案、信息层级或文字区域说明，示例内容必须直接使用目标语言，不得使用英文占位。\n\n## 摄影风格\n- 照明：柔光箱漫射光配合轮廓光\n- 景深：产品聚焦、背景柔化\n- 相机参考参数：ISO 100, 85mm 定焦\n\n## 品质要求\n- 分辨率：4K/高清\n- 风格：专业电商摄影\n- 真实度：超写实`
+      : `# Overall Design Specifications\n\n## Color System\n- Primary color: Product-led\n- Secondary color: Accent based on brand tone\n- Background color: Clean neutral\n\n## Font System\n- Heading Font: Sans-serif commercial display\n- Body Font: Sans-serif readability\n- Hierarchy: Heading:Subtitle:Body = 3:1.8:1\n\n## Copy Language Guardrail\n- ${buildVisibleCopyLanguageRule(outputLanguage, false)}\n- If examples for copy, text hierarchy, or text zones are needed, write those examples directly in the target language instead of English placeholders.\n\n## Visual Language\n- Decorative Elements: Minimal geometric accents\n- Icon Style: Thin-line icons when needed\n- Negative Space Principle: High whitespace utilization\n\n## Photography Style\n- Lighting: Soft-box diffused light with rim highlights\n- Depth of Field: Product-focused with soft background blur\n- Camera Parameter Reference: ISO 100, 85mm prime\n\n## Quality Requirements\n- Resolution: 4K/HD\n- Style: Professional e-commerce photography\n- Realism: Hyper-realistic`,
   );
 
   return {
@@ -407,11 +442,26 @@ function normalizeGenesisAnalysis(
   const rawCopyPlan = sanitizeString(parsed.copy_plan ?? parsed.copyPlan, "");
   const fallbackCopyPlan = buildGenesisCopyFallback(requirements, outputLanguage, uiLanguage);
 
+  const rawIdentity = (parsed.product_visual_identity ?? parsed.productVisualIdentity) as Record<string, unknown> | undefined;
+  const productVisualIdentity: ProductVisualIdentity | undefined = rawIdentity && typeof rawIdentity === "object"
+    ? {
+        primary_color: sanitizeString(rawIdentity.primary_color ?? rawIdentity.primaryColor, ""),
+        secondary_colors: Array.isArray(rawIdentity.secondary_colors ?? rawIdentity.secondaryColors)
+          ? (rawIdentity.secondary_colors ?? rawIdentity.secondaryColors as string[]).map(String)
+          : [],
+        material: sanitizeString(rawIdentity.material, ""),
+        key_features: Array.isArray(rawIdentity.key_features ?? rawIdentity.keyFeatures)
+          ? (rawIdentity.key_features ?? rawIdentity.keyFeatures as string[]).map(String)
+          : [],
+      }
+    : undefined;
+
   return {
     product_summary: sanitizeString(
       parsed.product_summary ?? parsed.productSummary,
       fallbackSummary,
     ),
+    product_visual_identity: productVisualIdentity,
     style_directions: normalizeGenesisStyleDirections(parsed, uiLanguage),
     copy_plan: outputLanguage === "none"
       ? ""
@@ -423,28 +473,23 @@ function normalizeGenesisAnalysis(
 }
 
 function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
-  const MODEL_BASE: Record<string, number> = {
-    "or-gemini-2.5-flash": 3, "or-gemini-3.1-flash": 5, "or-gemini-3-pro": 10,
-    "ta-gemini-2.5-flash": 3, "ta-gemini-3.1-flash": 3, "ta-gemini-3-pro": 5,
-    "midjourney": 15, "sd-3.5-ultra": 8, "dall-e-4": 12, "ideogram-3": 10,
-    "azure-flux": 5, "gpt-image": 5, "qiniu-gemini-pro": 5, "qiniu-gemini-flash": 5,
-    "volc-seedream-4.5": 5, "volc-seedream-5.0-lite": 5,
-    "flux-kontext-pro": 5, "gemini-pro-image": 5, "gemini-flash-image": 5,
-  };
-  const base = MODEL_BASE[model] ?? 5;
-  if (!turboEnabled) return base;
-  if (imageSize === "1K") return base + 3;
-  if (imageSize === "2K") return base + 7;
-  return base + 12;
+  void turboEnabled;
+  return getCreditCostForModel(model, imageSize);
 }
 
 function imageGenErrorCodeFromError(error: unknown): string {
   const message = String(error ?? "");
+  if (message.includes("AbortError")) return "UPSTREAM_TIMEOUT";
   if (message.includes("IMAGE_INPUT_SOURCE_MISSING")) return "IMAGE_INPUT_SOURCE_MISSING";
   if (message.includes("IMAGE_INPUT_PROMPT_MISSING")) return "IMAGE_INPUT_PROMPT_MISSING";
   if (message.includes("STORAGE_UPLOAD_FAILED")) return "STORAGE_UPLOAD_FAILED";
   if (message.includes("IMAGE_RESULT_MISSING")) return "IMAGE_RESULT_MISSING";
+  if (message.includes("IMAGE_SIZE_UNSATISFIED")) return "IMAGE_SIZE_UNSATISFIED";
   if (message.includes("INSUFFICIENT_CREDITS")) return "INSUFFICIENT_CREDITS";
+  if (
+    message.includes("InvalidEndpointOrModel.NotFound") ||
+    message.includes("does not exist or you do not have access to it")
+  ) return "MODEL_UNAVAILABLE";
   return "UPSTREAM_ERROR";
 }
 
@@ -455,20 +500,13 @@ type ImageRoute = {
   apiKey?: string;
 };
 
-// Map or-*/ta-* frontend model names to actual provider model IDs
-const OR_MODEL_MAP: Record<string, string> = {
-  "or-gemini-2.5-flash": "google/gemini-2.5-flash-image-preview",
-  "or-gemini-3.1-flash": "google/gemini-3.1-flash-image-preview",
-  "or-gemini-3-pro": "google/gemini-3-pro-image-preview",
-};
 const TA_MODEL_MAP: Record<string, string> = {
   "ta-gemini-2.5-flash": "gemini-2.5-flash-image-preview",
-  "ta-gemini-3.1-flash": "gemini-3.1-flash-image-preview",
   "ta-gemini-3-pro": "gemini-3-pro-image-preview",
 };
 
 function resolveImageRoute(modelFromRequest: string): ImageRoute {
-  const model = modelFromRequest.trim();
+  const model = normalizeRequestedModel(modelFromRequest.trim());
   const qnEndpoint = Deno.env.get("QN_IMAGE_API_ENDPOINT");
   const qnApiKey = Deno.env.get("QN_IMAGE_API_KEY");
 
@@ -566,12 +604,12 @@ function resolveImageRoute(modelFromRequest: string): ImageRoute {
   }
 
   // OpenRouter models (or-*)
-  if (OR_MODEL_MAP[model]) {
+  if (OPENROUTER_MODEL_MAP[model]) {
     return {
       provider: "openrouter",
       endpoint: Deno.env.get("OPENROUTER_API_ENDPOINT") ?? "https://openrouter.ai/api/v1/chat/completions",
       apiKey: Deno.env.get("OPENROUTER_API_KEY") ?? "",
-      model: OR_MODEL_MAP[model],
+      model: OPENROUTER_MODEL_MAP[model],
     };
   }
 
@@ -591,13 +629,13 @@ function resolveImageRoute(modelFromRequest: string): ImageRoute {
     // Fallback for environments without ToAPIs credentials:
     // map ta-* aliases back to equivalent OpenRouter models.
     const openRouterAlias = model.replace(/^ta-/, "or-");
-    if (OR_MODEL_MAP[openRouterAlias]) {
+    if (OPENROUTER_MODEL_MAP[openRouterAlias]) {
       console.warn(`TOAPIS_NOT_CONFIGURED fallback_to_openrouter model=${model} alias=${openRouterAlias}`);
       return {
         provider: "openrouter",
         endpoint: Deno.env.get("OPENROUTER_API_ENDPOINT") ?? "https://openrouter.ai/api/v1/chat/completions",
         apiKey: Deno.env.get("OPENROUTER_API_KEY") ?? "",
-        model: OR_MODEL_MAP[openRouterAlias],
+        model: OPENROUTER_MODEL_MAP[openRouterAlias],
       };
     }
 
@@ -704,6 +742,131 @@ function parseImageDimensions(bytes: Uint8Array): { w: number; h: number } | nul
   return null;
 }
 
+type SizeStatus = "exact" | "normalized_down" | "too_small" | "unknown";
+
+type PersistedGeneratedImage = {
+  resultUrl: string;
+  objectPath: string | null;
+  mimeType: string;
+  providerSize: string | null;
+  actualSize: { w: number; h: number } | null;
+  deliveredSize: { w: number; h: number } | null;
+  normalizedByServer: boolean;
+  sizeStatus: SizeStatus;
+};
+
+function extensionForMime(mimeType: string): string {
+  if (mimeType.includes("jpeg") || mimeType.includes("jpg")) return "jpg";
+  if (mimeType.includes("webp")) return "webp";
+  return "png";
+}
+
+function targetDimensionsForLongestEdge(dimensions: { w: number; h: number }, targetLongestEdge: number): { w: number; h: number } {
+  if (dimensions.w >= dimensions.h) {
+    return {
+      w: targetLongestEdge,
+      h: Math.max(1, Math.round(dimensions.h * (targetLongestEdge / dimensions.w))),
+    };
+  }
+  return {
+    w: Math.max(1, Math.round(dimensions.w * (targetLongestEdge / dimensions.h))),
+    h: targetLongestEdge,
+  };
+}
+
+async function normalizeImageBytes(
+  bytes: Uint8Array,
+  mimeType: string,
+  targetLongestEdge: number,
+): Promise<{ bytes: Uint8Array; mimeType: string; deliveredSize: { w: number; h: number } }> {
+  const dimensions = parseImageDimensions(bytes);
+  if (!dimensions) {
+    throw new Error("IMAGE_NORMALIZATION_FAILED missing_source_dimensions");
+  }
+
+  const target = targetDimensionsForLongestEdge(dimensions, targetLongestEdge);
+  const image = await Jimp.read(bytes);
+  image.resize(target.w, target.h, Jimp.RESIZE_LANCZOS);
+  const outputMime = mimeType.includes("jpeg") || mimeType.includes("jpg")
+    ? Jimp.MIME_JPEG
+    : Jimp.MIME_PNG;
+  const resized = await image.getBufferAsync(outputMime);
+  return {
+    bytes: new Uint8Array(resized),
+    mimeType: outputMime,
+    deliveredSize: target,
+  };
+}
+
+async function persistGeneratedImage(params: {
+  supabase: ReturnType<typeof createServiceClient>;
+  outputBucket: string;
+  userId: string;
+  providerSize: string | null;
+  generatedBase64?: string | null;
+  generatedUrl?: string | null;
+  imageSize: string;
+}): Promise<PersistedGeneratedImage> {
+  let imageBytes: Uint8Array | null = null;
+  let mimeType = "image/png";
+
+  if (params.generatedBase64) {
+    imageBytes = base64ToBytes(params.generatedBase64);
+  } else if (params.generatedUrl) {
+    const imgRes = await fetch(params.generatedUrl);
+    if (!imgRes.ok) throw new Error(`IMAGE_DOWNLOAD_FAILED ${imgRes.status}`);
+    imageBytes = new Uint8Array(await imgRes.arrayBuffer());
+    mimeType = imgRes.headers.get("content-type") || mimeType;
+  }
+
+  if (!imageBytes) {
+    throw new Error("IMAGE_RESULT_MISSING");
+  }
+
+  const actualSize = parseImageDimensions(imageBytes);
+  const targetLongestEdge = longestEdgeForSize(params.imageSize);
+  let deliveredBytes = imageBytes;
+  let deliveredMime = mimeType;
+  let deliveredSize = actualSize;
+  let normalizedByServer = false;
+  let sizeStatus: SizeStatus = actualSize ? "exact" : "unknown";
+
+  if (actualSize) {
+    const actualLongestEdge = Math.max(actualSize.w, actualSize.h);
+    if (actualLongestEdge < targetLongestEdge) {
+      throw new Error(`IMAGE_SIZE_UNSATISFIED requested=${params.imageSize} actual=${actualSize.w}x${actualSize.h}`);
+    }
+    if (actualLongestEdge > targetLongestEdge) {
+      const normalized = await normalizeImageBytes(imageBytes, mimeType, targetLongestEdge);
+      deliveredBytes = normalized.bytes;
+      deliveredMime = normalized.mimeType;
+      deliveredSize = normalized.deliveredSize;
+      normalizedByServer = true;
+      sizeStatus = "normalized_down";
+    }
+  }
+
+  const objectPath = `${params.userId}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${extensionForMime(deliveredMime)}`;
+  const { error: uploadError } = await params.supabase.storage
+    .from(params.outputBucket)
+    .upload(objectPath, deliveredBytes, { contentType: deliveredMime, upsert: false });
+  if (uploadError) {
+    throw new Error(`STORAGE_UPLOAD_FAILED: ${uploadError.message}`);
+  }
+  const { data: publicData } = params.supabase.storage.from(params.outputBucket).getPublicUrl(objectPath);
+
+  return {
+    resultUrl: publicData.publicUrl,
+    objectPath: `${params.outputBucket}/${objectPath}`,
+    mimeType: deliveredMime,
+    providerSize: params.providerSize,
+    actualSize,
+    deliveredSize,
+    normalizedByServer,
+    sizeStatus,
+  };
+}
+
 type StyleOutputItem = {
   url: string | null;
   b64_json: string | null;
@@ -711,6 +874,9 @@ type StyleOutputItem = {
   mime_type: string | null;
   provider_size: string | null;
   actual_size?: { w: number; h: number } | null;
+  delivered_size?: { w: number; h: number } | null;
+  normalized_by_server?: boolean;
+  size_status?: SizeStatus;
   reference_index: number;
   group_index: number;
   product_index?: number;
@@ -749,6 +915,9 @@ function styleReplicateErrorMessage(cause: unknown): string {
   if (text.includes("MODEL_RATIO_UNSUPPORTED")) {
     return "Selected ratio is not supported by current model output. Please try another ratio.";
   }
+  if (text.includes("IMAGE_SIZE_UNSATISFIED")) {
+    return "Selected resolution was not satisfied by the model output. Please switch model or lower the resolution.";
+  }
   if (text.includes("AbortError")) {
     return "Image generation timed out. Please retry; if it keeps failing, use a simpler prompt or smaller settings.";
   }
@@ -783,6 +952,7 @@ function styleReplicateErrorCode(error: unknown): string {
   if (message.includes("REFINEMENT_PRODUCT_IMAGES_REQUIRED")) return "REFINEMENT_PRODUCT_IMAGES_REQUIRED";
   if (message.includes("REFINEMENT_BACKGROUND_MODE_INVALID")) return "REFINEMENT_BACKGROUND_MODE_INVALID";
   if (message.includes("MODEL_RATIO_UNSUPPORTED")) return "MODEL_RATIO_UNSUPPORTED";
+  if (message.includes("IMAGE_SIZE_UNSATISFIED")) return "IMAGE_SIZE_UNSATISFIED";
   if (message.includes("AbortError")) return "UPSTREAM_TIMEOUT";
   if (message.includes("InvalidEndpointOrModel.NotFound")) return "MODEL_UNAVAILABLE";
   if (message.includes("STYLE_REFERENCE_IMAGE_MISSING")) return "STYLE_REFERENCE_IMAGE_MISSING";
@@ -1030,14 +1200,15 @@ async function processAnalysisJob(
       ? `你是顶级电商主图策划专家。请基于产品图和用户填写的主图要求，输出一个紧凑的 JSON 分析结果，用于后续主图生成。
 
 强规则：
-1. 用户填写的“组图要求/主图要求”优先级高于产品图分析。
+1. 用户填写的”组图要求/主图要求”优先级高于产品图分析。
 2. 只输出风格方向与共享文案，不要输出图片规划，不要输出整体设计规范。
 3. 风格方向只保留三个维度：sceneStyle、lighting、composition。
 4. 每个维度返回 1 到 3 个中文动态标签，每个标签不超过 5 个字。
 5. 每个维度必须给出一个 recommended 标签，且 recommended 必须来自 options。
 6. 如果输出语言不是纯视觉，copy_plan 必须是一段可直接用于电商主图的共享文案，必须明确吸收用户填写的商品名称和主要卖点，不能泛化，不能忽略卖点关键词。
 7. 如果输出语言为纯视觉，copy_plan 才能返回空字符串。
-8. 所有输出必须是合法 JSON，不要 Markdown，不要解释。`
+8. 所有输出必须是合法 JSON，不要 Markdown，不要解释。
+9. 【颜色提取——最高优先级】product_visual_identity.primary_color 必须准确反映产品图中产品的真实主色调。仔细观察产品图片的实际颜色，不要受背景色、光影或个人偏见影响。粉色就写粉色，白色就写白色，绝对不能把浅色产品识别为深色。`
       : `You are a top-tier e-commerce hero image strategist. Based on the product images and the user's hero-image brief, return a compact JSON analysis result for downstream hero image generation.
 
 Hard rules:
@@ -1048,12 +1219,19 @@ Hard rules:
 5. Each dimension must provide one recommended tag from its own options.
 6. If the output is not visual-only, copy_plan must be a usable e-commerce hero-image copy block that directly reflects the product description and key selling points from the user's brief.
 7. copy_plan may be empty only in visual-only mode.
-8. Return valid JSON only. No markdown. No explanations.`;
+8. Return valid JSON only. No markdown. No explanations.
+9. [COLOR EXTRACTION — HIGHEST PRIORITY] product_visual_identity.primary_color must accurately reflect the true dominant color of the product as seen in the uploaded images. Carefully observe the actual product color — do not confuse it with the background, lighting, or shadows. If the product is pink, write pink. Never misidentify a light-colored product as dark.`;
 
     const genesisUserPrompt = isZhGenesis
       ? `请严格输出如下 JSON：
 {
   "product_summary": "一句简洁总结，概括产品特点与用户卖点要求",
+  "product_visual_identity": {
+    "primary_color": "产品主色调，必须从产品图中精确识别（如：粉色、白色、黑色、深蓝色），附带近似十六进制色值",
+    "secondary_colors": ["辅助颜色列表"],
+    "material": "材质描述（如：皮革、帆布、尼龙、金属）",
+    "key_features": ["3-5个不可改变的关键视觉特征，如：金色五金扣、品牌logo浮雕、菱格纹车线"]
+  },
   "style_directions": {
     "sceneStyle": { "options": ["标签1","标签2","标签3"], "recommended": "标签1" },
     "lighting": { "options": ["标签1","标签2","标签3"], "recommended": "标签1" },
@@ -1061,6 +1239,11 @@ Hard rules:
   },
   "copy_plan": "一段共享文案，非纯视觉模式下必须直接体现商品名称和主要卖点"
 }
+
+强制视觉身份提取规则：
+- product_visual_identity 是最关键的字段，必须严格从产品图中提取，不得臆造、不得泛化。
+- primary_color 必须准确描述产品的真实主色调（例如粉色就写粉色，不能写成黑色或白色），并给出近似十六进制色值。
+- key_features 必须列出产品图中可见的、不可改变的设计特征。
 
 分析依据：
 - 优先依据用户要求，尤其是商品描述和主要卖点。
@@ -1076,6 +1259,12 @@ ${requirements || "（用户未填写额外要求，仅根据产品图分析）"
       : `Return strict JSON in this shape:
 {
   "product_summary": "One concise summary of product traits and the user's key selling-point brief",
+  "product_visual_identity": {
+    "primary_color": "The product's true dominant color as seen in the uploaded images (e.g. pink, white, black, navy blue), with approximate hex value",
+    "secondary_colors": ["list of secondary colors"],
+    "material": "Material description (e.g. leather, canvas, nylon, metal)",
+    "key_features": ["3-5 immutable visual features, e.g. gold hardware buckle, embossed brand logo, quilted stitching"]
+  },
   "style_directions": {
     "sceneStyle": { "options": ["tag1","tag2","tag3"], "recommended": "tag1" },
     "lighting": { "options": ["tag1","tag2","tag3"], "recommended": "tag1" },
@@ -1083,6 +1272,11 @@ ${requirements || "（用户未填写额外要求，仅根据产品图分析）"
   },
   "copy_plan": "One shared copy block that must directly reflect the product and key selling points unless this is visual-only mode"
 }
+
+Mandatory visual identity extraction rules:
+- product_visual_identity is the most critical field. Extract it strictly from the product images. Do not fabricate or generalize.
+- primary_color must accurately describe the true dominant color of the product (e.g. if the product is pink, write pink, not black or white), with an approximate hex value.
+- key_features must list visible, immutable design features from the product images.
 
 Analysis rules:
 - Prioritize the user's brief, especially the product description and key selling points.
@@ -1202,6 +1396,7 @@ ${requirements || "(No extra brief provided. Analyze from product images only.)"
         ? `${index + 1}. ${module.title}\n定位：${module.subtitle}\n内部重点：${module.seed}`
         : `${index + 1}. ${module.title}\nPositioning: ${module.subtitle}\nInternal focus: ${module.seed}`
     ).join("\n\n");
+    const visibleCopyLanguageRule = buildVisibleCopyLanguageRule(outputLanguage, isZhDetail);
 
     const ecomDetailSystemPrompt = isZhDetail
       ? `你是顶级电商详情页视觉策划专家。请基于同一商品的参考图、用户组图要求和所选详情页模块，输出一个严格可编辑的详情页规划蓝图 JSON。
@@ -1212,7 +1407,10 @@ ${requirements || "(No extra brief provided. Analyze from product images only.)"
 3. 每个 images[i].title 必须直接使用对应模块名称，不要改写。
 4. 每个模块的 description 和 design_content 必须围绕该模块的职责展开，且要结合用户组图要求。
 5. design_specs 只输出整组详情页共享的视觉规范。
-6. 只输出合法 JSON，不要 Markdown，不要解释。`
+6. ${visibleCopyLanguageRule}
+7. 如果需要提供文案示例、文字区域说明、信息层级或参数表字段名，在 outputLanguage=zh 时必须直接写简体中文，不能用 Title、Subtitle、Description、Selling Point、Feature 等英文占位。
+8. 规格表、售后保障、使用建议、成分说明、前后对比、核心卖点等信息型模块，如果包含新增可见文字，必须全部遵守目标语言约束。
+9. 只输出合法 JSON，不要 Markdown，不要解释。`
       : `You are a top-tier e-commerce detail-page visual strategist. Based on the same product reference images, the user's brief, and the selected detail-page modules, return a strict editable JSON blueprint.
 
 Hard rules:
@@ -1221,7 +1419,10 @@ Hard rules:
 3. Each images[i].title must use the corresponding module title exactly as provided.
 4. Each description and design_content must stay faithful to that module's purpose and the user's brief.
 5. design_specs should contain only the shared detail-page visual system.
-6. Return valid JSON only. No markdown. No explanations.`;
+6. ${visibleCopyLanguageRule}
+7. If you need example copy, text-zone notes, hierarchy guidance, or table headers, write them directly in the target language. Do not use placeholder labels such as Title, Subtitle, Description, Selling Point, or Feature when outputLanguage=zh.
+8. Spec tables, after-sales guarantees, usage tips, ingredient explanations, before/after comparisons, and selling-point modules must follow the same visible-copy language rule whenever they introduce added on-image text.
+9. Return valid JSON only. No markdown. No explanations.`;
 
     const ecomDetailUserPrompt = isZhDetail
       ? `请严格输出如下 JSON 结构：
@@ -1242,6 +1443,9 @@ Hard rules:
 ${moduleBlock || "1. 首屏主视觉"}
 - 每个 design_content 都要明确该模块要表达的内容、构图方式、信息层级、场景或材质重点、文案表达方式。
 - 输出语言：${outputLanguageLabel(outputLanguage)}
+- 文案语言硬约束：${visibleCopyLanguageRule}
+- 如果输出语言为简体中文，所有新增可见文案示例、标题、副标题、说明文案、参数表头、参数值、角标、CTA、保障语、步骤说明、注释、对比标签都必须直接写简体中文，不能出现英文单词、拼音、双语混排或英文占位。
+- 产品自身已有的 logo、包装原文、型号、成分表、技术单位不属于新增设计文案，不需要翻译或擦除。
 - 如果输出语言为纯视觉，请避免依赖大段文案，优先用视觉信息组织画面。
 
 用户组图要求：
@@ -1265,6 +1469,9 @@ Requirements:
 ${moduleBlock || "1. Hero Visual"}
 - Each design_content must clearly define the message hierarchy, composition, scene or material focus, and copy treatment of that module.
 - Output language: ${outputLanguageLabel(outputLanguage)}
+- Visible-copy language rule: ${visibleCopyLanguageRule}
+- If outputLanguage is Simplified Chinese, all added visible copy examples, titles, subtitles, body copy, spec-table headers, spec values, badges, CTAs, guarantee lines, step labels, annotations, and comparison labels must be written directly in Simplified Chinese only.
+- Existing product text such as logos, original packaging text, model numbers, ingredient tables, and technical units is not added design copy and should remain untouched.
 - If output language is visual-only, avoid relying on long copy and prioritize visual communication.
 
 User brief:
@@ -1657,9 +1864,14 @@ async function processImageGenJob(
 ): Promise<void> {
   const startedAt = Date.now();
   const payload = job.payload ?? {};
-  const model = String(payload.model ?? "or-gemini-3.1-flash");
+  const model = normalizeRequestedModel(String(payload.model ?? "or-gemini-3.1-flash"));
   const imageRoute = resolveImageRoute(model);
-  const imageSize = String(payload.imageSize ?? "2K");
+  const imageSize = payload.imageSize == null
+    ? getDefaultImageSizeForModel(model)
+    : String(payload.imageSize);
+  if (!isImageSizeSupportedForModel(model, imageSize, { includeInternal: true })) {
+    throw new Error(`IMAGE_SIZE_UNSATISFIED requested=${imageSize} model=${model}`);
+  }
   const turboEnabled = Boolean(payload.turboEnabled ?? false);
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
   const cost = Number(job.cost_amount ?? computeCost(model, turboEnabled, imageSize));
@@ -1798,50 +2010,26 @@ async function processImageGenJob(
       timeoutMsOverride: imageGenTimeoutMs,
     });
 
+    const providerEntry = Array.isArray(apiResponse.data) && apiResponse.data.length > 0
+      ? apiResponse.data[0] as Record<string, unknown>
+      : null;
+    const providerSize = providerEntry && typeof providerEntry.size === "string"
+      ? providerEntry.size
+      : null;
+
     // Handle both URL and b64 responses (Volcengine returns URL, others may return b64)
     const generated = extractGeneratedImageResult(apiResponse);
     const generatedBase64 = generated.b64 ?? null;
-    let resultUrl = generated.url ?? null;
-
     const outputBucket = Deno.env.get("GENERATIONS_BUCKET") ?? "generations";
-    let objectPath: string | null = null;
-    let actualMime = "image/png";
-    let actualDims: { w: number; h: number } | null = null;
-
-    if (generatedBase64) {
-      const imageBytes = base64ToBytes(generatedBase64);
-      actualDims = parseImageDimensions(imageBytes);
-      objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
-      const { error: uploadError } = await supabase.storage
-        .from(outputBucket)
-        .upload(objectPath, imageBytes, { contentType: "image/png", upsert: false });
-      if (uploadError) {
-        throw new Error(`STORAGE_UPLOAD_FAILED: ${uploadError.message}`);
-      }
-      const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
-      resultUrl = publicData.publicUrl;
-    } else if (resultUrl) {
-      const imgRes = await fetch(resultUrl);
-      if (!imgRes.ok) throw new Error(`IMAGE_DOWNLOAD_FAILED ${imgRes.status}`);
-      const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
-      actualDims = parseImageDimensions(imgBytes);
-      actualMime = imgRes.headers.get("content-type") || "image/png";
-      const ext = actualMime.includes("jpeg") || actualMime.includes("jpg") ? "jpg"
-        : actualMime.includes("webp") ? "webp" : "png";
-      objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from(outputBucket)
-        .upload(objectPath, imgBytes, { contentType: actualMime, upsert: false });
-      if (uploadError) {
-        throw new Error(`STORAGE_UPLOAD_FAILED: ${uploadError.message}`);
-      }
-      const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
-      resultUrl = publicData.publicUrl;
-    }
-
-    if (!resultUrl) {
-      throw new Error("IMAGE_RESULT_MISSING");
-    }
+    const persisted = await persistGeneratedImage({
+      supabase,
+      outputBucket,
+      userId: job.user_id,
+      providerSize,
+      generatedBase64,
+      generatedUrl: generated.url ?? null,
+      imageSize,
+    });
 
     const requestedSize = scaledRequestSize(aspectRatio, imageSize);
 
@@ -1852,9 +2040,13 @@ async function processImageGenJob(
       style_constraint_applied: Boolean(styleConstraintPrompt),
       style_constraint_source: styleConstraintSource,
       requested_size: requestedSize,
-      actual_size: actualDims,
-      mime_type: actualMime,
-      object_path: objectPath ? `${outputBucket}/${objectPath}` : null,
+      provider_size: persisted.providerSize,
+      actual_size: persisted.actualSize,
+      delivered_size: persisted.deliveredSize,
+      size_status: persisted.sizeStatus,
+      normalized_by_server: persisted.normalizedByServer,
+      mime_type: persisted.mimeType,
+      object_path: persisted.objectPath,
     };
 
     const resultData: Record<string, unknown> = resultDataBase;
@@ -1863,7 +2055,7 @@ async function processImageGenJob(
       .from("generation_jobs")
       .update({
         status: "success",
-        result_url: resultUrl,
+        result_url: persisted.resultUrl,
         result_data: resultData,
         error_code: null,
         error_message: null,
@@ -1876,7 +2068,7 @@ async function processImageGenJob(
     }
     await syncModelHistoryStatus(supabase, job.id, job.user_id, {
       status: "success",
-      result_url: resultUrl,
+      result_url: persisted.resultUrl,
       error_message: null,
     });
   } catch (e) {
@@ -1974,9 +2166,14 @@ async function processStyleReplicateJob(
 ): Promise<void> {
   const startedAt = Date.now();
   const payload = job.payload ?? {};
-  const modelName = String(payload.model ?? "or-gemini-3.1-flash");
+  const modelName = normalizeRequestedModel(String(payload.model ?? "or-gemini-3.1-flash"));
   const imageRoute = resolveImageRoute(modelName);
-  const imageSize = String(payload.imageSize ?? "2K");
+  const imageSize = payload.imageSize == null
+    ? getDefaultImageSizeForModel(modelName)
+    : String(payload.imageSize);
+  if (!isImageSizeSupportedForModel(modelName, imageSize, { includeInternal: true })) {
+    throw new Error(`IMAGE_SIZE_UNSATISFIED requested=${imageSize} model=${modelName}`);
+  }
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
   const mode: StyleReplicateMode = payload.mode === "batch"
     ? "batch"
@@ -2141,8 +2338,13 @@ async function processStyleReplicateJob(
         image_size: imageSize,
         mime_type: firstOutput?.mime_type ?? null,
         object_path: firstOutput?.object_path ?? null,
-        b64_json: firstOutput?.b64_json ?? null,
-        outputs: mergedOutputs,
+        requested_size: requestSize,
+        provider_size: firstOutput?.provider_size ?? null,
+        actual_size: firstOutput?.actual_size ?? null,
+        delivered_size: firstOutput?.delivered_size ?? null,
+        size_status: firstOutput?.size_status ?? "unknown",
+        normalized_by_server: firstOutput?.normalized_by_server ?? false,
+        outputs: mergedOutputs.map(({ b64_json: _b64, ...rest }) => rest),
         summary: {
           requested_count: units.length,
           completed_count: Math.max(0, Math.min(completed, units.length)),
@@ -2318,47 +2520,26 @@ async function processStyleReplicateJob(
 
         const generated = extractGeneratedImageResult(apiResponse);
         const generatedBase64 = generated.b64 ?? null;
-        let resultUrl = generated.url ?? null;
-        let objectPath: string | null = null;
-
-        let unitMime = "image/png";
-
-        let unitActualDims: { w: number; h: number } | null = null;
-
-        if (generatedBase64) {
-          const imageBytes = base64ToBytes(generatedBase64);
-          unitActualDims = parseImageDimensions(imageBytes);
-          objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
-          const { error: uploadError } = await supabase.storage
-            .from(outputBucket)
-            .upload(objectPath, imageBytes, { contentType: "image/png", upsert: false });
-          if (uploadError) throw new Error(`STORAGE_UPLOAD_FAILED: ${uploadError.message}`);
-          const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
-          resultUrl = publicData.publicUrl;
-        } else if (resultUrl) {
-          const imgRes = await fetch(resultUrl);
-          if (!imgRes.ok) throw new Error(`IMAGE_DOWNLOAD_FAILED ${imgRes.status}`);
-          const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
-          unitActualDims = parseImageDimensions(imgBytes);
-          unitMime = imgRes.headers.get("content-type") || "image/png";
-          const ext = unitMime.includes("jpeg") || unitMime.includes("jpg") ? "jpg"
-            : unitMime.includes("webp") ? "webp" : "png";
-          objectPath = `${job.user_id}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
-          const { error: uploadError } = await supabase.storage
-            .from(outputBucket)
-            .upload(objectPath, imgBytes, { contentType: unitMime, upsert: false });
-          if (uploadError) throw new Error(`STORAGE_UPLOAD_FAILED: ${uploadError.message}`);
-          const { data: publicData } = supabase.storage.from(outputBucket).getPublicUrl(objectPath);
-          resultUrl = publicData.publicUrl;
-        }
+        const persisted = await persistGeneratedImage({
+          supabase,
+          outputBucket,
+          userId: job.user_id,
+          providerSize,
+          generatedBase64,
+          generatedUrl: generated.url ?? null,
+          imageSize,
+        });
 
         chosen = {
-          url: resultUrl,
-          b64_json: generatedBase64,
-          object_path: objectPath ? `${outputBucket}/${objectPath}` : null,
-          mime_type: unitMime,
+          url: persisted.resultUrl,
+          b64_json: null,
+          object_path: persisted.objectPath,
+          mime_type: persisted.mimeType,
           provider_size: providerSize,
-          actual_size: unitActualDims,
+          actual_size: persisted.actualSize,
+          delivered_size: persisted.deliveredSize,
+          normalized_by_server: persisted.normalizedByServer,
+          size_status: persisted.sizeStatus,
         };
         break;
       }

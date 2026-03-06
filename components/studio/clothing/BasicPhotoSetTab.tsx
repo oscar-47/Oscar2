@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useLocale } from 'next-intl'
 import { Image as ImageIcon } from 'lucide-react'
@@ -17,6 +18,7 @@ import type { BasicPhotoTypeState, ClothingPhase } from './types'
 import { uploadFile } from '@/lib/api/upload'
 import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
+import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import type {
   GenerationModel,
   AspectRatio,
@@ -26,7 +28,7 @@ import type {
   BlueprintImagePlan,
   GeneratedPrompt,
 } from '@/types'
-import { isValidModel } from '@/types'
+import { DEFAULT_MODEL, isValidModel, normalizeGenerationModel, sanitizeImageSizeForModel } from '@/types'
 import { friendlyError } from '@/lib/utils'
 
 function uid() {
@@ -292,14 +294,17 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   })
   const [requirements, setRequirements] = useState('')
   const [language, setLanguage] = useState('none')
-  const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
+  const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4')
   const [resolution, setResolution] = useState<ImageSize>('2K')
-  const [turboEnabled, setTurboEnabled] = useState(false)
 
   const [steps, setSteps] = useState<ProgressStep[]>([])
   const [progress, setProgress] = useState(0)
-  const [results, setResults] = useState<ResultImage[]>([])
+  const {
+    assets: results,
+    appendAssets: appendResults,
+    clearAssets: clearResults,
+  } = useResultAssetSession('clothing-basic-photo')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [analysisBlueprint, setAnalysisBlueprint] = useState<AnalysisBlueprint | null>(null)
   const [editableDesignSpecs, setEditableDesignSpecs] = useState('')
@@ -309,19 +314,18 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   useSessionPersistence(
     'clothing-basic-photo',
     () => ({
-      requirements, language, model, aspectRatio, resolution, turboEnabled,
-      results: results.filter((r) => r.url && !r.url.startsWith('data:')),
+      requirements, language, model, aspectRatio, resolution,
     }),
     (s) => {
       if (typeof s.requirements === 'string') setRequirements(s.requirements)
       if (typeof s.language === 'string') setLanguage(s.language)
-      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
+      if (typeof s.model === 'string' && isValidModel(s.model)) {
+        setModel(normalizeGenerationModel(s.model) as GenerationModel)
+      }
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.resolution === 'string') setResolution(s.resolution as ImageSize)
-      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (Array.isArray(s.results)) {
-        const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string' && !r.url.startsWith('data:'))
-        if (restored.length > 0) setResults(restored)
+      if (typeof s.resolution === 'string') {
+        const restoredModel = typeof s.model === 'string' ? normalizeGenerationModel(s.model) : DEFAULT_MODEL
+        setResolution(sanitizeImageSizeForModel(restoredModel, s.resolution as ImageSize))
       }
     }
   )
@@ -490,7 +494,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
           model,
           aspectRatio,
           imageSize: resolution,
-          turboEnabled,
           workflowMode: 'product',
           client_job_id: `${uid()}_${i}`,
           fe_attempt: 1,
@@ -507,10 +510,14 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       const newResults: ResultImage[] = imageJobs
         .filter((j) => j.result_url)
         .map((j, i) => ({
-          url: j.result_url!,
-          label: editableImagePlans[i]?.title ?? `图片 ${i + 1}`,
+          ...createResultAsset({
+            url: j.result_url!,
+            label: editableImagePlans[i]?.title ?? `图片 ${i + 1}`,
+            ...extractResultAssetMetadata(j.result_data),
+            originModule: 'clothing-basic-photo',
+          }),
         }))
-      setResults(newResults)
+      appendResults(newResults)
       setPhase('complete')
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
@@ -520,6 +527,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     }
   }, [
     analysisBlueprint,
+    appendResults,
     editableImagePlans,
     editableDesignSpecs,
     uploadedUrls,
@@ -527,7 +535,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     model,
     aspectRatio,
     resolution,
-    turboEnabled,
     backendLocale,
     language,
     traceId,
@@ -539,13 +546,13 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     setPhase('input')
     setSteps([])
     setProgress(0)
-    setResults([])
+    clearResults()
     setErrorMessage(null)
     setAnalysisBlueprint(null)
     setEditableDesignSpecs('')
     setEditableImagePlans([])
     setUploadedUrls([])
-  }, [])
+  }, [clearResults])
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort()
@@ -599,8 +606,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
           onAspectRatioChange={setAspectRatio}
           resolution={resolution}
           onResolutionChange={setResolution}
-          turboEnabled={turboEnabled}
-          onTurboChange={setTurboEnabled}
           disabled={isProcessing}
         />
 
@@ -716,7 +721,14 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
 
     return (
       <div className="space-y-4">
-        {results.length > 0 && <ResultGallery images={results} aspectRatio={aspectRatio} />}
+        {results.length > 0 && (
+          <ResultGallery
+            images={results}
+            aspectRatio={aspectRatio}
+            editorSessionKey="clothing-basic-photo"
+            originModule="clothing-basic-photo"
+          />
+        )}
         {results.length === 0 && errorMessage && (
           <div className="text-center text-sm text-destructive">{errorMessage}</div>
         )}

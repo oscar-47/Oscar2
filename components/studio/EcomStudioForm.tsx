@@ -10,7 +10,6 @@ import {
   Settings2,
   ShoppingBag,
   Sparkles,
-  Zap,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -22,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { MultiImageUploader, type UploadedImage } from '@/components/upload/MultiImageUploader'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
 import type { ProgressStep } from '@/components/generation/GenerationProgress'
@@ -32,6 +30,7 @@ import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
 import { EcomDetailModuleSelector } from '@/components/studio/EcomDetailModuleSelector'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
+import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { uploadFiles } from '@/lib/api/upload'
 import {
@@ -42,6 +41,7 @@ import {
 } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import { friendlyError } from '@/lib/utils'
+import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import {
   buildEcomDetailAnalysisRequirements,
   ECOM_DETAIL_MODULES,
@@ -63,9 +63,13 @@ import type {
 } from '@/types'
 import {
   AVAILABLE_MODELS,
-  DEFAULT_CREDIT_COSTS,
+  DEFAULT_MODEL,
+  getGenerationCreditCost,
+  getSupportedImageSizes,
   IMAGE_SIZE_LABELS,
   isValidModel,
+  normalizeGenerationModel,
+  sanitizeImageSizeForModel,
 } from '@/types'
 
 const ASPECT_RATIOS_EN: { value: AspectRatio; label: string }[] = [
@@ -85,8 +89,6 @@ const ASPECT_RATIOS_ZH: { value: AspectRatio; label: string }[] = [
   { value: '9:16', label: '9:16 长图' },
   { value: '16:9', label: '16:9 宽屏' },
 ]
-
-const RESOLUTION_OPTIONS: ImageSize[] = ['1K', '2K']
 
 const OUTPUT_LANGUAGES_EN: { value: OutputLanguage; label: string }[] = [
   { value: 'none', label: 'No Text (Visual Only)' },
@@ -108,7 +110,6 @@ const OUTPUT_LANGUAGES_ZH = OUTPUT_LANGUAGES_EN.map((lang) =>
     : lang
 )
 
-const TURBO_SURCHARGE: Record<string, number> = { '1K': 3, '2K': 7, '4K': 12 }
 const DEFAULT_REQUIREMENTS_ZH = '我的商品是____，主要卖点是____'
 const DEFAULT_REQUIREMENTS_EN = 'My product is ____, key selling point is ____'
 const MODULE_ID_SET = new Set(ECOM_DETAIL_MODULES.map((module) => module.id))
@@ -149,16 +150,12 @@ function isAnalysisStale(
 
 function computeCost(
   model: GenerationModel,
-  turboEnabled: boolean,
   imageSize: ImageSize,
   imageCount: number,
 ): number {
   if (imageCount <= 0) return 0
-  const base = DEFAULT_CREDIT_COSTS[model] ?? 5
-  const perImage = turboEnabled
-    ? base + (TURBO_SURCHARGE[imageSize] ?? 12)
-    : base
-  return perImage * imageCount
+  const base = getGenerationCreditCost(model, imageSize)
+  return base * imageCount
 }
 
 function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> {
@@ -316,11 +313,10 @@ export function EcomStudioForm() {
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
   const [requirements, setRequirements] = useState(defaultRequirements)
   const [selectedDetailModules, setSelectedDetailModules] = useState<EcomDetailModuleId[]>([])
-  const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
+  const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4')
   const [imageSize, setImageSize] = useState<ImageSize>('2K')
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>('none')
-  const [turboEnabled, setTurboEnabled] = useState(false)
 
   const [analysisBlueprint, setAnalysisBlueprint] = useState<AnalysisBlueprint | null>(null)
   const [editableDesignSpecs, setEditableDesignSpecs] = useState('')
@@ -329,7 +325,11 @@ export function EcomStudioForm() {
 
   const [steps, setSteps] = useState<ProgressStep[]>([])
   const [progress, setProgress] = useState(0)
-  const [results, setResults] = useState<ResultImage[]>([])
+  const {
+    assets: results,
+    appendAssets: appendResults,
+    clearAssets: clearResults,
+  } = useResultAssetSession('ecom-studio')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([])
 
@@ -345,8 +345,6 @@ export function EcomStudioForm() {
       aspectRatio,
       imageSize,
       outputLanguage,
-      turboEnabled,
-      results: results.filter((item) => item.url && !item.url.startsWith('data:')),
     }),
     (session) => {
       if (typeof session.requirements === 'string') setRequirements(session.requirements)
@@ -356,17 +354,14 @@ export function EcomStudioForm() {
         if (restored.length > 0) setSelectedDetailModules(restored)
       }
       if (typeof session.model === 'string' && isValidModel(session.model)) {
-        setModel(session.model as GenerationModel)
+        setModel(normalizeGenerationModel(session.model) as GenerationModel)
       }
       if (typeof session.aspectRatio === 'string') setAspectRatio(session.aspectRatio as AspectRatio)
-      if (typeof session.imageSize === 'string') setImageSize(session.imageSize as ImageSize)
-      if (typeof session.outputLanguage === 'string') setOutputLanguage(session.outputLanguage as OutputLanguage)
-      if (typeof session.turboEnabled === 'boolean') setTurboEnabled(session.turboEnabled)
-      if (Array.isArray(session.results)) {
-        const restored = (session.results as ResultImage[])
-          .filter((item) => item.url && typeof item.url === 'string' && !item.url.startsWith('data:'))
-        if (restored.length > 0) setResults(restored)
+      if (typeof session.imageSize === 'string') {
+        const restoredModel = typeof session.model === 'string' ? normalizeGenerationModel(session.model) : DEFAULT_MODEL
+        setImageSize(sanitizeImageSizeForModel(restoredModel, session.imageSize as ImageSize))
       }
+      if (typeof session.outputLanguage === 'string') setOutputLanguage(session.outputLanguage as OutputLanguage)
     },
   )
 
@@ -374,7 +369,8 @@ export function EcomStudioForm() {
   const currentImageCount = phase === 'preview' || phase === 'generating' || phase === 'complete'
     ? editableImagePlans.length
     : selectedModules.length
-  const totalCost = computeCost(model, turboEnabled, imageSize, currentImageCount)
+  const totalCost = computeCost(model, imageSize, currentImageCount)
+  const resolutionOptions = getSupportedImageSizes(model)
   const insufficientCredits = credits !== null && totalCost > 0 && credits < totalCost
   const currentSnapshot: AnalysisParamSnapshot = {
     imagesSignature: buildImagesSignature(productImages),
@@ -584,7 +580,6 @@ export function EcomStudioForm() {
           model,
           aspectRatio,
           imageSize,
-          turboEnabled,
           client_job_id: `${uid()}_${index}`,
           fe_attempt: 1,
           trace_id: traceId,
@@ -603,14 +598,18 @@ export function EcomStudioForm() {
       const nextResults: ResultImage[] = jobs
         .filter((job) => job.result_url)
         .map((job, index) => ({
-          url: job.result_url!,
-          label: editableImagePlans[index]?.title ?? `${isZh ? '模块' : 'Module'} ${index + 1}`,
+          ...createResultAsset({
+            url: job.result_url!,
+            label: editableImagePlans[index]?.title ?? `${isZh ? '模块' : 'Module'} ${index + 1}`,
+            ...extractResultAssetMetadata(job.result_data),
+            originModule: 'ecom-studio',
+          }),
         }))
 
       setStep('generate', { status: 'done' })
       setStep('done', { status: 'done' })
       setProgress(100)
-      setResults(nextResults)
+      appendResults(nextResults)
       setPhase('complete')
       refreshCredits()
     } catch (error) {
@@ -620,6 +619,7 @@ export function EcomStudioForm() {
       setPhase('preview')
     }
   }, [
+    appendResults,
     analysisBlueprint,
     aspectRatio,
     backendLocale,
@@ -633,7 +633,6 @@ export function EcomStudioForm() {
     productImages,
     selectedDetailModules,
     setStep,
-    turboEnabled,
     uploadedUrls,
   ])
 
@@ -663,17 +662,16 @@ export function EcomStudioForm() {
     setProductImages([])
     setRequirements(defaultRequirements)
     setSelectedDetailModules([])
-    setTurboEnabled(false)
     setAnalysisBlueprint(null)
     setEditableDesignSpecs('')
     setEditableImagePlans([])
     setAnalysisParams(null)
     setSteps([])
     setProgress(0)
-    setResults([])
+    clearResults()
     setErrorMessage(null)
     setUploadedUrls([])
-  }, [defaultRequirements])
+  }, [clearResults, defaultRequirements])
 
   const rightPanelTitle = phase === 'preview'
     ? (isZh ? '详情页规划方案' : 'Detail Page Plan')
@@ -799,7 +797,11 @@ export function EcomStudioForm() {
                 <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('model')}</Label>
                 <Select
                   value={model}
-                  onValueChange={(value) => setModel(value as GenerationModel)}
+                  onValueChange={(value) => {
+                    const nextModel = normalizeGenerationModel(value) as GenerationModel
+                    setModel(nextModel)
+                    setImageSize((current) => sanitizeImageSizeForModel(nextModel, current))
+                  }}
                   disabled={isProcessing}
                 >
                   <SelectTrigger className={panelInputClass}>
@@ -844,7 +846,7 @@ export function EcomStudioForm() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {RESOLUTION_OPTIONS.map((resolution) => (
+                    {resolutionOptions.map((resolution) => (
                       <SelectItem key={resolution} value={resolution}>
                         {isZh ? IMAGE_SIZE_LABELS[resolution].zh : IMAGE_SIZE_LABELS[resolution].en}
                       </SelectItem>
@@ -861,27 +863,6 @@ export function EcomStudioForm() {
             disabled={isProcessing}
             isZh={isZh}
           />
-
-          {phase === 'preview' && (
-            <div className="rounded-[28px] border border-[#d0d4dc] bg-white px-4 py-3.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${turboEnabled ? 'bg-[#e7f8ee] text-[#22b968]' : 'bg-[#eceef2] text-[#7a7f8b]'}`}>
-                    <Zap className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? 'Turbo 加速模式' : 'Turbo Mode'}</p>
-                    <p className="text-[13px] text-[#7d818d]">{isZh ? '更快、更稳定' : 'Faster and more stable'}</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={turboEnabled}
-                  onCheckedChange={setTurboEnabled}
-                  className="h-8 w-14 border-0 data-[state=checked]:bg-[#1a1d24] data-[state=unchecked]:bg-[#d8d9dd]"
-                />
-              </div>
-            </div>
-          )}
 
           {phase === 'input' && (
             <Button
@@ -1037,7 +1018,12 @@ export function EcomStudioForm() {
           )}
 
           {phase === 'complete' && (
-            <ResultGallery images={results} aspectRatio={aspectRatio} />
+            <ResultGallery
+              images={results}
+              aspectRatio={aspectRatio}
+              editorSessionKey="ecom-studio"
+              originModule="ecom-studio"
+            />
           )}
         </div>
       </div>

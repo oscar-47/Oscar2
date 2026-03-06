@@ -7,14 +7,14 @@ import { useEditorStore } from '@/lib/stores/editor-store'
 import { generateImage } from '@/lib/api/edge-functions'
 import { uploadFile } from '@/lib/api/upload'
 import { useWaitForJob } from '@/lib/hooks/useWaitForJob'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS } from '@/types'
+import {
+  AVAILABLE_MODELS,
+  getGenerationCreditCost,
+  getSupportedImageSizes,
+  normalizeGenerationModel,
+  sanitizeImageSizeForModel,
+} from '@/types'
 import type { GenerationModel, AspectRatio, ImageSize } from '@/types'
-import { cn } from '@/lib/utils'
-
-const RESOLUTION_OPTIONS: Array<{ value: ImageSize; label: string; labelZh: string }> = [
-  { value: '1K', label: '1K (1024px)', labelZh: '1K 标清 (1024px)' },
-  { value: '2K', label: '2K (2048px)', labelZh: '2K 高清 (2048px)' },
-]
 
 const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
   { value: '1:1', label: '1:1' },
@@ -56,11 +56,8 @@ export function QuickEditPanel() {
   })
 
   const computeCost = useCallback(() => {
-    const base = DEFAULT_CREDIT_COSTS[quickEdit.model] ?? 5
-    if (!quickEdit.turboEnabled) return base
-    const surcharge = quickEdit.imageSize === '1K' ? 3 : quickEdit.imageSize === '2K' ? 7 : 12
-    return base + surcharge
-  }, [quickEdit.turboEnabled, quickEdit.imageSize, quickEdit.model])
+    return getGenerationCreditCost(quickEdit.model, quickEdit.imageSize)
+  }, [quickEdit.imageSize, quickEdit.model])
 
   const handleRefUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -89,7 +86,6 @@ export function QuickEditPanel() {
         model: quickEdit.model,
         aspectRatio: quickEdit.aspectRatio,
         imageSize: quickEdit.imageSize,
-        turboEnabled: quickEdit.turboEnabled,
         editMode: true,
         editType: 'quick',
         originalImage: obj.url,
@@ -108,6 +104,7 @@ export function QuickEditPanel() {
   if (!quickEdit.open) return null
 
   const cost = computeCost()
+  const resolutionOptions = getSupportedImageSizes(quickEdit.model)
 
   return (
     <div className="absolute right-4 top-16 z-[10000] w-[340px] rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl">
@@ -168,7 +165,11 @@ export function QuickEditPanel() {
             </label>
             <select
               value={quickEdit.model}
-              onChange={(e) => setQuickEditField('model', e.target.value as GenerationModel)}
+              onChange={(e) => {
+                const nextModel = normalizeGenerationModel(e.target.value) as GenerationModel
+                setQuickEditField('model', nextModel)
+                setQuickEditField('imageSize', sanitizeImageSizeForModel(nextModel, quickEdit.imageSize))
+              }}
               className="w-full rounded-lg border border-[#d1d5db] bg-white px-2.5 py-1.5 text-sm text-[#111827] focus:border-[#6366f1] focus:outline-none"
             >
               {AVAILABLE_MODELS.map((opt) => (
@@ -185,17 +186,19 @@ export function QuickEditPanel() {
               onChange={(e) => setQuickEditField('imageSize', e.target.value as ImageSize)}
               className="w-full rounded-lg border border-[#d1d5db] bg-white px-2.5 py-1.5 text-sm text-[#111827] focus:border-[#6366f1] focus:outline-none"
             >
-              {RESOLUTION_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {locale === 'zh' ? opt.labelZh : opt.label}
+              {resolutionOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {locale === 'zh'
+                    ? `${opt} (${opt === '1K' ? '1024px' : opt === '2K' ? '2048px' : '4096px'})`
+                    : `${opt} (${opt === '1K' ? '1024px' : opt === '2K' ? '2048px' : '4096px'})`}
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* Ratio & Turbo */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Aspect Ratio */}
+        <div>
           <div>
             <label className="mb-1 block text-xs font-medium text-[#6b7280]">
               {t('quickEditRatio')}
@@ -209,23 +212,6 @@ export function QuickEditPanel() {
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[#6b7280]">
-              {t('quickEditTurbo')}
-            </label>
-            <button
-              type="button"
-              onClick={() => setQuickEditField('turboEnabled', !quickEdit.turboEnabled)}
-              className={cn(
-                'mt-0.5 flex h-8 w-full items-center justify-center rounded-lg border text-xs font-medium transition-colors',
-                quickEdit.turboEnabled
-                  ? 'border-[#6366f1] bg-[#eef2ff] text-[#6366f1]'
-                  : 'border-[#d1d5db] text-[#9ca3af]'
-              )}
-            >
-              {quickEdit.turboEnabled ? 'ON' : 'OFF'}
-            </button>
           </div>
         </div>
 

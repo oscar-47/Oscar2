@@ -2,7 +2,6 @@
 
 import { useLocale } from 'next-intl'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -11,9 +10,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SectionIcon } from '@/components/shared/SectionIcon'
-import { SlidersHorizontal, Zap } from 'lucide-react'
+import { SlidersHorizontal } from 'lucide-react'
 import type { GenerationModel, AspectRatio, ImageSize, OutputLanguage } from '@/types'
-import { AVAILABLE_MODELS, IMAGE_SIZE_LABELS } from '@/types'
+import {
+  AVAILABLE_MODELS,
+  getDefaultImageSize,
+  getSupportedImageSizes,
+  IMAGE_SIZE_LABELS,
+  normalizeGenerationModel,
+} from '@/types'
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -34,8 +39,6 @@ interface GenerationParametersCardProps {
   onImageCountChange?: (v: number) => void
   showImageCount?: boolean
   imageCountOptions?: number[]
-  turboEnabled?: boolean
-  onTurboChange?: (v: boolean) => void
 
   // Aspect ratio options to show (different forms may want different options)
   aspectRatioOptions?: AspectRatio[]
@@ -62,8 +65,6 @@ const ASPECT_RATIO_LABELS: Record<AspectRatio, { en: string; zh: string }> = {
 }
 
 const DEFAULT_ASPECT_RATIOS: AspectRatio[] = ['1:1', '3:4', '4:3', '4:5', '16:9']
-
-const RESOLUTION_OPTIONS: ImageSize[] = ['1K', '2K']  // 4K removed: Gemini API image_size unreliable for 4K
 
 interface OutputLangOption {
   value: OutputLanguage
@@ -99,8 +100,6 @@ export function GenerationParametersCard({
   imageCount,
   onImageCountChange,
   showImageCount = false,
-  turboEnabled,
-  onTurboChange,
   aspectRatioOptions,
   imageCountOptions,
   extraFields,
@@ -109,6 +108,7 @@ export function GenerationParametersCard({
   const isZh = locale === 'zh'
 
   const ratios = aspectRatioOptions ?? DEFAULT_ASPECT_RATIOS
+  const resolutionOptions = getSupportedImageSizes(model)
 
   const selectTriggerClass =
     'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] text-[#1b1f26] shadow-none'
@@ -117,7 +117,6 @@ export function GenerationParametersCard({
     outputLanguage !== undefined && onOutputLanguageChange !== undefined
   const showImageCountField =
     showImageCount && imageCount !== undefined && onImageCountChange !== undefined
-  const showTurbo = turboEnabled !== undefined && onTurboChange !== undefined
 
   return (
     <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
@@ -141,7 +140,14 @@ export function GenerationParametersCard({
         </Label>
         <Select
           value={model}
-          onValueChange={(v) => onModelChange(v as GenerationModel)}
+          onValueChange={(v) => {
+            const nextModel = normalizeGenerationModel(v) as GenerationModel
+            onModelChange(nextModel)
+            const nextDefault = getDefaultImageSize(nextModel)
+            if (!getSupportedImageSizes(nextModel).includes(imageSize)) {
+              onImageSizeChange(nextDefault)
+            }
+          }}
           disabled={disabled}
         >
           <SelectTrigger className={selectTriggerClass}>
@@ -190,7 +196,7 @@ export function GenerationParametersCard({
           {isZh ? '分辨率' : 'Resolution'}
         </Label>
         <div className="flex gap-2">
-          {RESOLUTION_OPTIONS.map((s) => {
+          {resolutionOptions.map((s) => {
             const active = imageSize === s
             return (
               <button
@@ -267,37 +273,6 @@ export function GenerationParametersCard({
 
       {/* Extra fields slot */}
       {extraFields}
-
-      {/* Turbo Mode */}
-      {showTurbo && (
-        <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-2.5">
-          <div className="flex items-center gap-2.5">
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                turboEnabled
-                  ? 'bg-[#e7f8ee] text-[#22b968]'
-                  : 'bg-[#eceef2] text-[#6f737c]'
-              }`}
-            >
-              <Zap className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-[14px] font-semibold text-[#1a1d24]">
-                {isZh ? 'Turbo 加速模式' : 'Turbo Mode'}
-              </p>
-              <p className="text-[12px] text-[#7d818d]">
-                {isZh ? '更快、更稳定' : 'Faster & more stable'}
-              </p>
-            </div>
-          </div>
-          <Switch
-            checked={turboEnabled}
-            onCheckedChange={onTurboChange}
-            disabled={disabled}
-            className="h-8 w-14 border-0 data-[state=checked]:bg-[#1a1d24] data-[state=unchecked]:bg-[#d8d9dd]"
-          />
-        </div>
-      )}
     </div>
   )
 }

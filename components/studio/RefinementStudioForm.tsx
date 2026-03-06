@@ -1,10 +1,12 @@
 'use client'
 
-import { useCallback, useRef, useState, useEffect } from 'react'
+import { useCallback, useRef, useState } from 'react'
+import { ResultGallery } from '@/components/generation/ResultGallery'
+import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { useTranslations, useLocale } from 'next-intl'
 import { useDropzone, type FileRejection } from 'react-dropzone'
-import { Loader2, Plus, Download, Sparkles, FileText, Upload, X, ImageIcon } from 'lucide-react'
+import { Loader2, Plus, Download, Sparkles, FileText, Upload, ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -22,8 +24,15 @@ import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
+import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import type { AspectRatio, BackgroundMode, GenerationJob, GenerationModel, ImageSize } from '@/types'
-import { DEFAULT_CREDIT_COSTS, isValidModel } from '@/types'
+import {
+  DEFAULT_MODEL,
+  getGenerationCreditCost,
+  isValidModel,
+  normalizeGenerationModel,
+  sanitizeImageSizeForModel,
+} from '@/types'
 import { friendlyError } from '@/lib/utils'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
@@ -185,45 +194,36 @@ export function RefinementStudioForm() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [userPrompt, setUserPrompt] = useState('')
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>('white')
-  const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
+  const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [imageSize, setImageSize] = useState<ImageSize>('2K')
-  const [turboEnabled, setTurboEnabled] = useState(false)
   const [phase, setPhase] = useState<Phase>('idle')
   const [progress, setProgress] = useState(0)
   const [statusLine, setStatusLine] = useState('')
   const [cards, setCards] = useState<Card[]>([])
+  const {
+    assets: resultAssets,
+    appendAssets: appendResultAssets,
+    clearAssets: clearResultAssets,
+  } = useResultAssetSession('refinement-studio')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null)
   const [downloadingAll, setDownloadingAll] = useState(false)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-
-  // Lightbox: Escape key + scroll lock
-  useEffect(() => {
-    if (!previewUrl) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreviewUrl(null) }
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
-  }, [previewUrl])
 
   useSessionPersistence(
     'refinement-studio',
     () => ({
-      userPrompt, backgroundMode, model, aspectRatio, imageSize, turboEnabled,
-      cards: cards.filter((c) => c.status === 'success' && c.url),
+      userPrompt, backgroundMode, model, aspectRatio, imageSize,
     }),
     (s) => {
       if (typeof s.userPrompt === 'string') setUserPrompt(s.userPrompt)
       if (typeof s.backgroundMode === 'string') setBackgroundMode(s.backgroundMode as BackgroundMode)
-      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
+      if (typeof s.model === 'string' && isValidModel(s.model)) {
+        setModel(normalizeGenerationModel(s.model) as GenerationModel)
+      }
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
-      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (Array.isArray(s.cards)) {
-        const restored = (s.cards as Card[]).filter((c) => c.status === 'success' && c.url && typeof c.url === 'string')
-        if (restored.length > 0) setCards(restored)
+      if (typeof s.imageSize === 'string') {
+        const restoredModel = typeof s.model === 'string' ? normalizeGenerationModel(s.model) : DEFAULT_MODEL
+        setImageSize(sanitizeImageSizeForModel(restoredModel, s.imageSize as ImageSize))
       }
     }
   )
@@ -232,10 +232,8 @@ export function RefinementStudioForm() {
   const uploadedUrlsRef = useRef<string[]>([])
 
   const expectedCount = productImages.length
-  const baseCost = DEFAULT_CREDIT_COSTS[model] ?? 5
-  const turboExtra = imageSize === '1K' ? 3 : imageSize === '2K' ? 7 : 12
-  const unitCost = turboEnabled ? baseCost + turboExtra : baseCost
-  const totalCost = unitCost * Math.max(1, expectedCount)
+  const baseCost = getGenerationCreditCost(model, imageSize)
+  const totalCost = baseCost * Math.max(1, expectedCount)
   const insufficientCredits = total !== null && total < totalCost
   const isRunning = phase === 'running'
   const canGenerate = expectedCount > 0 && !isRunning && !insufficientCredits
@@ -326,7 +324,6 @@ export function RefinementStudioForm() {
           model,
           aspectRatio,
           imageSize,
-          turboEnabled,
           trace_id: uid(),
           client_job_id: uid(),
           fe_attempt: 1,
@@ -375,6 +372,17 @@ export function RefinementStudioForm() {
           setCards(finalSnapshot.cards)
         }
 
+        const successAssets = finalSnapshot.cards
+          .filter((card) => card.status === 'success' && card.url)
+          .map((card) => createResultAsset({
+            url: card.url!,
+            ...extractResultAssetMetadata(job.result_data),
+            originModule: 'refinement-studio',
+          }))
+        if (successAssets.length > 0) {
+          appendResultAssets(successAssets)
+        }
+
         setProgress(100)
         const successCount = finalSnapshot.cards.filter((c) => c.status === 'success').length
         setPhase(successCount > 0 ? 'success' : 'failed')
@@ -392,7 +400,7 @@ export function RefinementStudioForm() {
         refreshCredits()
       }
     },
-    [aspectRatio, backgroundMode, imageSize, model, t, tc, turboEnabled, userPrompt]
+    [appendResultAssets, aspectRatio, backgroundMode, imageSize, isZh, model, t, tc, userPrompt]
   )
 
   const handleSubmit = useCallback(async () => {
@@ -414,7 +422,7 @@ export function RefinementStudioForm() {
       setPhase('failed')
       setProgress(0)
     }
-  }, [canGenerate, expectedCount, productImages, runRefinement, t, tc])
+  }, [canGenerate, expectedCount, isZh, productImages, runRefinement, t, tc])
 
   const retryFailed = useCallback(async () => {
     const sourceUrls = uploadedUrlsRef.current
@@ -430,22 +438,10 @@ export function RefinementStudioForm() {
     await runRefinement(retryUrls, mergeIndices)
   }, [cards, runRefinement])
 
-  const downloadOne = (url: string, index: number) => {
-    try {
-      setDownloadingIndex(index)
-      triggerDirectDownload(url, `refinement-${index + 1}-${Date.now()}.png`)
-    } catch (e: unknown) {
-      setErrorMessage(friendlyError(e instanceof Error ? e.message : tc('error'), isZh))
-      setPhase('failed')
-    } finally {
-      setDownloadingIndex(null)
-    }
-  }
-
   const downloadAll = async () => {
     try {
       setDownloadingAll(true)
-      const urls = cards.filter((x) => x.status === 'success' && x.url).map((x) => x.url as string)
+      const urls = resultAssets.map((asset) => asset.url)
       for (let i = 0; i < urls.length; i++) {
         triggerDirectDownload(urls[i], `refinement-${i + 1}-${Date.now()}.png`)
         await new Promise((resolve) => setTimeout(resolve, 120))
@@ -567,13 +563,11 @@ export function RefinementStudioForm() {
             onModelChange={setModel}
             aspectRatio={aspectRatio}
             onAspectRatioChange={setAspectRatio}
-            imageSize={imageSize}
-            onImageSizeChange={setImageSize}
-            disabled={isRunning}
-            turboEnabled={turboEnabled}
-            onTurboChange={setTurboEnabled}
-            aspectRatioOptions={['1:1', '3:4', '4:3', '16:9', '9:16', '3:2', '2:3', '21:9']}
-            extraFields={
+          imageSize={imageSize}
+          onImageSizeChange={setImageSize}
+          disabled={isRunning}
+          aspectRatioOptions={['1:1', '3:4', '4:3', '16:9', '9:16', '3:2', '2:3', '21:9']}
+          extraFields={
               <div className="mt-4 space-y-1.5">
                 <Label className="text-[13px] font-medium text-[#5a5e6b]">{t('backgroundMode')}</Label>
                 <Select value={backgroundMode} onValueChange={(v) => setBackgroundMode(v as BackgroundMode)} disabled={isRunning}>
@@ -652,7 +646,7 @@ export function RefinementStudioForm() {
             </div>
           )}
 
-          {phase === 'idle' && cards.length === 0 ? (
+          {phase === 'idle' && resultAssets.length === 0 && cards.length === 0 ? (
             <div className="flex min-h-[620px] items-center justify-center">
               <div className="text-center">
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#e8eaef] text-[#767b86]">
@@ -662,33 +656,16 @@ export function RefinementStudioForm() {
                 <p className="mt-1 text-[15px] text-[#5f6672]">{t('waitingActionHint')}</p>
               </div>
             </div>
-          ) : (
+          ) : phase === 'running' ? (
             <div className="flex flex-wrap content-start items-start gap-3">
               {cards.map((card, i) =>
-                card.status === 'success' && card.url ? (
+                card.status === 'loading' ? (
                   <div
                     key={i}
-                    role="button"
-                    tabIndex={0}
-                    className="group relative w-[220px] max-w-full cursor-pointer overflow-hidden rounded-2xl border border-[#d2d6de] bg-[#eef0f4]"
+                    className="flex w-[220px] max-w-full items-center justify-center rounded-2xl border border-[#d0d4db] bg-[#eff1f4]"
                     style={{ aspectRatio: previewAspectRatio }}
-                    onClick={() => setPreviewUrl(card.url)}
-                    onKeyDown={(e) => {
-                      if (e.target !== e.currentTarget) return
-                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPreviewUrl(card.url) }
-                    }}
                   >
-                    <img src={card.url} alt={`result-${i + 1}`} className="w-full object-cover" />
-                    <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/35 opacity-0 transition-opacity pointer-events-none group-hover:opacity-100 group-focus-within:opacity-100">
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); downloadOne(card.url as string, i) }}
-                        disabled={downloadingIndex === i || downloadingAll}
-                        className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30 disabled:opacity-60"
-                      >
-                        {downloadingIndex === i ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                      </button>
-                    </div>
+                    <Loader2 className="h-5 w-5 animate-spin text-[#6f737c]" />
                   </div>
                 ) : card.status === 'failed' ? (
                   <div key={i} className="w-[220px] max-w-full rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
@@ -697,23 +674,44 @@ export function RefinementStudioForm() {
                 ) : (
                   <div
                     key={i}
-                    className="flex w-[220px] max-w-full items-center justify-center rounded-2xl border border-[#d0d4db] bg-[#eff1f4]"
+                    className="w-[220px] max-w-full overflow-hidden rounded-2xl border border-[#d2d6de] bg-[#eef0f4] opacity-60"
                     style={{ aspectRatio: previewAspectRatio }}
                   >
-                    <Loader2 className="h-5 w-5 animate-spin text-[#6f737c]" />
+                    <img src={card.url!} alt={`result-${i + 1}`} className="w-full object-cover" />
                   </div>
                 )
               )}
             </div>
+          ) : (
+            <div className="space-y-3">
+              {resultAssets.length > 0 && (
+                <ResultGallery
+                  images={resultAssets}
+                  aspectRatio={aspectRatio}
+                  editorSessionKey="refinement-studio"
+                  originModule="refinement-studio"
+                  onClear={clearResultAssets}
+                />
+              )}
+              {cards.some((card) => card.status === 'failed') && (
+                <div className="flex flex-wrap content-start items-start gap-3">
+                  {cards.filter((card) => card.status === 'failed').map((card, index) => (
+                    <div key={`failed-${index}`} className="w-[220px] max-w-full rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+                      {card.error ?? tc('error')}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
-          {cards.length > 0 && phase !== 'running' && (
-            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {(cards.length > 0 || resultAssets.length > 0) && phase !== 'running' && (
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
               <Button
                 variant="outline"
                 className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
                 onClick={downloadAll}
-                disabled={!cards.some((x) => x.status === 'success') || downloadingAll || downloadingIndex !== null}
+                disabled={resultAssets.length === 0 || downloadingAll}
               >
                 {downloadingAll ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
                 {t('downloadAllSuccess')}
@@ -722,7 +720,7 @@ export function RefinementStudioForm() {
                 variant="outline"
                 className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
                 onClick={retryFailed}
-                disabled={!cards.some((x) => x.status === 'failed') || downloadingAll || downloadingIndex !== null}
+                disabled={!cards.some((x) => x.status === 'failed') || downloadingAll}
               >
                 {t('retryFailed')}
               </Button>
@@ -730,41 +728,24 @@ export function RefinementStudioForm() {
                 variant="outline"
                 className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
                 onClick={handleSubmit}
-                disabled={!canGenerate || downloadingAll || downloadingIndex !== null}
+                disabled={!canGenerate || downloadingAll}
               >
                 <Plus className="mr-1 h-4 w-4" />
                 {t('regenerateAll')}
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
+                onClick={clearResultAssets}
+                disabled={resultAssets.length === 0 || downloadingAll}
+              >
+                {isZh ? '清除历史' : 'Clear History'}
               </Button>
             </div>
           )}
         </div>
       </div>
     </CorePageShell>
-    {previewUrl && (
-      <div
-        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={() => setPreviewUrl(null)}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Image Preview"
-      >
-        <button
-          type="button"
-          className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/80 transition-all hover:bg-white/20 hover:text-white"
-          onClick={(e) => { e.stopPropagation(); setPreviewUrl(null) }}
-          aria-label="Close"
-          autoFocus
-        >
-          <X className="h-5 w-5" />
-        </button>
-        <img
-          src={previewUrl}
-          alt="preview"
-          className="max-h-[85vh] max-w-[85vw] rounded-xl object-contain shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
-        />
-      </div>
-    )}
     </>
   )
 }

@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
+import { ResultGallery } from '@/components/generation/ResultGallery'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
+import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { ImageUploader } from '@/components/upload/ImageUploader'
 import { CreditCostBadge } from '@/components/generation/CreditCostBadge'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
@@ -18,10 +19,18 @@ import { uploadFile, uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationModel, AspectRatio, ImageSize, GenerationJob } from '@/types'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel } from '@/types'
+import {
+  AVAILABLE_MODELS,
+  DEFAULT_MODEL,
+  getGenerationCreditCost,
+  getSupportedImageSizes,
+  isValidModel,
+  normalizeGenerationModel,
+  sanitizeImageSizeForModel,
+} from '@/types'
+import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import { friendlyError } from '@/lib/utils'
-import { Loader2, Sparkles, X, Plus, Download, Image as ImageIcon, ShieldCheck, Zap, Pencil } from 'lucide-react'
-import { createEditorSession } from '@/lib/utils/editor-session'
+import { Loader2, Sparkles, Plus, Download, Image as ImageIcon, ShieldCheck } from 'lucide-react'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
 
@@ -87,51 +96,43 @@ export function AestheticMirrorForm() {
   const [batchRefs, setBatchRefs] = useState<UImg[]>([])
   const [batchProduct, setBatchProduct] = useState<UImg | null>(null)
   const [userPrompt, setUserPrompt] = useState('')
-  const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
+  const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
-  const [imageSize, setImageSize] = useState<ImageSize>('1K')
+  const [imageSize, setImageSize] = useState<ImageSize>('2K')
   const [imageCount, setImageCount] = useState(1)
   const [groupCount, setGroupCount] = useState(1)
-  const [turboEnabled, setTurboEnabled] = useState(false)
   const [phase, setPhase] = useState<Phase>('idle')
   const [progress, setProgress] = useState(0)
   const [statusLine, setStatusLine] = useState('')
   const [cards, setCards] = useState<Card[]>([])
+  const {
+    assets: resultAssets,
+    appendAssets: appendResultAssets,
+    clearAssets: clearResultAssets,
+  } = useResultAssetSession('aesthetic-mirror')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null)
   const [downloadingAll, setDownloadingAll] = useState(false)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-
-  // Lightbox: Escape key + scroll lock
-  useEffect(() => {
-    if (!previewUrl) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreviewUrl(null) }
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
-  }, [previewUrl])
 
   // Persist all form state to sessionStorage
   useSessionPersistence(
     'aesthetic-mirror',
     () => ({
-      mode, userPrompt, model, aspectRatio, imageSize, imageCount, groupCount, turboEnabled,
-      cards: cards.filter((c) => c.status === 'success' && c.url),
+      mode, userPrompt, model, aspectRatio, imageSize, imageCount, groupCount,
     }),
     (s) => {
       if (s.mode === 'single' || s.mode === 'batch') setMode(s.mode)
       if (typeof s.userPrompt === 'string') setUserPrompt(s.userPrompt)
-      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
+      if (typeof s.model === 'string' && isValidModel(s.model)) {
+        const nextModel = normalizeGenerationModel(s.model) as GenerationModel
+        setModel(nextModel)
+      }
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
+      if (typeof s.imageSize === 'string') {
+        const restoredModel = typeof s.model === 'string' ? normalizeGenerationModel(s.model) : DEFAULT_MODEL
+        setImageSize(sanitizeImageSizeForModel(restoredModel, s.imageSize as ImageSize))
+      }
       if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
       if (typeof s.groupCount === 'number') setGroupCount(s.groupCount)
-      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (Array.isArray(s.cards)) {
-        const restored = (s.cards as Card[]).filter((c) => c.status === 'success' && c.url && typeof c.url === 'string')
-        if (restored.length > 0) setCards(restored)
-      }
     }
   )
 
@@ -146,10 +147,8 @@ export function AestheticMirrorForm() {
   } | null>(null)
 
   const expectedCount = mode === 'batch' ? batchRefs.length * groupCount : singleProducts.length * imageCount
-  const baseCost = DEFAULT_CREDIT_COSTS[model] ?? 5
-  const turboExtra = imageSize === '1K' ? 3 : imageSize === '2K' ? 7 : 12
-  const unitCost = turboEnabled ? baseCost + turboExtra : baseCost
-  const totalCost = unitCost * Math.max(1, expectedCount)
+  const baseCost = getGenerationCreditCost(model, imageSize)
+  const totalCost = baseCost * Math.max(1, expectedCount)
   const insufficientCredits = total !== null && total < totalCost
   const isRunning = phase === 'running'
   const isZh = locale.startsWith('zh')
@@ -162,6 +161,7 @@ export function AestheticMirrorForm() {
   const resultPanelSubtitle = phase === 'running'
     ? (isZh ? '正在分析参考图并生成设计规范' : 'Analyzing references and generating design specs')
     : (isZh ? '上传产品图并点击分析开始' : "Upload product images and click 'Analyze' to start.")
+  const resolutionOptions = getSupportedImageSizes(model)
   const canGenerate = mode === 'single'
     ? !!singleRefFile && singleProducts.length > 0 && !isRunning && !insufficientCredits
     : batchRefs.length > 0 && !!batchProduct && !isRunning && !insufficientCredits
@@ -192,16 +192,22 @@ export function AestheticMirrorForm() {
     setPhase('running'); setProgress(10); setStatusLine(t('runningText1')); setErrorMessage(null)
     if (!mergeIdx?.length) {
       const loadingCards: Card[] = Array.from({ length: Math.max(1, slots) }, (_, i) => ({ url: null, status: 'loading' as const, referenceIndex: i, groupIndex: 0 }))
-      // Append: keep previous successful results, add loading placeholders after them
-      setCards(prev => [...prev.filter(c => c.status === 'success' && c.url), ...loadingCards])
+      setCards(loadingCards)
     }
     const progressTimer = setInterval(() => setProgress((p) => Math.min(90, p + 7)), 900)
     const statusTimer = setInterval(() => setStatusLine((s) => s === t('runningText1') ? t('runningText2') : s === t('runningText2') ? t('runningText3') : t('runningText1')), 1800)
     try {
-      const { job_id } = await analyzeSingle({ ...request, trace_id: uid(), client_job_id: uid(), fe_attempt: 1, turboEnabled } as any)
+      const { job_id } = await analyzeSingle({ ...request, trace_id: uid(), client_job_id: uid(), fe_attempt: 1 } as any)
       const job = await waitForJob(job_id, abort.signal)
       const next = parseCards(job)
       if (!next.length) throw new Error(t('noResultError'))
+      const successAssets = next
+        .filter((card) => card.status === 'success' && card.url)
+        .map((card) => createResultAsset({
+          url: card.url!,
+          ...extractResultAssetMetadata(job.result_data),
+          originModule: 'aesthetic-mirror',
+        }))
       if (mergeIdx?.length) {
         setCards((prev) => {
           const merged = [...prev]
@@ -209,8 +215,10 @@ export function AestheticMirrorForm() {
           return merged
         })
       } else {
-        // Replace loading placeholders with actual results, keep previous successes
-        setCards(prev => [...prev.filter(c => c.status === 'success' && c.url), ...next])
+        setCards(next)
+      }
+      if (successAssets.length > 0) {
+        appendResultAssets(successAssets)
       }
       setProgress(100); setPhase('success')
     } catch (e: unknown) {
@@ -218,7 +226,7 @@ export function AestheticMirrorForm() {
     } finally {
       clearInterval(progressTimer); clearInterval(statusTimer); refreshCredits()
     }
-  }, [t, tc])
+  }, [appendResultAssets, isZh, t, tc])
 
   const handleSubmit = useCallback(async () => {
     // Set running state immediately so the button disables on click
@@ -261,7 +269,7 @@ export function AestheticMirrorForm() {
     } catch (e: unknown) {
       if ((e as Error).name !== 'AbortError') { setErrorMessage(friendlyError(e instanceof Error ? e.message : 'Upload failed', isZh)); setPhase('failed'); setProgress(0) }
     }
-  }, [mode, singleRefFile, singleProducts, batchRefs, batchProduct, model, aspectRatio, imageSize, imageCount, groupCount, userPrompt, runRequest, t])
+  }, [mode, singleRefFile, singleProducts, batchRefs, batchProduct, model, aspectRatio, imageSize, imageCount, groupCount, isZh, userPrompt, runRequest, t])
 
   const retryFailed = useCallback(async () => {
     const ctx = lastRequestRef.current
@@ -281,32 +289,10 @@ export function AestheticMirrorForm() {
     }, refs.length, failed.map((x) => x.i))
   }, [cards, runRequest, model, aspectRatio, imageSize])
 
-  const downloadOne = async (url: string, index: number) => {
-    try {
-      setDownloadingIndex(index)
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(`DOWNLOAD_FAILED_${res.status}`)
-      const blob = await res.blob()
-      const o = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = o
-      a.download = `style-replicate-${index + 1}-${Date.now()}.png`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(o)
-    } catch (e) {
-      setErrorMessage(friendlyError(e instanceof Error ? e.message : tc('error'), isZh))
-      setPhase('failed')
-    } finally {
-      setDownloadingIndex(null)
-    }
-  }
-
   const downloadAll = async () => {
     try {
       setDownloadingAll(true)
-      const urls = cards.filter((x) => x.status === 'success' && x.url).map((x) => x.url as string)
+      const urls = resultAssets.map((asset) => asset.url)
       for (let i = 0; i < urls.length; i++) {
         const res = await fetch(urls[i])
         if (!res.ok) continue
@@ -495,7 +481,14 @@ export function AestheticMirrorForm() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{tc('model')}</Label>
-                  <Select value={model} onValueChange={(v) => setModel(v as GenerationModel)}>
+                  <Select
+                    value={model}
+                    onValueChange={(v) => {
+                      const nextModel = normalizeGenerationModel(v) as GenerationModel
+                      setModel(nextModel)
+                      setImageSize((current) => sanitizeImageSizeForModel(nextModel, current))
+                    }}
+                  >
                     <SelectTrigger className="h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px]">
                       <SelectValue />
                     </SelectTrigger>
@@ -524,8 +517,9 @@ export function AestheticMirrorForm() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="1K">1K</SelectItem>
-                      <SelectItem value="2K">2K</SelectItem>
+                      {resolutionOptions.map((size) => (
+                        <SelectItem key={size} value={size}>{size}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -540,24 +534,6 @@ export function AestheticMirrorForm() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              <div className="flex items-center justify-between rounded-2xl border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-2.5">
-                <div className="flex items-center gap-2.5">
-                  <div className={`flex h-8 w-8 items-center justify-center rounded-full ${turboEnabled ? 'bg-[#e7f8ee] text-[#22b968]' : 'bg-[#eceef2] text-[#6f737c]'}`}>
-                    <Zap className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[14px] font-semibold text-[#1a1d24]">Turbo {isZh ? '加速模式' : 'Boost'}</p>
-                    <p className="text-[12px] text-[#7d818d]">{isZh ? '更快、更稳定' : 'Faster & more stable'}</p>
-                  </div>
-                </div>
-                <Switch
-                  checked={turboEnabled}
-                  onCheckedChange={setTurboEnabled}
-                  disabled={isRunning}
-                  className="h-8 w-14 border-0 data-[state=checked]:bg-[#1a1d24] data-[state=unchecked]:bg-[#d8d9dd]"
-                />
               </div>
 
               {isRunning ? (
@@ -628,40 +604,46 @@ export function AestheticMirrorForm() {
             )}
             {phase === 'success' && (
               <div className="space-y-3">
-                <div className="flex flex-wrap content-start items-start gap-3">
-                  {cards.map((c, i) => c.status === 'success' && c.url ? (
-                    <div
-                      key={i}
-                      role="button"
-                      tabIndex={0}
-                      className="group relative w-[220px] max-w-full cursor-pointer overflow-hidden rounded-2xl border border-[#dcdce1] bg-white"
-                      style={{ aspectRatio: previewAspectRatio }}
-                      onClick={() => setPreviewUrl(c.url)}
-                      onKeyDown={(e) => {
-                        if (e.target !== e.currentTarget) return
-                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPreviewUrl(c.url) }
-                      }}
-                    >
-                      <img src={c.url} alt={`result-${i + 1}`} className="w-full object-cover" />
-                      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/35 opacity-0 transition-opacity pointer-events-none group-hover:opacity-100 group-focus-within:opacity-100">
-                        <button type="button" onClick={(e) => { e.stopPropagation(); const sid = createEditorSession([c.url!]); router.push(`/${locale}/image-editor?sid=${sid}`) }} className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30"><Pencil className="h-4 w-4" /></button>
-                        <button type="button" onClick={(e) => { e.stopPropagation(); void downloadOne(c.url as string, i) }} disabled={downloadingIndex === i || downloadingAll} className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30 disabled:opacity-60">{downloadingIndex === i ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}</button>
+                <ResultGallery
+                  images={resultAssets}
+                  aspectRatio={aspectRatio}
+                  editorSessionKey="aesthetic-mirror"
+                  originModule="aesthetic-mirror"
+                />
+                {cards.some((card) => card.status === 'failed') && (
+                  <div className="flex flex-wrap content-start items-start gap-3">
+                    {cards.filter((card) => card.status === 'failed').map((card, index) => (
+                      <div key={`failed-${index}`} className="w-[220px] max-w-full rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+                        {card.error ?? tc('error')}
                       </div>
-                    </div>
-                  ) : (
-                    <div key={i} className="w-[220px] max-w-full rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">{c.error ?? tc('error')}</div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-                  <Button variant="outline" onClick={downloadAll} disabled={!cards.some((x) => x.status === 'success') || downloadingAll || downloadingIndex !== null}>{downloadingAll ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}{t('downloadAllSuccess')}</Button>
-                  <Button variant="outline" onClick={retryFailed} disabled={!cards.some((x) => x.status === 'failed') || downloadingAll || downloadingIndex !== null}>{t('retryFailed')}</Button>
-                  <Button variant="outline" onClick={handleSubmit} disabled={!canGenerate || downloadingAll || downloadingIndex !== null}><Sparkles className="mr-1 h-4 w-4" />{t('regenerateAll')}</Button>
-                  <Button variant="outline" onClick={() => { const urls = cards.filter((c) => c.status === 'success' && c.url).map((c) => c.url!); if (urls.length) { const sid = createEditorSession(urls); router.push(`/${locale}/image-editor?sid=${sid}`) } }} disabled={!cards.some((x) => x.status === 'success')}><Pencil className="mr-1 h-4 w-4" />{isZh ? '批量编辑' : 'Batch Edit'}</Button>
+                  <Button variant="outline" onClick={downloadAll} disabled={resultAssets.length === 0 || downloadingAll}>{downloadingAll ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}{t('downloadAllSuccess')}</Button>
+                  <Button variant="outline" onClick={retryFailed} disabled={!cards.some((x) => x.status === 'failed') || downloadingAll}>{t('retryFailed')}</Button>
+                  <Button variant="outline" onClick={handleSubmit} disabled={!canGenerate || downloadingAll}><Sparkles className="mr-1 h-4 w-4" />{t('regenerateAll')}</Button>
+                  <Button variant="outline" onClick={clearResultAssets} disabled={resultAssets.length === 0 || downloadingAll}>{isZh ? '清除历史' : 'Clear History'}</Button>
                 </div>
               </div>
             )}
-            {phase === 'failed' && <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5"><p className="text-sm text-destructive">{errorMessage ?? tc('error')}</p></div>}
-            {phase === 'idle' && (
+            {phase === 'failed' && (
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
+                  <p className="text-sm text-destructive">{errorMessage ?? tc('error')}</p>
+                </div>
+                {resultAssets.length > 0 && (
+                  <ResultGallery
+                    images={resultAssets}
+                    aspectRatio={aspectRatio}
+                    editorSessionKey="aesthetic-mirror"
+                    originModule="aesthetic-mirror"
+                    onClear={clearResultAssets}
+                  />
+                )}
+              </div>
+            )}
+            {phase === 'idle' && resultAssets.length === 0 && (
               <div className="flex min-h-[620px] items-center justify-center">
                 <div className="text-center">
                   <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#ececef] text-[#7f828c]">
@@ -671,6 +653,15 @@ export function AestheticMirrorForm() {
                   <p className="mt-1 text-base text-[#7f828c]">{isZh ? '点击左侧“开始复刻风格”按钮' : 'Click "Replicate Style" on the left to start'}</p>
                 </div>
               </div>
+            )}
+            {phase === 'idle' && resultAssets.length > 0 && (
+              <ResultGallery
+                images={resultAssets}
+                aspectRatio={aspectRatio}
+                editorSessionKey="aesthetic-mirror"
+                originModule="aesthetic-mirror"
+                onClear={clearResultAssets}
+              />
             )}
           </div>
         </div>
@@ -690,31 +681,6 @@ export function AestheticMirrorForm() {
           </div>
         </div>
     </CorePageShell>
-    {previewUrl && (
-      <div
-        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={() => setPreviewUrl(null)}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Image Preview"
-      >
-        <button
-          type="button"
-          className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/80 transition-all hover:bg-white/20 hover:text-white"
-          onClick={(e) => { e.stopPropagation(); setPreviewUrl(null) }}
-          aria-label="Close"
-          autoFocus
-        >
-          <X className="h-5 w-5" />
-        </button>
-        <img
-          src={previewUrl}
-          alt="preview"
-          className="max-h-[85vh] max-w-[85vw] rounded-xl object-contain shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
-        />
-      </div>
-    )}
     </>
   )
 }

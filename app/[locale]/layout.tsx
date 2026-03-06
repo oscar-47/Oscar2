@@ -1,15 +1,6 @@
 import { NextIntlClientProvider } from 'next-intl'
-import { getMessages } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { routing } from '@/i18n/routing'
-import { Noto_Sans_SC } from 'next/font/google'
-
-const notoSansSc = Noto_Sans_SC({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  display: 'swap',
-  fallback: ['Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
-})
 
 export default async function LocaleLayout({
   children,
@@ -24,13 +15,11 @@ export default async function LocaleLayout({
     notFound()
   }
 
-  const messages = await getMessages()
+  const messages = (await import(`@/messages/${locale}.json`)).default
 
   return (
-    <html lang={locale}>
-      <body className={notoSansSc.className}>
-        <NextIntlClientProvider messages={messages}>{children}</NextIntlClientProvider>
-      </body>
-    </html>
+    <NextIntlClientProvider locale={locale} messages={messages}>
+      {children}
+    </NextIntlClientProvider>
   )
 }

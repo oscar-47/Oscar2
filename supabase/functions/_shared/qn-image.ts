@@ -364,6 +364,9 @@ export async function callQnImageAPI(params: {
         model,
         messages: [{ role: "user", content: contentParts }],
         modalities: ["image", "text"],
+        provider: {
+          require_parameters: true,
+        },
       };
       const imageConfig: Record<string, string> = {};
       if (params.aspectRatio) imageConfig.aspect_ratio = params.aspectRatio;

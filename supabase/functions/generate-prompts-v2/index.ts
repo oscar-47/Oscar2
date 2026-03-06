@@ -16,6 +16,52 @@ function normalizeStyleConstraintPrompt(value: unknown): string {
   return prompt.length > 0 ? prompt : "";
 }
 
+function outputLanguageLabel(value: string): string {
+  switch (value) {
+    case "none":
+      return "No Text (Visual Only)";
+    case "zh":
+      return "Simplified Chinese";
+    case "ja":
+      return "Japanese";
+    case "ko":
+      return "Korean";
+    case "es":
+      return "Spanish";
+    case "fr":
+      return "French";
+    case "de":
+      return "German";
+    case "pt":
+      return "Portuguese";
+    case "ar":
+      return "Arabic";
+    case "ru":
+      return "Russian";
+    default:
+      return "English";
+  }
+}
+
+function buildVisibleCopyLanguageRule(value: string, isZh: boolean): string {
+  if (value === "none") {
+    return isZh
+      ? "不得添加任何新增画面文字。"
+      : "Do not add any new visible copy.";
+  }
+
+  if (value === "zh") {
+    return isZh
+      ? "所有新增可见文案必须且只能使用简体中文，禁止英文单词、拼音、双语混排，以及 Title、Subtitle、Description、Selling Point、Feature 等英文占位词。该约束覆盖主标题、副标题、说明文案、卖点标签、参数表头、参数值、角标、CTA、保障语、步骤说明、注释、对比标签。产品自身已有的 logo、包装原文、型号、成分表、技术单位不属于新增设计文案。"
+      : "All added visible copy must be Simplified Chinese only. Do not use English words, pinyin, bilingual mixing, or placeholder labels such as Title, Subtitle, Description, Selling Point, or Feature. This rule covers headlines, subtitles, body copy, selling-point labels, spec-table headers, spec values, badges, CTAs, guarantee copy, step labels, annotations, and comparison labels. Existing product text such as logos, original packaging text, model numbers, ingredient tables, and technical units is not added design copy.";
+  }
+
+  const languageLabel = outputLanguageLabel(value);
+  return isZh
+    ? `所有新增可见文案必须只使用${languageLabel}，禁止混入其他语言；产品自身已有的 logo、包装原文、型号、成分表、技术单位不属于新增设计文案。`
+    : `All added visible copy must use ${languageLabel} only and must not mix in other languages. Existing product text such as logos, original packaging text, model numbers, ingredient tables, and technical units is not added design copy.`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
   if (req.method !== "POST") return err("BAD_REQUEST", "Method not allowed", 405);
@@ -43,6 +89,8 @@ Deno.serve(async (req) => {
   const isModelTryOn = clothingModeVal === "model_prompt_generation";
   const isGenesisModule = module === "genesis";
   const isEcomDetailModule = module === "ecom-detail";
+  const ecomDetailCopyRuleZh = buildVisibleCopyLanguageRule(language, true);
+  const ecomDetailCopyRuleEn = buildVisibleCopyLanguageRule(language, false);
   const analysisJson = typeof body.analysisJson === "string"
     ? body.analysisJson
     : JSON.stringify(body.analysisJson, null, 2);
@@ -132,6 +180,9 @@ Universal requirements:
 
 输出要求：严格 JSON 数组，每个元素包含 prompt, title, negative_prompt, marketing_hook, priority 字段，不含 Markdown，不含解释。`;
 
+  const genesisCopyRuleZh = buildVisibleCopyLanguageRule(language, true);
+  const genesisCopyRuleEn = buildVisibleCopyLanguageRule(language, false);
+
   const systemPrompt = isGenesisModule
     ? language === "zh"
       ? `你是顶级电商主图提示词工程专家。请基于主图分析结果，为同一款商品生成一组可直接出图的主图提示词。
@@ -140,6 +191,8 @@ Universal requirements:
 - 用户需求优先级高于产品图分析摘要。
 - 所有提示词必须严格保持上传商品与参考图中的同一款商品，不得改款，不得换商品。
 - 上传的产品图是硬参考，必须保留商品原本的颜色、材质、纹理、版型、轮廓、logo、印花、五金、车线和其他关键设计特征。
+- 【颜色锚定——最高优先级】分析结果中的 product_visual_identity.primary_color 是产品的真实主色调，每条 prompt 必须在开头明确声明该颜色（含十六进制色值），并在 negative_prompt 中排除其他易混淆颜色（如产品是粉色则排除黑色、深色）。
+- 每条 prompt 必须引用 product_visual_identity 中的 material 和 key_features，确保产品视觉身份不丢失。
 - 只允许变化场景、机位、构图、景别、光线和背景，不允许改色、改材质、改细节、改结构。
 - 如果提供了共享文案，必须把这段共享文案作为画面中的真实文字内容放进每一张图里，不能只表达相近意思，不能省略。
 - 有共享文案时，每条 prompt 都必须明确说明文字内容、文字位置、版式层级、留白区域、可读性要求，以及文字不能遮挡商品主体。
@@ -147,6 +200,8 @@ Universal requirements:
 - 如果 outputLanguage 是 none，但用户手动提供了文案，按用户原文使用，不要翻译。
 - 所选风格标签是高优先级视觉约束，但不要机械堆砌标签。
 - 需要生成 exactly ${imageCount} 条提示词，每条提示词既要统一风格，又要在角度、景别、构图或场景上有合理变化。
+- 文案语言硬约束：${genesisCopyRuleZh}
+- title、marketing_hook 也必须遵守上述语言约束，不得出现英文单词或英文短语。
 - 输出严格 JSON 数组，每项包含 prompt, title, negative_prompt, marketing_hook, priority。`
       : `You are a top-tier e-commerce hero-image prompt engineer. Based on the compact hero-image analysis, generate a set of production-ready prompts for the same product.
 
@@ -154,6 +209,8 @@ Rules:
 - User requirements have higher priority than image-derived product analysis.
 - All prompts must preserve the exact same product identity from the uploaded reference images.
 - Treat the uploaded product images as hard references for the exact SKU. Do not change color, material, texture, silhouette, logo, print, hardware, stitching, proportions, or any signature design detail.
+- [COLOR ANCHORING — HIGHEST PRIORITY] The product_visual_identity.primary_color from the analysis is the true dominant color. Every prompt must explicitly state this color (with hex value) at the beginning, and the negative_prompt must exclude confusable colors (e.g. if the product is pink, exclude black, dark tones).
+- Every prompt must reference the material and key_features from product_visual_identity to ensure the product's visual identity is preserved.
 - Only scene, camera angle, crop, composition, lighting, and background styling may vary.
 - If shared copy is provided, render that exact shared copy as visible in-image text in every image. Do not paraphrase it and do not omit it.
 - When shared copy exists, every prompt must explicitly define the text content, text placement, hierarchy, safe whitespace, readability, and that the text must not block the product.
@@ -161,6 +218,8 @@ Rules:
 - If outputLanguage is none but the user manually provided copy, use the user's original copy without translation.
 - Selected style tags are high-priority visual constraints, but integrate them naturally.
 - Generate exactly ${imageCount} prompts. Keep them stylistically consistent while varying angle, framing, composition, or scene appropriately.
+- Visible-copy language rule: ${genesisCopyRuleEn}
+- The title and marketing_hook fields must also follow the same language rule.
 - Return a strict JSON array only. Each item must contain prompt, title, negative_prompt, marketing_hook, priority.`
     : isEcomDetailModule
     ? language === "zh"
@@ -170,8 +229,11 @@ Rules:
 - 每条提示词必须严格对应一个详情页模块，顺序必须与蓝图中的 images 数组一致。
 - 同一批提示词必须保持同一商品身份一致，不能改动产品造型、材质、颜色或结构。
 - 必须充分吸收每个模块的标题、描述和 design_content，将模块目标转成明确的构图、光影、场景、材质和文案排版要求。
+- 文案语言硬约束：${ecomDetailCopyRuleZh}
 - 如果输出语言为 none，则不得生成任何画面文字要求。
+- 如果输出语言为简体中文，所有新增可见文案必须直接写简体中文，不能出现英文单词、拼音、双语混排或英文占位词；若蓝图里出现英文样例，也必须保留原意改写成中文后再写入 prompt。
 - 如果某个模块本身更适合信息型版式（如规格表、售后保障、使用建议），也必须保持可视化、可落地的电商详情页表达。
+- 规格表、售后保障、使用建议、成分说明、前后对比、核心卖点等模块中的表头、字段名、标签、CTA、对比项和注释，同样必须遵守目标语言硬约束。
 - 输出严格 JSON 数组，每项包含 prompt, title, negative_prompt, marketing_hook, priority。`
       : `You are a top-tier e-commerce detail-page prompt engineer. Based on the approved blueprint, generate one production-ready prompt for each detail-page module of the same product.
 
@@ -179,8 +241,11 @@ Rules:
 - Each prompt must map to exactly one module, in the same order as the blueprint images array.
 - Keep the same product identity across the full set without altering shape, color, material, or structure.
 - Turn each module title, description, and design_content into a concrete prompt covering composition, scene, lighting, material, and copy layout when needed.
+- Visible-copy language rule: ${ecomDetailCopyRuleEn}
 - If output language is none, do not introduce any in-image text requirements.
+- If outputLanguage is Simplified Chinese, all added visible copy must be written directly in Simplified Chinese only. If the blueprint contains accidental English examples, preserve the meaning but convert them into Simplified Chinese prompt instructions instead of copying them.
 - Information-heavy modules such as spec tables, after-sales guarantees, or usage tips must still remain visual, commercially styled, and image-generation friendly.
+- The same language rule applies to headlines, subtitles, body copy, spec-table headers, spec values, badges, CTAs, guarantee text, step labels, annotations, and comparison labels.
 - Return a strict JSON array only. Each item must contain prompt, title, negative_prompt, marketing_hook, priority.`
     : isModelTryOn
     ? systemPromptModelTryOn
@@ -218,6 +283,14 @@ Color scheme (exact hex values from blueprint) → Text layout (position and cop
 
 Output a strict JSON array only; each element must contain prompt, title, negative_prompt, marketing_hook, priority fields; no Markdown; no explanations.`;
 
+  const genesisLangRule = language === "zh"
+    ? `- 语言硬约束：所有 prompt 中的文案描述、title、marketing_hook 必须使用简体中文，禁止英文单词、英文短语、拼音或双语混排。prompt 字段中描述画面文字内容时也必须使用简体中文。
+- ${genesisCopyRuleZh}`
+    : language === "none"
+    ? `- Language: Visual only. No text overlay.`
+    : `- Visible-copy language rule: ${genesisCopyRuleEn}
+- The title and marketing_hook fields must also use ${outputLanguageLabel(language)}.`;
+
   const userPrompt = isGenesisModule
     ? `
 Generate exactly ${imageCount} prompt objects.
@@ -230,6 +303,8 @@ Rules:
 - Keep product appearance faithful to the compact analysis summary and the uploaded reference images.
 - Prioritize user requirements over inferred product traits when conflicts appear.
 - The uploaded product images are hard product references of the same item from different angles. Every prompt must explicitly preserve the exact same product colorway, materials, texture, silhouette, logo, print, trims, and key construction details.
+- [COLOR ANCHORING] Read product_visual_identity.primary_color from the analysis. Every prompt MUST begin by explicitly stating this exact color and hex value for the product. The negative_prompt MUST exclude colors that could be confused (e.g. if product is pink (#FFB6C1), negative_prompt must include "black bag, dark colored bag, gray bag").
+- Every prompt must reference the material and key_features from product_visual_identity.
 - Never redesign, recolor, swap fabric, simplify details, or replace the product with a similar item.
 - Only vary scene setup, camera angle, framing, composition, and lighting.
 - If shared copy is empty, do not introduce any text overlay.
@@ -240,6 +315,7 @@ Rules:
   3. typography hierarchy and readability requirements,
   4. instruction that the text must not cover or distort the product.
 - Use selected style tags as strong visual guidance.
+${genesisLangRule}
 - Return JSON array only. No markdown fences. No explanation text.
 
 Compact hero-image analysis:
@@ -260,6 +336,8 @@ Rules:
 - Reuse the module title as the prompt title when possible.
 - Keep all prompts faithful to the same product and the same selected module intent.
 - If design_specs and image plans disagree, follow the image plan first and design_specs second.
+- Output language has higher priority than any accidental sample copy inside the blueprint. If the blueprint includes non-target-language sample text, preserve the meaning but rewrite the copy requirements into the target language instead of copying it verbatim.
+- ${ecomDetailCopyRuleEn}
 - Return JSON array only. No markdown fences. No explanation text.
 
 Detail-page blueprint:

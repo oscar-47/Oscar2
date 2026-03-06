@@ -1,10 +1,23 @@
 import { create } from 'zustand'
-import type { GenerationModel, AspectRatio, ImageSize } from '@/types'
+import type {
+  AspectRatio,
+  GenerationModel,
+  ImageSize,
+  ResultAsset,
+  ResultAssetOrigin,
+  ResultAssetSection,
+} from '@/types'
+import { DEFAULT_MODEL } from '@/types'
 
 export interface CanvasObject {
   id: string
   url: string
   originalUrl: string
+  label?: string
+  section: ResultAssetSection
+  sourceAssetId?: string
+  createdAt: number
+  originModule: ResultAssetOrigin
   x: number
   y: number
   width: number
@@ -24,7 +37,7 @@ export interface CropState {
   y: number
   width: number
   height: number
-  aspectRatioLock: string | null // e.g. '1:1', '16:9', null = free
+  aspectRatioLock: string | null
 }
 
 export interface QuickEditState {
@@ -36,7 +49,6 @@ export interface QuickEditState {
   model: GenerationModel
   aspectRatio: AspectRatio
   imageSize: ImageSize
-  turboEnabled: boolean
   isProcessing: boolean
   jobId: string | null
 }
@@ -60,11 +72,10 @@ export interface TextEditState {
   objectId: string | null
   requestId: string | null
   items: TextEditItem[]
-  turboEnabled: boolean
   isProcessing: boolean
   isDetecting: boolean
-  ocrJobId: string | null  // job_id from detect-image-text
-  jobId: string | null     // job_id from generate-image (apply)
+  ocrJobId: string | null
+  jobId: string | null
 }
 
 export interface ComparisonState {
@@ -86,8 +97,7 @@ interface EditorState {
   textEdit: TextEditState
   comparison: ComparisonState
 
-  // Actions
-  initFromUrls: (urls: string[]) => void
+  initFromAssets: (assets: ResultAsset[]) => void
   addImage: (url: string, naturalWidth?: number, naturalHeight?: number) => void
   removeObject: (id: string) => void
   selectObject: (id: string | null) => void
@@ -98,32 +108,26 @@ interface EditorState {
   setPan: (x: number, y: number) => void
   setTool: (tool: EditorTool) => void
 
-  // Crop
   startCrop: (objectId: string) => void
   updateCropRegion: (patch: Partial<Pick<CropState, 'x' | 'y' | 'width' | 'height' | 'aspectRatioLock'>>) => void
   applyCrop: (croppedUrl: string, snapshot: { objectId: string; cropW: number; cropH: number; sessionId: string }) => void
   cancelCrop: () => void
 
-  // Quick Edit
   openQuickEdit: (objectId: string) => void
   closeQuickEdit: () => void
   setQuickEditField: <K extends keyof QuickEditState>(key: K, value: QuickEditState[K]) => void
 
-  // Text Detection
   setTextDetection: (patch: Partial<TextDetectionState>) => void
 
-  // Text Edit
   openTextEdit: (objectId: string) => void
   closeTextEdit: () => void
   setTextEditItems: (items: TextEditItem[], requestId: string) => void
   setEditedText: (id: string, value: string) => void
   setTextEditField: <K extends keyof TextEditState>(key: K, value: TextEditState[K]) => void
 
-  // Comparison
   setComparison: (patch: Partial<ComparisonState>) => void
-
-  // Text edit result
   applyTextEditResult: (objectId: string, resultUrl: string) => void
+  exportAssets: () => ResultAsset[]
 }
 
 const DEFAULT_DISPLAY_WIDTH = 300
@@ -146,10 +150,9 @@ const defaultQuickEdit: QuickEditState = {
   prompt: '',
   referenceImage: null,
   referencePreview: null,
-  model: 'or-gemini-3.1-flash',
+  model: DEFAULT_MODEL,
   aspectRatio: '1:1',
   imageSize: '2K',
-  turboEnabled: false,
   isProcessing: false,
   jobId: null,
 }
@@ -166,7 +169,6 @@ const defaultTextEdit: TextEditState = {
   objectId: null,
   requestId: null,
   items: [],
-  turboEnabled: false,
   isProcessing: false,
   isDetecting: false,
   ocrJobId: null,
@@ -179,10 +181,56 @@ const defaultComparison: ComparisonState = {
   toId: null,
 }
 
+function buildCanvasObject(asset: ResultAsset, y: number, zIndex: number): CanvasObject {
+  return {
+    id: asset.id,
+    url: asset.url,
+    originalUrl: asset.url,
+    label: asset.label,
+    section: asset.section,
+    sourceAssetId: asset.sourceAssetId,
+    createdAt: asset.createdAt,
+    originModule: asset.originModule,
+    x: 40,
+    y,
+    width: DEFAULT_DISPLAY_WIDTH,
+    height: DEFAULT_DISPLAY_WIDTH,
+    naturalWidth: 0,
+    naturalHeight: 0,
+    zIndex,
+  }
+}
+
+function nextDerivedObject(source: CanvasObject, input: {
+  url: string
+  naturalWidth: number
+  naturalHeight: number
+  displayHeight: number
+  zIndex: number
+}): CanvasObject {
+  return {
+    id: crypto.randomUUID(),
+    url: input.url,
+    originalUrl: input.url,
+    label: source.label,
+    section: 'edited',
+    sourceAssetId: source.id,
+    createdAt: Date.now(),
+    originModule: source.originModule,
+    x: source.x + source.width + 40,
+    y: source.y,
+    width: source.width,
+    height: input.displayHeight,
+    naturalWidth: input.naturalWidth,
+    naturalHeight: input.naturalHeight,
+    zIndex: input.zIndex,
+  }
+}
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   objects: [],
   selectedId: null,
-  zoom: 1.0,
+  zoom: 1,
   panX: 0,
   panY: 0,
   activeTool: 'select',
@@ -192,37 +240,33 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   textEdit: defaultTextEdit,
   comparison: defaultComparison,
 
-  initFromUrls: (urls) => {
+  initFromAssets: (assets) => {
     let currentY = 40
-    const objects: CanvasObject[] = urls.map((url, i) => {
-      const obj: CanvasObject = {
-        id: crypto.randomUUID(),
-        url,
-        originalUrl: url,
-        x: 40,
-        y: currentY,
-        width: DEFAULT_DISPLAY_WIDTH,
-        height: DEFAULT_DISPLAY_WIDTH, // placeholder, updated after image load
-        naturalWidth: 0,
-        naturalHeight: 0,
-        zIndex: i + 1,
-      }
+    const objects = assets.map((asset, index) => {
+      const next = buildCanvasObject(asset, currentY, index + 1)
       currentY += DEFAULT_DISPLAY_WIDTH + VERTICAL_GAP
-      return obj
+      return next
     })
-    set({ objects, selectedId: null })
+
+    set({
+      objects,
+      selectedId: null,
+      crop: defaultCrop,
+      quickEdit: defaultQuickEdit,
+      textDetection: defaultTextDetection,
+      textEdit: defaultTextEdit,
+      comparison: defaultComparison,
+    })
   },
 
   addImage: (url, naturalWidth, naturalHeight) => {
     const state = get()
-    const maxZ = state.objects.reduce((max, o) => Math.max(max, o.zIndex), 0)
-    const lastObj = state.objects[state.objects.length - 1]
-    const y = lastObj ? lastObj.y + lastObj.height + VERTICAL_GAP : 40
-
-    const w = naturalWidth ?? DEFAULT_DISPLAY_WIDTH
-    const h = naturalHeight ?? DEFAULT_DISPLAY_WIDTH
-    const displayWidth = DEFAULT_DISPLAY_WIDTH
-    const displayHeight = w > 0 ? (h / w) * displayWidth : displayWidth
+    const maxZ = state.objects.reduce((max, object) => Math.max(max, object.zIndex), 0)
+    const lastObject = state.objects[state.objects.length - 1]
+    const y = lastObject ? lastObject.y + lastObject.height + VERTICAL_GAP : 40
+    const width = naturalWidth ?? DEFAULT_DISPLAY_WIDTH
+    const height = naturalHeight ?? DEFAULT_DISPLAY_WIDTH
+    const displayHeight = width > 0 ? (height / width) * DEFAULT_DISPLAY_WIDTH : DEFAULT_DISPLAY_WIDTH
 
     set({
       objects: [
@@ -231,12 +275,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           id: crypto.randomUUID(),
           url,
           originalUrl: url,
+          label: undefined,
+          section: 'original',
+          sourceAssetId: undefined,
+          createdAt: Date.now(),
+          originModule: 'image-editor',
           x: 40,
           y,
-          width: displayWidth,
+          width: DEFAULT_DISPLAY_WIDTH,
           height: displayHeight,
-          naturalWidth: w,
-          naturalHeight: h,
+          naturalWidth: width,
+          naturalHeight: height,
           zIndex: maxZ + 1,
         },
       ],
@@ -246,7 +295,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   removeObject: (id) => {
     const state = get()
     set({
-      objects: state.objects.filter((o) => o.id !== id),
+      objects: state.objects.filter((object) => object.id !== id),
       selectedId: state.selectedId === id ? null : state.selectedId,
     })
   },
@@ -255,42 +304,43 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   moveObject: (id, deltaX, deltaY) => {
     set({
-      objects: get().objects.map((o) =>
-        o.id === id ? { ...o, x: o.x + deltaX, y: o.y + deltaY } : o
-      ),
+      objects: get().objects.map((object) => (
+        object.id === id
+          ? { ...object, x: object.x + deltaX, y: object.y + deltaY }
+          : object
+      )),
     })
   },
 
   replaceObjectUrl: (id, newUrl) => {
     set({
-      objects: get().objects.map((o) =>
-        o.id === id ? { ...o, url: newUrl } : o
-      ),
+      objects: get().objects.map((object) => (
+        object.id === id ? { ...object, url: newUrl } : object
+      )),
     })
   },
 
   updateObjectDimensions: (id, naturalWidth, naturalHeight) => {
     set({
-      objects: get().objects.map((o) => {
-        if (o.id !== id) return o
+      objects: get().objects.map((object) => {
+        if (object.id !== id) return object
         const displayHeight = naturalWidth > 0
-          ? (naturalHeight / naturalWidth) * o.width
-          : o.height
-        return { ...o, naturalWidth, naturalHeight, height: displayHeight }
+          ? (naturalHeight / naturalWidth) * object.width
+          : object.height
+        return { ...object, naturalWidth, naturalHeight, height: displayHeight }
       }),
     })
   },
 
-  setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(5.0, zoom)) }),
+  setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(5, zoom)) }),
 
   setPan: (x, y) => set({ panX: x, panY: y }),
 
   setTool: (tool) => set({ activeTool: tool }),
 
-  // Crop
   startCrop: (objectId) => {
-    const obj = get().objects.find((o) => o.id === objectId)
-    if (!obj) return
+    const object = get().objects.find((item) => item.id === objectId)
+    if (!object) return
     set({
       crop: {
         active: true,
@@ -298,8 +348,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         sessionId: crypto.randomUUID(),
         x: 0,
         y: 0,
-        width: obj.naturalWidth || obj.width,
-        height: obj.naturalHeight || obj.height,
+        width: object.naturalWidth || object.width,
+        height: object.naturalHeight || object.height,
         aspectRatioLock: null,
       },
       selectedId: objectId,
@@ -313,41 +363,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   applyCrop: (croppedUrl, snapshot) => {
     const { objectId, cropW, cropH, sessionId } = snapshot
     if (!objectId || cropW <= 0 || cropH <= 0) return
-    // Stale completion — silently ignore
     if (get().crop.sessionId !== sessionId) return
-    const obj = get().objects.find((o) => o.id === objectId)
-    if (!obj) {
+
+    const object = get().objects.find((item) => item.id === objectId)
+    if (!object) {
       set({ crop: defaultCrop })
       return
     }
-    const displayHeight = (cropH / cropW) * obj.width
-    const newId = crypto.randomUUID()
-    const newObj: CanvasObject = {
-      id: newId,
+
+    const newObject = nextDerivedObject(object, {
       url: croppedUrl,
-      originalUrl: croppedUrl,
-      x: obj.x + obj.width + 40,
-      y: obj.y,
-      width: obj.width,
-      height: displayHeight,
       naturalWidth: cropW,
       naturalHeight: cropH,
-      zIndex: Math.max(...get().objects.map((o) => o.zIndex), 0) + 1,
-    }
+      displayHeight: (cropH / cropW) * object.width,
+      zIndex: Math.max(...get().objects.map((item) => item.zIndex), 0) + 1,
+    })
+
     set({
-      objects: [...get().objects, newObj],
-      comparison: { visible: true, fromId: objectId, toId: newId },
-      selectedId: newId,
+      objects: [...get().objects, newObject],
+      comparison: { visible: true, fromId: objectId, toId: newObject.id },
+      selectedId: newObject.id,
       crop: defaultCrop,
     })
   },
 
   cancelCrop: () => set({ crop: defaultCrop }),
 
-  // Quick Edit
   openQuickEdit: (objectId) => {
-    const obj = get().objects.find((o) => o.id === objectId)
-    if (!obj) return
+    const object = get().objects.find((item) => item.id === objectId)
+    if (!object) return
     set({
       quickEdit: {
         ...defaultQuickEdit,
@@ -364,15 +408,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ quickEdit: { ...get().quickEdit, [key]: value } })
   },
 
-  // Text Detection
   setTextDetection: (patch) => {
     set({ textDetection: { ...get().textDetection, ...patch } })
   },
 
-  // Text Edit
   openTextEdit: (objectId) => {
-    const obj = get().objects.find((o) => o.id === objectId)
-    if (!obj) return
+    const object = get().objects.find((item) => item.id === objectId)
+    if (!object) return
     set({
       textEdit: {
         ...defaultTextEdit,
@@ -397,9 +439,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({
       textEdit: {
         ...get().textEdit,
-        items: get().textEdit.items.map((item) =>
+        items: get().textEdit.items.map((item) => (
           item.id === id ? { ...item, edited: value } : item
-        ),
+        )),
       },
     })
   },
@@ -408,32 +450,38 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ textEdit: { ...get().textEdit, [key]: value } })
   },
 
-  // Comparison
   setComparison: (patch) => {
     set({ comparison: { ...get().comparison, ...patch } })
   },
 
-  // Text edit result — add edited image next to original and show comparison arrow
   applyTextEditResult: (objectId, resultUrl) => {
-    const obj = get().objects.find((o) => o.id === objectId)
-    if (!obj) return
-    const newId = crypto.randomUUID()
-    const newObj: CanvasObject = {
-      id: newId,
+    const object = get().objects.find((item) => item.id === objectId)
+    if (!object) return
+
+    const newObject = nextDerivedObject(object, {
       url: resultUrl,
-      originalUrl: resultUrl,
-      x: obj.x + obj.width + 40,
-      y: obj.y,
-      width: obj.width,
-      height: obj.height,
-      naturalWidth: obj.naturalWidth,
-      naturalHeight: obj.naturalHeight,
-      zIndex: Math.max(...get().objects.map((o) => o.zIndex), 0) + 1,
-    }
+      naturalWidth: object.naturalWidth,
+      naturalHeight: object.naturalHeight,
+      displayHeight: object.height,
+      zIndex: Math.max(...get().objects.map((item) => item.zIndex), 0) + 1,
+    })
+
     set({
-      objects: [...get().objects, newObj],
-      comparison: { visible: true, fromId: objectId, toId: newId },
-      selectedId: newId,
+      objects: [...get().objects, newObject],
+      comparison: { visible: true, fromId: objectId, toId: newObject.id },
+      selectedId: newObject.id,
     })
   },
+
+  exportAssets: () => (
+    get().objects.map((object) => ({
+      id: object.id,
+      url: object.url,
+      label: object.label,
+      section: object.section,
+      sourceAssetId: object.sourceAssetId,
+      createdAt: object.createdAt,
+      originModule: object.originModule,
+    }))
+  ),
 }))

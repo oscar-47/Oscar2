@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
-import { X, Sparkles, Loader2, Type, Zap } from 'lucide-react'
+import { X, Sparkles, Loader2, Type } from 'lucide-react'
 import { useEditorStore } from '@/lib/stores/editor-store'
 import { detectImageText, generateImage } from '@/lib/api/edge-functions'
 import { useWaitForJob } from '@/lib/hooks/useWaitForJob'
@@ -124,7 +124,6 @@ export function TextEditPanel() {
         model: 'gpt-image',
         aspectRatio: '1:1',
         imageSize: '2K',
-        turboEnabled: textEdit.turboEnabled,
         editMode: true,
         editType: 'text',
         originalImage: obj.url,
@@ -151,7 +150,7 @@ export function TextEditPanel() {
   if (!textEdit.open) return null
 
   const hasChanges = textEdit.items.some((item) => item.edited !== item.original)
-  const cost = textEdit.turboEnabled ? 12 : 5
+  const cost = 5
 
   return (
     <div className="absolute right-4 top-16 z-[10000] w-[340px] rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl">
@@ -211,32 +210,6 @@ export function TextEditPanel() {
                   )}
                 />
               ))}
-            </div>
-
-            {/* Turbo toggle */}
-            <div className="flex items-center justify-between rounded-lg border border-[#e5e7eb] px-3 py-2">
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-[#f59e0b]" />
-                <div>
-                  <p className="text-xs font-medium text-[#111827]">{t('textEditTurbo')}</p>
-                  <p className="text-[10px] text-[#9ca3af]">{t('textEditTurboDesc')}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTextEditField('turboEnabled', !textEdit.turboEnabled)}
-                className={cn(
-                  'relative h-5 w-9 rounded-full transition-colors',
-                  textEdit.turboEnabled ? 'bg-[#6366f1]' : 'bg-[#d1d5db]'
-                )}
-              >
-                <span
-                  className={cn(
-                    'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
-                    textEdit.turboEnabled ? 'translate-x-4' : 'translate-x-0.5'
-                  )}
-                />
-              </button>
             </div>
 
             {/* Apply button */}

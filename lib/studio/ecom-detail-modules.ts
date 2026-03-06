@@ -181,8 +181,8 @@ function asTrimmedString(value: unknown): string {
 
 function fallbackDesignSpecs(isZh: boolean, outputLanguage: OutputLanguage): string {
   return isZh
-    ? `所有模块需保持同一商品的一致性，统一视觉语气、光影逻辑与版式节奏。输出语言为 ${outputLanguage === 'none' ? '纯视觉无文字' : outputLanguage}，如涉及文案信息，必须围绕用户提供的组图要求展开。`
-    : `All modules must keep the same product identity, visual rhythm, lighting logic, and layout language. Output language is ${outputLanguage === 'none' ? 'visual only with no copy' : outputLanguage}. Any copy should stay aligned with the user's brief.`
+    ? `所有模块需保持同一商品的一致性，统一视觉语气、光影逻辑与版式节奏。输出语言为 ${outputLanguage === 'none' ? '纯视觉无文字' : outputLanguage === 'zh' ? '简体中文' : outputLanguage}。如涉及新增设计文案，必须围绕用户提供的组图要求展开，并且严格使用目标语言；若输出语言为简体中文，则不得出现英文单词、拼音、双语混排或英文占位词。产品自身已有的 logo、包装原文、型号、成分表、技术单位不属于新增设计文案。`
+    : `All modules must keep the same product identity, visual rhythm, lighting logic, and layout language. Output language is ${outputLanguage === 'none' ? 'visual only with no copy' : outputLanguage === 'zh' ? 'Simplified Chinese' : outputLanguage}. Any added design copy must align with the user's brief and use the target language only. If the target language is Simplified Chinese, do not use English words, pinyin, bilingual mixing, or English placeholders. Existing product text such as logos, original packaging text, model numbers, ingredient tables, and technical units is not added design copy.`
 }
 
 function parseBlueprintRecord(input: unknown): Record<string, unknown> | null {

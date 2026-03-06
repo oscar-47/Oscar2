@@ -1,21 +1,16 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
+import {
+  getCreditCostForModel,
+  getDefaultImageSizeForModel,
+  isImageSizeSupportedForModel,
+  normalizeRequestedModel,
+} from "../_shared/generation-config.ts";
 
 function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
-  const MODEL_BASE: Record<string, number> = {
-    "or-gemini-2.5-flash": 3, "or-gemini-3.1-flash": 5, "or-gemini-3-pro": 10,
-    "ta-gemini-2.5-flash": 3, "ta-gemini-3.1-flash": 3, "ta-gemini-3-pro": 5,
-    "midjourney": 15, "sd-3.5-ultra": 8, "dall-e-4": 12, "ideogram-3": 10,
-    "azure-flux": 5, "gpt-image": 5, "qiniu-gemini-pro": 5, "qiniu-gemini-flash": 5,
-    "volc-seedream-4.5": 5, "volc-seedream-5.0-lite": 5,
-    "flux-kontext-pro": 5, "gemini-pro-image": 5, "gemini-flash-image": 5,
-  };
-  const base = MODEL_BASE[model] ?? 5;
-  if (!turboEnabled) return base;
-  if (imageSize === "1K") return base + 3;
-  if (imageSize === "2K") return base + 7;
-  return base + 12;
+  void turboEnabled;
+  return getCreditCostForModel(model, imageSize);
 }
 
 function hasAllowedRefinementImageExtension(value: string): boolean {
@@ -85,8 +80,13 @@ Deno.serve(async (req) => {
     body.backgroundMode = backgroundMode;
   }
 
-  const modelName = String(body.model ?? "or-gemini-3.1-flash");
-  const effectiveImageSize = String(body.imageSize ?? "2K");
+  const modelName = normalizeRequestedModel(String(body.model ?? "or-gemini-3.1-flash"));
+  const effectiveImageSize = body.imageSize == null
+    ? getDefaultImageSizeForModel(modelName)
+    : String(body.imageSize);
+  if (!isImageSizeSupportedForModel(modelName, effectiveImageSize, { includeInternal: true })) {
+    return err("IMAGE_SIZE_UNSATISFIED", `imageSize ${effectiveImageSize} is not supported for model ${modelName}`, 400);
+  }
   const imageCount = Math.max(1, Math.min(9, Number(body.imageCount ?? 1)));
   const groupCount = Math.max(1, Math.min(9, Number(body.groupCount ?? 1)));
   const productCount = mode === "single" || mode === "refinement"
@@ -106,6 +106,8 @@ Deno.serve(async (req) => {
 
   const payload = {
     ...body,
+    model: modelName,
+    imageSize: effectiveImageSize,
     mode,
     groupCount,
     metadata: {

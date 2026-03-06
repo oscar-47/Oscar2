@@ -16,7 +16,6 @@ export interface AIModelParams {
   ethnicity: 'asian' | 'white' | 'black' | 'latino'
   otherRequirements?: string
   count: 1 | 2 | 3 | 4
-  turboEnabled: boolean
 }
 
 export interface AIModelHistoryItem {

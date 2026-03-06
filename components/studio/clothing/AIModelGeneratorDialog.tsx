@@ -5,7 +5,6 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { generateModelImage, processGenerationJob } from '@/lib/api/edge-functions'
 import { uploadFile } from '@/lib/api/upload'
@@ -262,7 +261,6 @@ export function AIModelGeneratorDialog({
           otherRequirements: otherRequirements.trim() || undefined,
           count: 1,
           imageCount: 1,
-          turboEnabled: false,
           productImage: uploadedProductUrl,
           trace_id: uid(),
           client_job_id: uid(),
@@ -407,16 +405,6 @@ export function AIModelGeneratorDialog({
                     <SelectItem value="4">4张</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div className="rounded-xl border bg-muted/30 p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold">Turbo 加速模式</p>
-                    <p className="text-xs text-muted-foreground">共振、稳定</p>
-                  </div>
-                  <Switch checked={false} disabled />
-                </div>
               </div>
 
               <div>

@@ -6,7 +6,9 @@ import { useRouter } from 'next/navigation'
 import { AlertCircle, Download, ExternalLink, Image as ImageIcon, Loader2, Pencil, CheckSquare, Square, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createEditorSession } from '@/lib/utils/editor-session'
-import type { GenerationJob, JobStatus, JobType } from '@/types'
+import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
+import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
+import type { GenerationJob, JobStatus, JobType, ResultAsset, ResultAssetSection } from '@/types'
 
 const PAGE_SIZE = 12
 
@@ -22,8 +24,16 @@ interface HistoryAsset {
   status: JobStatus
   url: string | null
   prompt: string | null
-  createdAt: string
+  createdAt: string | number
   errorMessage: string | null
+  section: ResultAssetSection
+  sourceAssetId?: string
+  requestedSize?: string
+  providerSize?: string
+  actualSize?: string
+  deliveredSize?: string
+  sizeStatus?: ResultAsset['sizeStatus']
+  normalizedByServer?: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -97,6 +107,7 @@ function extractResultUrls(row: HistoryJobRow): string[] {
 function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
   const urls = extractResultUrls(row)
   const prompt = extractPrompt(row.payload)
+  const metadata = extractResultAssetMetadata(row.result_data)
   if (urls.length > 0) {
     return urls.map((url, index) => ({
       id: `${row.id}_${index}`,
@@ -107,6 +118,8 @@ function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
       prompt,
       createdAt: row.created_at,
       errorMessage: row.error_message,
+      section: 'original',
+      ...metadata,
     }))
   }
 
@@ -119,7 +132,57 @@ function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
     prompt,
     createdAt: row.created_at,
     errorMessage: row.error_message,
+    section: 'original',
+    ...metadata,
   }]
+}
+
+function mapResultAssetToHistoryAsset(asset: ResultAsset): HistoryAsset {
+  return {
+    id: asset.id,
+    jobId: asset.sourceAssetId ?? asset.id,
+    type: 'IMAGE_GEN',
+    status: 'success',
+    url: asset.url,
+    prompt: null,
+    createdAt: asset.createdAt,
+    errorMessage: null,
+    section: asset.section,
+    sourceAssetId: asset.sourceAssetId,
+    requestedSize: asset.requestedSize,
+    providerSize: asset.providerSize,
+    actualSize: asset.actualSize,
+    deliveredSize: asset.deliveredSize,
+    sizeStatus: asset.sizeStatus,
+    normalizedByServer: asset.normalizedByServer,
+  }
+}
+
+function mapHistoryAssetToResultAsset(asset: HistoryAsset): ResultAsset | null {
+  if (!asset.url) return null
+  return createResultAsset({
+    id: asset.id,
+    url: asset.url,
+    section: asset.section,
+    sourceAssetId: asset.sourceAssetId,
+    createdAt: typeof asset.createdAt === 'number' ? asset.createdAt : new Date(asset.createdAt).getTime(),
+    originModule: 'history',
+    requestedSize: asset.requestedSize,
+    providerSize: asset.providerSize,
+    actualSize: asset.actualSize,
+    deliveredSize: asset.deliveredSize,
+    sizeStatus: asset.sizeStatus,
+    normalizedByServer: asset.normalizedByServer,
+  })
+}
+
+function formatResolutionMeta(item: HistoryAsset, isZh: boolean): string | null {
+  const parts: string[] = []
+  if (item.requestedSize) parts.push(`${isZh ? '请求' : 'Requested'} ${item.requestedSize}`)
+  if (item.deliveredSize) parts.push(`${isZh ? '交付' : 'Delivered'} ${item.deliveredSize}`)
+  if (!item.deliveredSize && item.actualSize) parts.push(`${isZh ? '实际' : 'Actual'} ${item.actualSize}`)
+  if (item.normalizedByServer) parts.push(isZh ? '已归一化' : 'Normalized')
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 export function HistoryPage() {
@@ -127,6 +190,7 @@ export function HistoryPage() {
   const tEditor = useTranslations('studio.editor')
   const locale = useLocale()
   const router = useRouter()
+  const { assets: localAssets, clearAssets: clearLocalAssets } = useResultAssetSession('history')
   const [items, setItems] = useState<HistoryAsset[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -147,6 +211,26 @@ export function HistoryPage() {
     minute: '2-digit',
     hour12: false,
   }), [locale])
+  const isZh = locale.startsWith('zh')
+  const displayItems = useMemo(() => {
+    const merged = [...items]
+    const existingIds = new Set(merged.map((item) => item.id))
+    for (const asset of localAssets.map(mapResultAssetToHistoryAsset)) {
+      if (existingIds.has(asset.id)) continue
+      existingIds.add(asset.id)
+      merged.push(asset)
+    }
+    return merged
+  }, [items, localAssets])
+  const originalItems = useMemo(
+    () => displayItems.filter((item) => item.section !== 'edited'),
+    [displayItems],
+  )
+  const editedItems = useMemo(
+    () => [...displayItems.filter((item) => item.section === 'edited')]
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
+    [displayItems],
+  )
 
   const fetchPage = useCallback(async (nextPage: number, append: boolean) => {
     const res = await fetch(`/api/history?page=${nextPage}&pageSize=${PAGE_SIZE}`, {
@@ -231,16 +315,27 @@ export function HistoryPage() {
   }
 
   const openSelectedInEditor = () => {
-    const urls = items
-      .filter((item) => selectedIds.has(item.id) && item.url)
-      .map((item) => item.url!)
-    if (urls.length === 0) return
-    const sid = createEditorSession(urls)
+    const assets = displayItems
+      .filter((item) => selectedIds.has(item.id))
+      .map(mapHistoryAssetToResultAsset)
+      .filter((item): item is ResultAsset => item !== null)
+    if (assets.length === 0) return
+    const sid = createEditorSession({
+      assets,
+      returnSessionKey: 'history',
+      originModule: 'history',
+    })
     router.push(`/${locale}/image-editor?sid=${sid}`)
   }
 
-  const openSingleInEditor = (url: string) => {
-    const sid = createEditorSession([url])
+  const openSingleInEditor = (item: HistoryAsset) => {
+    const asset = mapHistoryAssetToResultAsset(item)
+    if (!asset) return
+    const sid = createEditorSession({
+      assets: [asset],
+      returnSessionKey: 'history',
+      originModule: 'history',
+    })
     router.push(`/${locale}/image-editor?sid=${sid}`)
   }
 
@@ -251,12 +346,115 @@ export function HistoryPage() {
 
   const statusLabel = (status: JobStatus) => t(`status.${status}` as Parameters<typeof t>[0])
   const typeLabel = (type: JobType) => t(`type.${type}` as Parameters<typeof t>[0])
+  const renderItems = (sectionItems: HistoryAsset[]) => (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {sectionItems.map((item) => (
+        <div
+          key={item.id}
+          className="group overflow-hidden rounded-2xl border border-[#d0d4dc] bg-white"
+          onClick={() => selectionMode && item.url && toggleSelection(item.id)}
+        >
+          <div className="relative aspect-[3/4] overflow-hidden bg-[#f1f3f6]">
+            {item.url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={item.url}
+                alt={t('imageAlt')}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center text-[#8b8f99]">
+                <ImageIcon className="h-7 w-7" />
+                <p className="mt-2 text-xs">{t('noImage')}</p>
+              </div>
+            )}
+
+            {selectionMode && item.url && (
+              <div className="absolute left-2 top-2">
+                {selectedIds.has(item.id) ? (
+                  <CheckSquare className="h-6 w-6 text-[#3b82f6] drop-shadow" />
+                ) : (
+                  <Square className="h-6 w-6 text-white drop-shadow" />
+                )}
+              </div>
+            )}
+
+            {!selectionMode && item.url && (
+              <button
+                type="button"
+                onClick={(event) => { event.stopPropagation(); openSingleInEditor(item) }}
+                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-2 p-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="rounded-md bg-[#eef0f4] px-2 py-1 text-[#5c6271]">{typeLabel(item.type)}</span>
+              <span className="rounded-md bg-[#f3f4f7] px-2 py-1 text-[#6b7280]">{statusLabel(item.status)}</span>
+            </div>
+
+            <p className="text-xs text-[#7d818d]">{formatter.format(new Date(item.createdAt))}</p>
+
+            {item.prompt && (
+              <p className="line-clamp-2 text-xs leading-5 text-[#5d6372]">{item.prompt}</p>
+            )}
+
+            {formatResolutionMeta(item, isZh) && (
+              <p className="text-[11px] leading-5 text-[#6b7280]">{formatResolutionMeta(item, isZh)}</p>
+            )}
+
+            {item.errorMessage && (
+              <p className="line-clamp-2 text-xs leading-5 text-[#ba4656]">{item.errorMessage}</p>
+            )}
+
+            <div className="flex items-center gap-2 pt-1">
+              {item.url && !selectionMode && (
+                <>
+                  <a href={item.url} target="_blank" rel="noopener noreferrer">
+                    <Button variant="outline" size="sm" className="h-8 gap-1.5 px-2.5 text-xs">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      {t('open')}
+                    </Button>
+                  </a>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2.5 text-xs"
+                    onClick={(event) => { event.stopPropagation(); openSingleInEditor(item) }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 px-2.5 text-xs"
+                onClick={(event) => { event.stopPropagation(); void handleDownload(item) }}
+                disabled={!item.url || downloadingId === item.id}
+              >
+                {downloadingId === item.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                {t('download')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 
   return (
     <div className="mx-auto max-w-7xl">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('title')}</h1>
-        {items.length > 0 && !loading && (
+        {displayItems.length > 0 && !loading && (
           <Button
             variant={selectionMode ? 'default' : 'outline'}
             size="sm"
@@ -285,7 +483,7 @@ export function HistoryPage() {
         </div>
       )}
 
-      {!loading && items.length === 0 && (
+      {!loading && displayItems.length === 0 && (
         <p className="text-muted-foreground">{t('empty')}</p>
       )}
 
@@ -301,105 +499,35 @@ export function HistoryPage() {
         </div>
       )}
 
-      {items.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="group overflow-hidden rounded-2xl border border-[#d0d4dc] bg-white"
-              onClick={() => selectionMode && item.url && toggleSelection(item.id)}
-            >
-              <div className="relative aspect-[3/4] overflow-hidden bg-[#f1f3f6]">
-                {item.url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.url}
-                    alt={t('imageAlt')}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center text-[#8b8f99]">
-                    <ImageIcon className="h-7 w-7" />
-                    <p className="mt-2 text-xs">{t('noImage')}</p>
-                  </div>
-                )}
-
-                {/* Selection checkbox */}
-                {selectionMode && item.url && (
-                  <div className="absolute top-2 left-2">
-                    {selectedIds.has(item.id) ? (
-                      <CheckSquare className="h-6 w-6 text-[#3b82f6] drop-shadow" />
-                    ) : (
-                      <Square className="h-6 w-6 text-white drop-shadow" />
-                    )}
-                  </div>
-                )}
-
-                {/* Edit icon on hover (non-selection mode) */}
-                {!selectionMode && item.url && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); openSingleInEditor(item.url!) }}
-                    className="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                )}
+      {displayItems.length > 0 && (
+        <div className="space-y-6">
+          {originalItems.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-[11px] text-muted-foreground">{tEditor('originalSection')}</span>
+                <div className="h-px flex-1 bg-border" />
               </div>
-
-              <div className="space-y-2 p-3">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="rounded-md bg-[#eef0f4] px-2 py-1 text-[#5c6271]">{typeLabel(item.type)}</span>
-                  <span className="rounded-md bg-[#f3f4f7] px-2 py-1 text-[#6b7280]">{statusLabel(item.status)}</span>
-                </div>
-
-                <p className="text-xs text-[#7d818d]">{formatter.format(new Date(item.createdAt))}</p>
-
-                {item.prompt && (
-                  <p className="line-clamp-2 text-xs leading-5 text-[#5d6372]">{item.prompt}</p>
-                )}
-
-                {item.errorMessage && (
-                  <p className="line-clamp-2 text-xs leading-5 text-[#ba4656]">{item.errorMessage}</p>
-                )}
-
-                <div className="flex items-center gap-2 pt-1">
-                  {item.url && !selectionMode && (
-                    <>
-                      <a href={item.url} target="_blank" rel="noopener noreferrer">
-                        <Button variant="outline" size="sm" className="h-8 gap-1.5 px-2.5 text-xs">
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          {t('open')}
-                        </Button>
-                      </a>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1.5 px-2.5 text-xs"
-                        onClick={(e) => { e.stopPropagation(); openSingleInEditor(item.url!) }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 gap-1.5 px-2.5 text-xs"
-                    onClick={(e) => { e.stopPropagation(); void handleDownload(item) }}
-                    disabled={!item.url || downloadingId === item.id}
-                  >
-                    {downloadingId === item.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Download className="h-3.5 w-3.5" />
-                    )}
-                    {t('download')}
-                  </Button>
-                </div>
+              {renderItems(originalItems)}
+            </section>
+          )}
+          {editedItems.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-[11px] text-muted-foreground">{tEditor('editedSection')}</span>
+                <div className="h-px flex-1 bg-border" />
               </div>
+              {renderItems(editedItems)}
+            </section>
+          )}
+          {editedItems.length > 0 && (
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={clearLocalAssets}>
+                {locale === 'zh' ? '清除修改图' : 'Clear Edited'}
+              </Button>
             </div>
-          ))}
+          )}
         </div>
       )}
 
@@ -419,7 +547,7 @@ export function HistoryPage() {
         </div>
       )}
 
-      {hasMore && items.length > 0 && (
+      {hasMore && originalItems.length > 0 && (
         <div className="mt-6 flex justify-center">
           <Button variant="outline" onClick={() => void loadMore()} disabled={loadingMore}>
             {loadingMore ? t('loadingMore') : t('loadMore')}

@@ -46,28 +46,62 @@ const ENV = loadEnv()
 const CHAT_KEY = ENV.QN_CHAT_API_KEY || ENV.QN_IMAGE_API_KEY
 const CHAT_ENDPOINT = ENV.QN_CHAT_API_ENDPOINT || 'https://api.qnaigc.com/v1/chat/completions'
 const CHAT_MODEL = ENV.QN_CHAT_MODEL || 'moonshotai/kimi-k2.5'
-const IMAGE_KEY = ENV.QN_IMAGE_API_KEY
-const IMAGE_ENDPOINT = ENV.QN_IMAGE_API_ENDPOINT || 'https://api.qnaigc.com/v1/images/edits'
-const IMAGE_MODEL = ENV.QN_IMAGE_MODEL || 'gemini-3.0-pro-image-preview'
+const DEFAULT_IMAGE_KEY = ENV.QN_IMAGE_API_KEY
+const DEFAULT_IMAGE_ENDPOINT = ENV.QN_IMAGE_API_ENDPOINT || 'https://api.qnaigc.com/v1/images/edits'
+const DEFAULT_IMAGE_MODEL = ENV.QN_IMAGE_MODEL || 'gemini-3.0-pro-image-preview'
+const OPENROUTER_KEY = ENV.OPENROUTER_API_KEY || ''
+const OPENROUTER_ENDPOINT = ENV.OPENROUTER_API_ENDPOINT || 'https://openrouter.ai/api/v1/chat/completions'
 
 // Azure detection helpers
 const isAzureOpenAI = (url) => url.includes('.openai.azure.com')
 const isAzureAIFoundry = (url) => url.includes('.services.ai.azure.com')
 const isAzure = (url) => isAzureOpenAI(url) || isAzureAIFoundry(url)
+const isOpenRouter = (url) => {
+  try {
+    return new URL(url).hostname === 'openrouter.ai'
+  } catch {
+    return false
+  }
+}
 
 // ── Parse args ───────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2)
 let testImagePath = null
 let onlyStep = null
+let imageModel = DEFAULT_IMAGE_MODEL
+let imageEndpoint = DEFAULT_IMAGE_ENDPOINT
+let imageKey = DEFAULT_IMAGE_KEY
+let imageSize = '2K'
+let aspectRatio = '1:1'
+let saveOutput = true
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--step') {
     onlyStep = parseInt(args[i + 1])
     i++
+  } else if (args[i] === '--image-model') {
+    imageModel = args[i + 1]
+    i++
+  } else if (args[i] === '--image-endpoint') {
+    imageEndpoint = args[i + 1]
+    i++
+  } else if (args[i] === '--image-size') {
+    imageSize = args[i + 1]
+    i++
+  } else if (args[i] === '--aspect-ratio') {
+    aspectRatio = args[i + 1]
+    i++
+  } else if (args[i] === '--no-save') {
+    saveOutput = false
   } else if (!args[i].startsWith('-')) {
     testImagePath = args[i]
   }
+}
+
+if (imageModel.startsWith('google/') && OPENROUTER_KEY && imageEndpoint === DEFAULT_IMAGE_ENDPOINT) {
+  imageEndpoint = OPENROUTER_ENDPOINT
+  imageKey = OPENROUTER_KEY
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -91,6 +125,65 @@ function logJson(label, obj) {
   } else {
     console.log(`   ${label}: ${str}`)
   }
+}
+
+function parseImageDimensions(buffer) {
+  const bytes = new Uint8Array(buffer)
+  if (bytes.length < 30) return null
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    return { w: view.getUint32(16), h: view.getUint32(20) }
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let i = 2
+    while (i < bytes.length - 9) {
+      if (bytes[i] !== 0xff) { i++; continue }
+      const marker = bytes[i + 1]
+      if (marker === 0xc0 || marker === 0xc2) {
+        const h = (bytes[i + 5] << 8) | bytes[i + 6]
+        const w = (bytes[i + 7] << 8) | bytes[i + 8]
+        return { w, h }
+      }
+      const segLen = (bytes[i + 2] << 8) | bytes[i + 3]
+      i += 2 + segLen
+    }
+  }
+  return null
+}
+
+function aspectRatioToBaseSize(ratio) {
+  switch (ratio) {
+    case '2:3': return '2048x3072'
+    case '3:2': return '3072x2048'
+    case '3:4': return '1920x2560'
+    case '4:3': return '2560x1920'
+    case '9:16': return '1440x2560'
+    case '16:9': return '2560x1440'
+    case '4:5': return '2048x2560'
+    case '5:4': return '2560x2048'
+    case '21:9': return '3360x1440'
+    default: return '2048x2048'
+  }
+}
+
+function longestEdgeForSize(size) {
+  if (size === '1K') return 1024
+  if (size === '4K') return 4096
+  return 2048
+}
+
+function scaledRequestSize(ratio, size) {
+  const base = aspectRatioToBaseSize(ratio)
+  const match = base.match(/^(\d+)x(\d+)$/)
+  if (!match) return base
+  const w = Number(match[1])
+  const h = Number(match[2])
+  const longest = Math.max(w, h)
+  const target = longestEdgeForSize(size)
+  if (longest === target) return base
+  const scale = target / longest
+  const round64 = (v) => Math.max(512, Math.round(v * scale / 64) * 64)
+  return `${round64(w)}x${round64(h)}`
 }
 
 // ── 生成一个简单的测试图片（红色方块） ─────────────────────────────────────────
@@ -343,10 +436,14 @@ ${analysisJson}`
 // ── Step 3: 生成图片 (gemini images/edits) ───────────────────────────────────
 
 async function step3_generateImage(imageDataUrl, prompt) {
-  log('🎨', `Step 3: 生成图片 — ${IMAGE_MODEL}`)
-  console.log(`   模型: ${IMAGE_MODEL}`)
-  console.log(`   端点: ${IMAGE_ENDPOINT}`)
-  console.log(`   Azure: ${isAzure(IMAGE_ENDPOINT) ? (isAzureAIFoundry(IMAGE_ENDPOINT) ? 'AI Foundry' : 'OpenAI') : 'No'}`)
+  log('🎨', `Step 3: 生成图片 — ${imageModel}`)
+  console.log(`   模型: ${imageModel}`)
+  console.log(`   端点: ${imageEndpoint}`)
+  console.log(`   分辨率: ${imageSize}`)
+  console.log(`   比例: ${aspectRatio}`)
+  console.log(`   请求尺寸: ${scaledRequestSize(aspectRatio, imageSize)}`)
+  console.log(`   Azure: ${isAzure(imageEndpoint) ? (isAzureAIFoundry(imageEndpoint) ? 'AI Foundry' : 'OpenAI') : 'No'}`)
+  console.log(`   OpenRouter: ${isOpenRouter(imageEndpoint) ? 'Yes' : 'No'}`)
   console.log(`   Prompt: "${prompt.slice(0, 100)}..."`)
 
   const ecomPrefix = "Professional e-commerce product photography. High-end commercial catalog quality. " +
@@ -357,7 +454,33 @@ async function step3_generateImage(imageDataUrl, prompt) {
   const startTime = Date.now()
   let res
 
-  if (isAzure(IMAGE_ENDPOINT)) {
+  if (isOpenRouter(imageEndpoint)) {
+    res = await fetch(imageEndpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${imageKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: imageModel,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: finalPrompt },
+            { type: 'image_url', image_url: { url: imageDataUrl } },
+          ],
+        }],
+        modalities: ['image', 'text'],
+        image_config: {
+          aspect_ratio: aspectRatio,
+          image_size: imageSize,
+        },
+        provider: {
+          require_parameters: true,
+        },
+      }),
+    })
+  } else if (isAzure(imageEndpoint)) {
     // Azure: multipart FormData for image edits
     // Extract raw base64 bytes from data URL
     const b64Part = imageDataUrl.split(',')[1]
@@ -370,31 +493,32 @@ async function step3_generateImage(imageDataUrl, prompt) {
     form.append('image', blob, 'image.png')
     form.append('prompt', finalPrompt)
     form.append('n', '1')
-    form.append('size', '1024x1024')
+    form.append('size', scaledRequestSize(aspectRatio, imageSize))
 
     const headers = {}
-    if (isAzureAIFoundry(IMAGE_ENDPOINT)) {
-      headers['Api-Key'] = IMAGE_KEY
-      form.append('model', IMAGE_MODEL)
+    if (isAzureAIFoundry(imageEndpoint)) {
+      headers['Api-Key'] = imageKey
+      form.append('model', imageModel)
       form.append('output_format', 'png')
     } else {
-      headers['Authorization'] = `Bearer ${IMAGE_KEY}`
+      headers['Authorization'] = `Bearer ${imageKey}`
     }
 
-    res = await fetch(IMAGE_ENDPOINT, { method: 'POST', headers, body: form })
+    res = await fetch(imageEndpoint, { method: 'POST', headers, body: form })
   } else {
     // qnaigc / OpenAI-compatible: JSON body
-    res = await fetch(IMAGE_ENDPOINT, {
+    res = await fetch(imageEndpoint, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${IMAGE_KEY}`,
+        'Authorization': `Bearer ${imageKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: IMAGE_MODEL,
+        model: imageModel,
         image: imageDataUrl,
         prompt: finalPrompt,
         n: 1,
+        size: scaledRequestSize(aspectRatio, imageSize),
       }),
     })
   }
@@ -409,8 +533,9 @@ async function step3_generateImage(imageDataUrl, prompt) {
 
   const data = await res.json()
 
-  // 提取 b64_json
+  // 提取 b64_json / URL
   let b64 = null
+  let outputUrl = null
   if (Array.isArray(data?.data)) {
     for (const entry of data.data) {
       if (entry?.b64_json) {
@@ -421,25 +546,57 @@ async function step3_generateImage(imageDataUrl, prompt) {
         }
         break
       }
+      if (entry?.url) {
+        outputUrl = entry.url
+      }
+    }
+  }
+  if (!b64 && Array.isArray(data?.choices)) {
+    const msg = data.choices[0]?.message
+    const imageUrl = msg?.images?.[0]?.image_url?.url || msg?.content?.find?.((part) => part?.type === 'image_url')?.image_url?.url || null
+    if (typeof imageUrl === 'string' && imageUrl.startsWith('data:')) {
+      b64 = imageUrl.split(',')[1] || null
+    } else if (typeof imageUrl === 'string' && imageUrl) {
+      outputUrl = imageUrl
     }
   }
 
   if (b64) {
     const sizeKB = Math.round(b64.length * 0.75 / 1024)
+    const buffer = Buffer.from(b64, 'base64')
+    const dims = parseImageDimensions(buffer)
     console.log(`   ✅ 图片生成成功 (${elapsed}ms)`)
     console.log(`   图片大小: ~${sizeKB} KB`)
+    if (dims) console.log(`   实际尺寸: ${dims.w}x${dims.h}`)
 
-    // 保存到本地
-    const outDir = path.join(ROOT, 'scripts/test-output')
-    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
+    let outPath = null
+    if (saveOutput) {
+      const outDir = path.join(ROOT, 'scripts/test-output')
+      if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
+      outPath = path.join(outDir, `generated_${Date.now()}.png`)
+      fs.writeFileSync(outPath, buffer)
+      console.log(`   💾 已保存到: ${outPath}`)
+    }
 
-    const outPath = path.join(outDir, `generated_${Date.now()}.png`)
-    fs.writeFileSync(outPath, Buffer.from(b64, 'base64'))
-    console.log(`   💾 已保存到: ${outPath}`)
-
-    return { b64, outputPath: outPath }
+    return { b64, outputPath: outPath, dimensions: dims }
+  } else if (outputUrl) {
+    const imgRes = await fetch(outputUrl)
+    const buffer = Buffer.from(await imgRes.arrayBuffer())
+    const dims = parseImageDimensions(buffer)
+    console.log(`   ✅ 图片生成成功 (${elapsed}ms)`)
+    console.log(`   输出 URL: ${outputUrl}`)
+    if (dims) console.log(`   实际尺寸: ${dims.w}x${dims.h}`)
+    let outPath = null
+    if (saveOutput) {
+      const outDir = path.join(ROOT, 'scripts/test-output')
+      if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
+      outPath = path.join(outDir, `generated_${Date.now()}.png`)
+      fs.writeFileSync(outPath, buffer)
+      console.log(`   💾 已保存到: ${outPath}`)
+    }
+    return { outputUrl, outputPath: outPath, dimensions: dims }
   } else {
-    console.log(`   ❌ 响应中没有找到 b64_json`)
+    console.log(`   ❌ 响应中没有找到 b64_json 或 url`)
     logJson('响应数据', data)
     return null
   }
@@ -472,11 +629,11 @@ async function main() {
   console.log('  Shopix AI 核心流程本地测试')
   console.log('=' .repeat(60))
   console.log(`\n  Chat 模型: ${CHAT_MODEL}`)
-  console.log(`  Image 模型: ${IMAGE_MODEL}`)
+  console.log(`  Image 模型: ${imageModel}`)
   console.log(`  Chat Key: ${CHAT_KEY ? CHAT_KEY.slice(0, 8) + '...' : '❌ 缺失'}`)
-  console.log(`  Image Key: ${IMAGE_KEY ? IMAGE_KEY.slice(0, 8) + '...' : '❌ 缺失'}`)
+  console.log(`  Image Key: ${imageKey ? imageKey.slice(0, 8) + '...' : '❌ 缺失'}`)
 
-  if (!CHAT_KEY || !IMAGE_KEY) {
+  if (!CHAT_KEY || !imageKey) {
     console.error('\n❌ API Key 缺失，请检查 supabase/functions/.env.local')
     process.exit(1)
   }
@@ -554,7 +711,7 @@ async function main() {
   if (!onlyStep || onlyStep === 2)
     console.log(`   Step 2 (${CHAT_MODEL} SSE → prompts):      ${status(results.step2?.prompts?.length > 0)}`)
   if (!onlyStep || onlyStep === 3)
-    console.log(`   Step 3 (${IMAGE_MODEL} → 图片):           ${status(results.step3?.b64)}`)
+    console.log(`   Step 3 (${imageModel} → 图片):           ${status(results.step3?.b64 || results.step3?.outputUrl)}`)
 
   console.log('')
 

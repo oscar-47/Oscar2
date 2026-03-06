@@ -18,8 +18,6 @@ interface ClothingSettingsSectionProps {
   onAspectRatioChange: (value: AspectRatio) => void
   resolution: ImageSize
   onResolutionChange: (value: ImageSize) => void
-  turboEnabled: boolean
-  onTurboChange: (value: boolean) => void
   disabled?: boolean
 }
 
@@ -34,8 +32,6 @@ export function ClothingSettingsSection({
   onAspectRatioChange,
   resolution,
   onResolutionChange,
-  turboEnabled,
-  onTurboChange,
   disabled = false,
 }: ClothingSettingsSectionProps) {
   const locale = useLocale()
@@ -84,8 +80,6 @@ export function ClothingSettingsSection({
         disabled={disabled}
         outputLanguage={language as OutputLanguage}
         onOutputLanguageChange={(v) => onLanguageChange(v)}
-        turboEnabled={turboEnabled}
-        onTurboChange={onTurboChange}
         aspectRatioOptions={['1:1', '3:4', '4:3', '9:16', '16:9']}
       />
     </div>

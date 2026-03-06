@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { loadEditorSession } from '@/lib/utils/editor-session'
+import { clearEditorSession, loadEditorSession } from '@/lib/utils/editor-session'
 import { useEditorStore } from '@/lib/stores/editor-store'
 import { uploadFile } from '@/lib/api/upload'
+import { upsertResultAssets } from '@/lib/utils/result-assets'
+import type { ResultAsset } from '@/types'
 import { EditorHeader } from './EditorHeader'
 import { EditorSidebar } from './EditorSidebar'
 import { EditorCanvas } from './EditorCanvas'
@@ -26,51 +28,61 @@ function isOurStorageDomain(url: string): boolean {
   }
 }
 
-async function reuploadIfCrossOrigin(url: string): Promise<string> {
-  if (isOurStorageDomain(url) || url.startsWith('data:')) return url
+async function reuploadIfCrossOrigin(asset: ResultAsset): Promise<ResultAsset> {
+  if (isOurStorageDomain(asset.url) || asset.url.startsWith('data:')) return asset
   try {
-    const res = await fetch(url)
-    if (!res.ok) return url
+    const res = await fetch(asset.url)
+    if (!res.ok) return asset
     const blob = await res.blob()
-    const ext = url.match(/\.(png|jpg|jpeg|webp)/i)?.[1] ?? 'png'
+    const ext = asset.url.match(/\.(png|jpg|jpeg|webp)/i)?.[1] ?? 'png'
     const file = new File([blob], `reupload-${Date.now()}.${ext}`, { type: blob.type })
     const result = await uploadFile(file)
-    return result.publicUrl
+    return { ...asset, url: result.publicUrl }
   } catch {
-    return url // fallback: use original URL
+    return asset
   }
 }
 
 export function ImageEditorPage({ sid }: ImageEditorPageProps) {
-  const initFromUrls = useEditorStore((s) => s.initFromUrls)
+  const initFromAssets = useEditorStore((s) => s.initFromAssets)
+  const exportAssets = useEditorStore((s) => s.exportAssets)
   const [initialized, setInitialized] = useState(false)
+  const [canWriteBack, setCanWriteBack] = useState(false)
 
   useEffect(() => {
     if (initialized) return
 
     async function init() {
-      let urls: string[] = []
+      let sessionPayload = sid ? loadEditorSession(sid) : null
 
-      if (sid) {
-        const sessionUrls = loadEditorSession(sid)
-        if (sessionUrls) urls = sessionUrls
-      }
-
-      if (urls.length > 0) {
+      if (sessionPayload?.assets.length) {
         // Re-upload cross-origin images for canvas safety
-        const safeUrls = await Promise.all(urls.map(reuploadIfCrossOrigin))
-        initFromUrls(safeUrls)
+        const safeAssets = await Promise.all(sessionPayload.assets.map(reuploadIfCrossOrigin))
+        initFromAssets(safeAssets)
+        setCanWriteBack(Boolean(sessionPayload.returnSessionKey))
+      } else {
+        initFromAssets([])
       }
 
       setInitialized(true)
     }
 
     void init()
-  }, [sid, initialized, initFromUrls])
+  }, [sid, initialized, initFromAssets])
+
+  const handleBack = () => {
+    if (sid) {
+      const payload = loadEditorSession(sid)
+      if (payload?.returnSessionKey && canWriteBack) {
+        upsertResultAssets(payload.returnSessionKey, exportAssets())
+      }
+      clearEditorSession(sid)
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
-      <EditorHeader />
+      <EditorHeader onBack={handleBack} />
       <div className="flex flex-1 overflow-hidden">
         <EditorSidebar />
         <EditorCanvas />

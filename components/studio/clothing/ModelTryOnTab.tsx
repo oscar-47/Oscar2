@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { Image as ImageIcon, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,7 +9,7 @@ import { SectionIcon } from '@/components/shared/SectionIcon'
 import { MultiImageUploader, type UploadedImage } from '@/components/upload/MultiImageUploader'
 import type { ProgressStep } from '@/components/generation/GenerationProgress'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
-import { ResultGallery, type ResultImage } from '@/components/generation/ResultGallery'
+import { ResultGallery } from '@/components/generation/ResultGallery'
 import { ModelImageSection } from './ModelImageSection'
 import { ClothingSettingsSection } from './ClothingSettingsSection'
 import { AIModelGeneratorDialog } from './AIModelGeneratorDialog'
@@ -16,8 +17,9 @@ import { PreviewTileGrid } from '@/components/generation/PreviewTileGrid'
 import { uploadFile } from '@/lib/api/upload'
 import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
+import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import type { GenerationModel, AspectRatio, ImageSize, GenerationJob, ClothingPhase } from '@/types'
-import { isValidModel } from '@/types'
+import { DEFAULT_MODEL, isValidModel, normalizeGenerationModel, sanitizeImageSizeForModel } from '@/types'
 import { friendlyError } from '@/lib/utils'
 
 function uid() {
@@ -75,33 +77,35 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
   const [modelImage, setModelImage] = useState<UploadedImage | null>(null)
   const [requirements, setRequirements] = useState('')
   const [language, setLanguage] = useState('zh')
-  const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
+  const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [resolution, setResolution] = useState<ImageSize>('2K')
-  const [turboEnabled, setTurboEnabled] = useState(false)
   const [showAIModelDialog, setShowAIModelDialog] = useState(false)
 
   const [steps, setSteps] = useState<ProgressStep[]>([])
   const [progress, setProgress] = useState(0)
-  const [results, setResults] = useState<ResultImage[]>([])
+  const {
+    assets: results,
+    appendAssets: appendResults,
+    clearAssets: clearResults,
+  } = useResultAssetSession('clothing-model-tryon')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useSessionPersistence(
     'clothing-model-tryon',
     () => ({
-      requirements, language, model, aspectRatio, resolution, turboEnabled,
-      results: results.filter((r) => r.url && !r.url.startsWith('data:')),
+      requirements, language, model, aspectRatio, resolution,
     }),
     (s) => {
       if (typeof s.requirements === 'string') setRequirements(s.requirements)
       if (typeof s.language === 'string') setLanguage(s.language)
-      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
+      if (typeof s.model === 'string' && isValidModel(s.model)) {
+        setModel(normalizeGenerationModel(s.model) as GenerationModel)
+      }
       if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.resolution === 'string') setResolution(s.resolution as ImageSize)
-      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (Array.isArray(s.results)) {
-        const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string' && !r.url.startsWith('data:'))
-        if (restored.length > 0) setResults(restored)
+      if (typeof s.resolution === 'string') {
+        const restoredModel = typeof s.model === 'string' ? normalizeGenerationModel(s.model) : DEFAULT_MODEL
+        setResolution(sanitizeImageSizeForModel(restoredModel, s.resolution as ImageSize))
       }
     }
   )
@@ -246,7 +250,6 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
         model,
         aspectRatio,
         imageSize: resolution,
-        turboEnabled,
         workflowMode: 'model',
         client_job_id: uid(),
         fe_attempt: 1,
@@ -258,7 +261,14 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       setProgress(100)
 
       if (imageJob.result_url) {
-        setResults([{ url: imageJob.result_url, label: '模特试穿效果' }])
+        appendResults([
+          createResultAsset({
+            url: imageJob.result_url,
+            label: '模特试穿效果',
+            ...extractResultAssetMetadata(imageJob.result_data),
+            originModule: 'clothing-model-tryon',
+          }),
+        ])
       }
       setPhase('complete')
     } catch (err) {
@@ -267,16 +277,16 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase('preview')
     }
-  }, [productImages, modelImage, model, aspectRatio, resolution, turboEnabled, traceId, steps, set])
+  }, [appendResults, productImages, modelImage, model, aspectRatio, resolution, traceId, steps, set])
 
   const handleReset = useCallback(() => {
     abortRef.current?.abort()
     setPhase('input')
     setSteps([])
     setProgress(0)
-    setResults([])
+    clearResults()
     setErrorMessage(null)
-  }, [])
+  }, [clearResults])
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort()
@@ -341,8 +351,6 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
           onAspectRatioChange={setAspectRatio}
           resolution={resolution}
           onResolutionChange={setResolution}
-          turboEnabled={turboEnabled}
-          onTurboChange={setTurboEnabled}
           disabled={isProcessing}
         />
 
@@ -466,7 +474,14 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     // complete
     return (
       <div className="space-y-4">
-        {results.length > 0 && <ResultGallery images={results} aspectRatio={aspectRatio} />}
+        {results.length > 0 && (
+          <ResultGallery
+            images={results}
+            aspectRatio={aspectRatio}
+            editorSessionKey="clothing-model-tryon"
+            originModule="clothing-model-tryon"
+          />
+        )}
         {results.length === 0 && errorMessage && (
           <div className="text-center text-sm text-destructive">{errorMessage}</div>
         )}

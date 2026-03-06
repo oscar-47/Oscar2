@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -20,6 +19,7 @@ import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStat
 import { ResultGallery, type ResultImage } from '@/components/generation/ResultGallery'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
+import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { uploadFiles } from '@/lib/api/upload'
 import {
@@ -29,7 +29,8 @@ import {
   processGenerationJob,
 } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, ArrowRight, Loader2, ImageIcon, AlertTriangle, RefreshCw, Sparkles, Zap, Plus, X } from 'lucide-react'
+import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
+import { ArrowLeft, ArrowRight, Loader2, ImageIcon, AlertTriangle, RefreshCw, Sparkles, Plus, X } from 'lucide-react'
 import type {
   GenerationModel,
   AspectRatio,
@@ -44,7 +45,15 @@ import type {
   GenesisAnalysisResult,
   GenesisStyleDirectionKey,
 } from '@/types'
-import { DEFAULT_CREDIT_COSTS, AVAILABLE_MODELS, isValidModel } from '@/types'
+import {
+  AVAILABLE_MODELS,
+  DEFAULT_MODEL,
+  getGenerationCreditCost,
+  getSupportedImageSizes,
+  isValidModel,
+  normalizeGenerationModel,
+  sanitizeImageSizeForModel,
+} from '@/types'
 import { friendlyError } from '@/lib/utils'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -79,16 +88,6 @@ const IMAGE_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 const GENESIS_DEFAULT_REQUIREMENTS_ZH = '我的商品是____，主要卖点是____'
 const GENESIS_DEFAULT_REQUIREMENTS_EN = 'My product is ____, key selling point is ____'
 const GENESIS_STYLE_KEYS: GenesisStyleDirectionKey[] = ['sceneStyle', 'lighting', 'composition']
-
-const RESOLUTION_OPTIONS_EN: { value: ImageSize; label: string; proOnly: boolean }[] = [
-  { value: '1K', label: '1K (1024px)', proOnly: false },
-  { value: '2K', label: '2K (2048px)', proOnly: false },
-]
-
-const RESOLUTION_OPTIONS_ZH: { value: ImageSize; label: string; proOnly: boolean }[] = [
-  { value: '1K', label: '1K 标清 (1024px)', proOnly: false },
-  { value: '2K', label: '2K 高清 (2048px)', proOnly: false },
-]
 
 const OUTPUT_LANGUAGES_EN: { value: OutputLanguage; label: string }[] = [
   { value: 'none', label: 'None Text(Visual Only)' },
@@ -252,22 +251,23 @@ function patchStep(
   return steps.map((s) => (s.id === id ? { ...s, ...patch } : s))
 }
 
-function computeCost(model: GenerationModel, turboEnabled: boolean, imageSize: ImageSize, imageCount: number): number {
-  const base = DEFAULT_CREDIT_COSTS[model] ?? 5
-  let perImage: number
-  if (turboEnabled) {
-    perImage = base + (imageSize === '1K' ? 3 : imageSize === '2K' ? 7 : 12)
-  } else {
-    perImage = base
-  }
-  return perImage * imageCount
+function computeCost(model: GenerationModel, _imageSize: ImageSize, imageCount: number): number {
+  const base = getGenerationCreditCost(model, _imageSize)
+  return base * imageCount
 }
 
 function extractResultFromJob(job: GenerationJob, index: number, batchId?: string, batchTimestamp?: number): ResultImage | null {
   const resultData = job.result_data as Record<string, unknown> | null
   const url = job.result_url
     ?? (typeof resultData?.b64_json === 'string' ? `data:image/png;base64,${resultData.b64_json}` : null)
-  return url ? { url, label: `Image ${index + 1}`, batchId, batchTimestamp } : null
+  return url ? createResultAsset({
+    url,
+    label: `Image ${index + 1}`,
+    batchId,
+    batchTimestamp,
+    ...extractResultAssetMetadata(job.result_data),
+    originModule: 'studio-genesis',
+  }) : null
 }
 
 function hasCjkText(value: string): boolean {
@@ -415,12 +415,26 @@ function normalizeGenesisAnalysisResult(
       : ''
   const fallbackCopyPlan = buildGenesisCopyFallback(requirements, outputLanguage, isZh)
 
+  const rawIdentity = (parsed?.product_visual_identity ?? parsed?.productVisualIdentity) as Record<string, unknown> | undefined
+  let productVisualIdentity: GenesisAnalysisResult['product_visual_identity']
+  if (rawIdentity && typeof rawIdentity === 'object') {
+    const sc = rawIdentity.secondary_colors ?? rawIdentity.secondaryColors
+    const kf = rawIdentity.key_features ?? rawIdentity.keyFeatures
+    productVisualIdentity = {
+      primary_color: String(rawIdentity.primary_color ?? rawIdentity.primaryColor ?? ''),
+      secondary_colors: Array.isArray(sc) ? sc.map(String) : [],
+      material: String(rawIdentity.material ?? ''),
+      key_features: Array.isArray(kf) ? kf.map(String) : [],
+    }
+  }
+
   return {
     product_summary: typeof parsed?.product_summary === 'string' && parsed.product_summary.trim()
       ? parsed.product_summary
       : typeof parsed?.productSummary === 'string' && parsed.productSummary.trim()
         ? parsed.productSummary
         : fallbackSummary,
+    product_visual_identity: productVisualIdentity,
     style_directions: styleDirections,
     copy_plan: outputLanguage === 'none'
       ? ''
@@ -843,17 +857,21 @@ export function StudioGenesisForm() {
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
   const [requirements, setRequirements] = useState(defaultRequirements)
   const [imageCount, setImageCount] = useState(1)
-  const [model, setModel] = useState<GenerationModel>('or-gemini-3.1-flash')
+  const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
-  const [imageSize, setImageSize] = useState<ImageSize>('1K')
+  const [imageSize, setImageSize] = useState<ImageSize>('2K')
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>(isZh ? 'zh' : 'en')
   // Locale-aware constants
   const ASPECT_RATIOS = locale === 'zh' ? ASPECT_RATIOS_ZH : ASPECT_RATIOS_EN
-  const RESOLUTION_OPTIONS = locale === 'zh' ? RESOLUTION_OPTIONS_ZH : RESOLUTION_OPTIONS_EN
+  const RESOLUTION_OPTIONS = getSupportedImageSizes(model).map((value) => ({
+    value,
+    label: locale === 'zh'
+      ? `${value} ${value === '1K' ? '标清' : value === '2K' ? '高清' : '超清'} (${value === '1K' ? '1024px' : value === '2K' ? '2048px' : '4096px'})`
+      : `${value} (${value === '1K' ? '1024px' : value === '2K' ? '2048px' : '4096px'})`,
+  }))
   const OUTPUT_LANGUAGES = locale === 'zh' ? OUTPUT_LANGUAGES_ZH : OUTPUT_LANGUAGES_EN
 
   // ── Preview state ──
-  const [turboEnabled, setTurboEnabled] = useState(false)
   const [genesisAnalysis, setGenesisAnalysis] = useState<GenesisAnalysisResult | null>(null)
   const [styleSelections, setStyleSelections] = useState<GenesisStyleSelections>({})
   const [customStyleTags, setCustomStyleTags] = useState<GenesisCustomStyleTags>({})
@@ -867,7 +885,11 @@ export function StudioGenesisForm() {
   const [phase, setPhase] = useState<GenesisPhase>('input')
   const [steps, setSteps] = useState<ProgressStep[]>([])
   const [progress, setProgress] = useState(0)
-  const [results, setResults] = useState<ResultImage[]>([])
+  const {
+    assets: results,
+    appendAssets: appendResults,
+    clearAssets: clearResults,
+  } = useResultAssetSession('studio-genesis-v2')
   const [imageSlots, setImageSlots] = useState<ImageSlot[]>([])
   const [failedSlotIndices, setFailedSlotIndices] = useState<number[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -879,28 +901,27 @@ export function StudioGenesisForm() {
   useSessionPersistence(
     'studio-genesis-v2',
     () => ({
-      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage, turboEnabled,
-      results: results.filter((r) => !r.url.startsWith('data:')),
+      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage,
     }),
     (s) => {
       if (typeof s.requirements === 'string') {
         setRequirements(s.requirements.trim().length > 0 ? s.requirements : defaultRequirements)
       }
       if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
-      if (typeof s.model === 'string' && isValidModel(s.model)) setModel(s.model as GenerationModel)
-      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.imageSize === 'string') setImageSize(s.imageSize as ImageSize)
-      if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
-      if (typeof s.turboEnabled === 'boolean') setTurboEnabled(s.turboEnabled)
-      if (Array.isArray(s.results)) {
-        const restored = (s.results as ResultImage[]).filter((r) => r.url && typeof r.url === 'string')
-        if (restored.length > 0) setResults(restored)
+      if (typeof s.model === 'string' && isValidModel(s.model)) {
+        setModel(normalizeGenerationModel(s.model) as GenerationModel)
       }
+      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
+      if (typeof s.imageSize === 'string') {
+        const restoredModel = typeof s.model === 'string' ? normalizeGenerationModel(s.model) : DEFAULT_MODEL
+        setImageSize(sanitizeImageSizeForModel(restoredModel, s.imageSize as ImageSize))
+      }
+      if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
     }
   )
 
   const { total } = useCredits()
-  const totalCost = computeCost(model, turboEnabled, imageSize, imageCount)
+  const totalCost = computeCost(model, imageSize, imageCount)
   const insufficientCredits = total !== null && total < totalCost
   const analyzingMessages = [
     t('analyzingStep1'),
@@ -1094,6 +1115,7 @@ export function StudioGenesisForm() {
           module: 'genesis',
           analysisJson: {
             product_summary: genesisAnalysis.product_summary,
+            product_visual_identity: genesisAnalysis.product_visual_identity,
             requirements,
             image_count: imageCount,
             output_language: outputLanguage,
@@ -1158,7 +1180,6 @@ export function StudioGenesisForm() {
             model,
             aspectRatio,
             imageSize,
-            turboEnabled,
             imageCount: 1,
             client_job_id: `${client_job_id}_${i}`,
             fe_attempt: 1,
@@ -1234,7 +1255,7 @@ export function StudioGenesisForm() {
       set('generate', { status: 'done' })
       set('done', { status: 'done' })
       setProgress(100)
-      setResults((prev) => [...prev, ...successResults])
+      appendResults(successResults)
       setFailedSlotIndices(failedIndices)
 
       if (successResults.length === 0) {
@@ -1250,7 +1271,7 @@ export function StudioGenesisForm() {
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
     }
-  }, [analysisParams, aspectRatio, backendLocale, copyPlan, genesisAnalysis, imageCount, imageSize, isZh, model, outputLanguage, productImages, requirements, styleSelections, t, tc, turboEnabled, uploadedUrls])
+  }, [analysisParams, appendResults, aspectRatio, backendLocale, copyPlan, genesisAnalysis, imageCount, imageSize, isZh, model, outputLanguage, productImages, requirements, styleSelections, t, tc, uploadedUrls])
 
   const handleBackToInput = useCallback(() => {
     setPhase('input')
@@ -1276,6 +1297,7 @@ export function StudioGenesisForm() {
     setPhase('input')
     setSteps([])
     setProgress(0)
+    clearResults()
     setImageSlots([])
     setFailedSlotIndices([])
     setErrorMessage(null)
@@ -1289,7 +1311,7 @@ export function StudioGenesisForm() {
     setCustomTagInputs({})
     setActiveCustomInputKey(null)
     setRequirements(defaultRequirements)
-  }, [defaultRequirements])
+  }, [clearResults, defaultRequirements])
 
   // ─── handleRetryFailed ────────────────────────────────────────────────────
 
@@ -1325,7 +1347,7 @@ export function StudioGenesisForm() {
           productImage: uploadedUrls[0],
           productImages: uploadedUrls,
           prompt: prompts[slotIdx],
-          model, aspectRatio, imageSize, turboEnabled,
+          model, aspectRatio, imageSize,
           imageCount: 1,
           client_job_id: `${uid()}_retry_${slotIdx}`,
           fe_attempt: 2, trace_id,
@@ -1384,7 +1406,7 @@ export function StudioGenesisForm() {
           newFailedIndices.push(retryJobMap[ri].slotIdx)
         }
       })
-      setResults((prev) => [...prev, ...retryResults])
+      appendResults(retryResults)
       setFailedSlotIndices(newFailedIndices)
       refreshCredits()
 
@@ -1399,7 +1421,7 @@ export function StudioGenesisForm() {
         setPhase('complete')
       }
     }
-  }, [retryContext, failedSlotIndices, uploadedUrls, model, aspectRatio, imageSize, turboEnabled, t])
+  }, [appendResults, retryContext, failedSlotIndices, uploadedUrls, model, aspectRatio, imageSize, isZh, t])
 
   const handleStyleSelect = useCallback((key: GenesisStyleDirectionKey, value: string) => {
     setStyleSelections((prev) => ({
@@ -1474,23 +1496,6 @@ export function StudioGenesisForm() {
               <p className="font-medium">{t('reanalyzeWarning')}</p>
             </div>
           )}
-
-          <div className="flex items-center justify-between rounded-3xl border border-[#d0d4dc] bg-white px-4 py-3.5">
-            <div className="flex items-center gap-3">
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${turboEnabled ? 'bg-[#e7f8ee] text-[#22b968]' : 'bg-[#eceef2] text-[#7a7f8b]'}`}>
-                <Zap className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? 'Turbo 加速模式' : t('turboBoost')}</p>
-                <p className="text-[13px] text-[#7d818d]">{isZh ? '更快、更稳定' : t('turboBoostDesc')}</p>
-              </div>
-            </div>
-            <Switch
-              checked={turboEnabled}
-              onCheckedChange={setTurboEnabled}
-              className="h-8 w-14 border-0 data-[state=checked]:bg-[#1a1d24] data-[state=unchecked]:bg-[#d8d9dd]"
-            />
-          </div>
 
           {needsReanalyze ? (
             <Button
@@ -1599,7 +1604,13 @@ export function StudioGenesisForm() {
       if (results.length > 0) {
         return (
           <div className="space-y-6">
-            <ResultGallery images={results} aspectRatio={aspectRatio} onClear={() => setResults([])} />
+            <ResultGallery
+              images={results}
+              aspectRatio={aspectRatio}
+              onClear={clearResults}
+              editorSessionKey="studio-genesis-v2"
+              originModule="studio-genesis"
+            />
           </div>
         )
       }
@@ -1776,7 +1787,13 @@ export function StudioGenesisForm() {
     return (
       <div className="space-y-6">
         {results.length > 0 && (
-          <ResultGallery images={results} aspectRatio={aspectRatio} onClear={() => setResults([])} />
+          <ResultGallery
+            images={results}
+            aspectRatio={aspectRatio}
+            onClear={clearResults}
+            editorSessionKey="studio-genesis-v2"
+            originModule="studio-genesis"
+          />
         )}
 
         {/* Show failed slots */}
@@ -1911,7 +1928,11 @@ export function StudioGenesisForm() {
                   <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('model')}</Label>
                   <Select
                     value={model}
-                    onValueChange={(v) => setModel(v as GenerationModel)}
+                    onValueChange={(v) => {
+                      const nextModel = normalizeGenerationModel(v) as GenerationModel
+                      setModel(nextModel)
+                      setImageSize((current) => sanitizeImageSizeForModel(nextModel, current))
+                    }}
                     disabled={genParamsDisabled}
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>

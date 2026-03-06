@@ -29,6 +29,12 @@ export function friendlyError(raw: string, isZh: boolean): string {
   if (lower.includes('image_input_prompt_missing')) {
     return isZh ? '生成提示词缺失，请重新分析。' : 'Generation prompt missing. Please re-analyze.'
   }
+  if (lower.includes('image_size_unsatisfied')) {
+    return isZh ? '当前模型未按所选分辨率返回结果，请切换模型或降低分辨率。' : 'The selected model did not satisfy the requested resolution. Try a different model or lower resolution.'
+  }
+  if (lower.includes('model_unavailable')) {
+    return isZh ? '当前模型暂不可用，请切换模型后重试。' : 'This model is currently unavailable. Please try another model.'
+  }
   // If already user-friendly (contains Chinese), pass through
   if (/[\u4e00-\u9fff]/.test(raw) && !lower.includes('error') && !lower.includes('typeerror')) {
     return raw

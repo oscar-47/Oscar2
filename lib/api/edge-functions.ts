@@ -248,7 +248,7 @@ export interface GenerateImageParams {
   model: GenerationModel
   aspectRatio: AspectRatio
   imageSize: ImageSize
-  turboEnabled: boolean
+  turboEnabled?: boolean
   imageCount?: number
   count?: number
   client_job_id: string
@@ -282,7 +282,7 @@ export interface GenerateModelImageParams {
   productImage?: string
   productImages?: string[]
   count?: number
-  turboEnabled: boolean
+  turboEnabled?: boolean
   // Compatibility fields
   age?: string
   skin?: string
@@ -339,7 +339,7 @@ export interface AnalyzeSingleParams {
   model: GenerationModel
   aspectRatio: AspectRatio
   imageSize: ImageSize
-  turboEnabled: boolean
+  turboEnabled?: boolean
   trace_id: string
   client_job_id: string
   fe_attempt: number
