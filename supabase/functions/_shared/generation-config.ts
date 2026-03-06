@@ -14,9 +14,9 @@ export const OPENROUTER_MODEL_MAP: Record<string, string> = {
 
 const MODEL_IMAGE_SIZES: Record<string, { publicSizes: EdgeImageSize[]; internalSizes: EdgeImageSize[]; defaultSize: EdgeImageSize }> = {
   "or-gemini-2.5-flash": {
-    publicSizes: ["1K", "2K"],
-    internalSizes: ["1K", "2K"],
-    defaultSize: "2K",
+    publicSizes: ["1K"],
+    internalSizes: ["1K"],
+    defaultSize: "1K",
   },
   "or-gemini-3.1-flash": {
     publicSizes: ["1K", "2K"],

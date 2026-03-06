@@ -156,9 +156,9 @@ export interface ModelCapability {
 
 export const MODEL_CAPABILITIES: Partial<Record<GenerationModel, ModelCapability>> = {
   'or-gemini-2.5-flash': {
-    supportedSizes: ['1K', '2K'],
-    publicSizes: ['1K', '2K'],
-    defaultSize: '2K',
+    supportedSizes: ['1K'],
+    publicSizes: ['1K'],
+    defaultSize: '1K',
     rolloutStage: 'public',
   },
   'or-gemini-3.1-flash': {

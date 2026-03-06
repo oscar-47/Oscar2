@@ -785,7 +785,8 @@ async function normalizeImageBytes(
   }
 
   const target = targetDimensionsForLongestEdge(dimensions, targetLongestEdge);
-  const image = await Jimp.read(bytes);
+  // Jimp 0.22.x requires Buffer, not plain Uint8Array, in Deno
+  const image = await Jimp.read(Buffer.from(bytes));
   image.resize(target.w, target.h, Jimp.RESIZE_LANCZOS);
   const outputMime = mimeType.includes("jpeg") || mimeType.includes("jpg")
     ? Jimp.MIME_JPEG
@@ -834,7 +835,10 @@ async function persistGeneratedImage(params: {
   if (actualSize) {
     const actualLongestEdge = Math.max(actualSize.w, actualSize.h);
     if (actualLongestEdge < targetLongestEdge) {
-      throw new Error(`IMAGE_SIZE_UNSATISFIED requested=${params.imageSize} actual=${actualSize.w}x${actualSize.h}`);
+      // Deliver as-is instead of failing — the model returned a smaller image than
+      // requested but a usable image is better than an error.
+      console.warn(`IMAGE_SIZE_DOWNGRADED requested=${params.imageSize} actual=${actualSize.w}x${actualSize.h}`);
+      sizeStatus = "too_small";
     }
     if (actualLongestEdge > targetLongestEdge) {
       const normalized = await normalizeImageBytes(imageBytes, mimeType, targetLongestEdge);
