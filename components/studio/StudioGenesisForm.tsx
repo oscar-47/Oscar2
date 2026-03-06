@@ -20,7 +20,6 @@ import { ResultGallery, type ResultImage } from '@/components/generation/ResultG
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
-import { useSessionPersistence } from '@/lib/hooks/useSessionPersistence'
 import { uploadFiles } from '@/lib/api/upload'
 import {
   analyzeProductV2,
@@ -897,28 +896,8 @@ export function StudioGenesisForm() {
   const [retryContext, setRetryContext] = useState<RetryContext | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  // ── Session persistence ──
-  useSessionPersistence(
-    'studio-genesis-v2',
-    () => ({
-      requirements, imageCount, model, aspectRatio, imageSize, outputLanguage,
-    }),
-    (s) => {
-      if (typeof s.requirements === 'string') {
-        setRequirements(s.requirements.trim().length > 0 ? s.requirements : defaultRequirements)
-      }
-      if (typeof s.imageCount === 'number') setImageCount(s.imageCount)
-      if (typeof s.model === 'string' && isValidModel(s.model)) {
-        setModel(normalizeGenerationModel(s.model) as GenerationModel)
-      }
-      if (typeof s.aspectRatio === 'string') setAspectRatio(s.aspectRatio as AspectRatio)
-      if (typeof s.imageSize === 'string') {
-        const restoredModel = typeof s.model === 'string' ? normalizeGenerationModel(s.model) : DEFAULT_MODEL
-        setImageSize(sanitizeImageSizeForModel(restoredModel, s.imageSize as ImageSize))
-      }
-      if (typeof s.outputLanguage === 'string') setOutputLanguage(s.outputLanguage as OutputLanguage)
-    }
-  )
+  // Session persistence removed: text persisted but images didn't, causing
+  // inconsistent UX on refresh. All state now resets on page reload.
 
   const { total } = useCredits()
   const totalCost = computeCost(model, imageSize, imageCount)
