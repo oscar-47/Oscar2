@@ -171,7 +171,7 @@ Deno.serve(async (req) => {
             await supabase.rpc("add_credits", { p_user_id: userId, p_amount: pkg.credits + bonus, p_type: "subscription" });
 
             profileUpdate.has_first_subscription = true;
-            profileUpdate.subscription_plan = pkg.name?.toLowerCase();
+            profileUpdate.subscription_plan = pkg.name;
             profileUpdate.subscription_status = "active";
           } else {
             await supabase.rpc("add_credits", { p_user_id: userId, p_amount: pkg.credits, p_type: "purchased" });
@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
               .from("packages")
               .select("id,credits,name")
               .eq("type", "subscription")
-              .ilike("name", planName)
+              .eq("name", planName)
               .single();
 
             if (pkg) {

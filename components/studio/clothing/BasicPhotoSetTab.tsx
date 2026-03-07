@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
+import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { useLocale } from 'next-intl'
 import { Image as ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -294,13 +295,15 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const [requirements, setRequirements] = useState('')
   const [language, setLanguage] = useState('none')
   const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
+  const { promptProfile } = usePromptProfile(model)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4')
-  const [resolution, setResolution] = useState<ImageSize>('2K')
+  const [resolution, setResolution] = useState<ImageSize>('1K')
 
   const [steps, setSteps] = useState<ProgressStep[]>([])
   const [progress, setProgress] = useState(0)
   const {
     assets: results,
+    activeBatchId,
     appendAssets: appendResults,
     clearAssets: clearResults,
   } = useResultAssetSession('clothing-basic-photo')
@@ -326,6 +329,8 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     if (!canStart) return
     const abort = new AbortController()
     abortRef.current = abort
+    const batchId = uid()
+    const batchTimestamp = Date.now()
 
     const initialSteps: ProgressStep[] = [
       { id: 'upload', label: '上传图片', status: 'pending' },
@@ -350,6 +355,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       const { job_id: analysisJobId } = await analyzeProductV2({
         productImage: uploadedProductUrls[0],
         productImages: uploadedProductUrls,
+        promptProfile,
         clothingMode: 'product_analysis',
         // FIX #1: send imageCount so backend generates correct number of plans
         imageCount: countSelectedTypes(typeState),
@@ -388,12 +394,14 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase('input')
     }
-  }, [canStart, productImages, typeState, requirements, backendLocale, language, traceId, set])
+  }, [canStart, productImages, typeState, requirements, backendLocale, language, traceId, set, promptProfile])
 
   const handleGenerate = useCallback(async () => {
     if (!analysisBlueprint || editableImagePlans.length === 0) return
     const abort = new AbortController()
     abortRef.current = abort
+    const batchId = uid()
+    const batchTimestamp = Date.now()
 
     const initialSteps: ProgressStep[] = [
       { id: 'upload', label: '上传图片', status: 'done' },
@@ -428,6 +436,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
         {
           analysisJson: modifiedBlueprint,
           design_specs: editableDesignSpecs,
+          promptProfile,
           imageCount: editableImagePlans.length,
           targetLanguage: backendLocale,
           outputLanguage: language,
@@ -473,6 +482,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
           productImage: uploadedProductUrls[0],
           productImages: uploadedProductUrls,
           prompt: prompts[i],
+          promptProfile,
           model,
           aspectRatio,
           imageSize: resolution,
@@ -495,11 +505,16 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
           ...createResultAsset({
             url: j.result_url!,
             label: editableImagePlans[i]?.title ?? `图片 ${i + 1}`,
+            batchId,
+            batchTimestamp,
             ...extractResultAssetMetadata(j.result_data),
             originModule: 'clothing-basic-photo',
           }),
         }))
-      appendResults(newResults)
+      appendResults(newResults, {
+        activeBatchId: batchId,
+        activeBatchTimestamp: batchTimestamp,
+      })
       setPhase('complete')
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
@@ -519,6 +534,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     resolution,
     backendLocale,
     language,
+    promptProfile,
     traceId,
     set,
   ])
@@ -706,7 +722,9 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
         {results.length > 0 && (
           <ResultGallery
             images={results}
+            activeBatchId={activeBatchId}
             aspectRatio={aspectRatio}
+            onClear={clearResults}
             editorSessionKey="clothing-basic-photo"
             originModule="clothing-basic-photo"
           />

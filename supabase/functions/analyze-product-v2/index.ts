@@ -1,6 +1,12 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
+import {
+  resolvePromptProfile,
+  TA_PRO_PROMPT_PROFILE_FLAG,
+  withPromptProfileConfigKeySuffix,
+} from "../_shared/prompt-profile.ts";
+import { getBooleanSystemConfig } from "../_shared/system-config.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
@@ -19,17 +25,25 @@ Deno.serve(async (req) => {
     : "";
   const uiLang = String(body.uiLanguage ?? body.targetLanguage ?? "en");
   const isZh = uiLang.startsWith("zh");
-  const promptConfigKey = typeof body.promptConfigKey === "string" && body.promptConfigKey.trim().length > 0
+  const taProPromptProfileEnabled = await getBooleanSystemConfig(TA_PRO_PROMPT_PROFILE_FLAG, false);
+  const promptProfile = resolvePromptProfile({
+    requestedProfile: body.promptProfile ?? body.prompt_profile,
+    enabled: taProPromptProfileEnabled,
+  });
+  const basePromptConfigKey = typeof body.promptConfigKey === "string" && body.promptConfigKey.trim().length > 0
     ? body.promptConfigKey
     : clothingMode === "model_strategy"
-    ? "clothing_model_tryon_strategy_prompt_zh"
+    ? (isZh ? "clothing_subject_tryon_strategy_prompt_zh" : "clothing_subject_tryon_strategy_prompt_en")
     : isZh
     ? "batch_analysis_prompt_zh"
     : "batch_analysis_prompt_en";
+  const promptConfigKey = withPromptProfileConfigKeySuffix(basePromptConfigKey, promptProfile);
 
   const supabase = createServiceClient();
   const payload = {
     ...body,
+    promptProfile,
+    prompt_profile: promptProfile,
     modelImage: typeof body.modelImage === "string" ? body.modelImage : null,
     // Read flat fields first, fall back to nested objects for backwards compatibility
     mannequinEnabled: Boolean(body.mannequinEnabled ?? (body.mannequin as Record<string, unknown>)?.enabled ?? false),

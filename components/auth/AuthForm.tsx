@@ -110,8 +110,20 @@ export function AuthForm() {
     <div className="w-full max-w-md rounded-2xl border bg-card p-8 shadow-sm">
       {/* Logo */}
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-foreground text-background font-bold text-lg">
-          P
+        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0f172a] text-white shadow-[0_10px_20px_rgba(15,23,42,0.18)]">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M8 0L9.8 5.2L15.6 5.2L10.9 8.8L12.7 14L8 10.4L3.3 14L5.1 8.8L0.4 5.2L6.2 5.2L8 0Z"
+              fill="currentColor"
+            />
+          </svg>
         </div>
         <h1 className="text-xl font-semibold">
           {mode === 'sign-in' ? t('welcome') : t('createAccount')}

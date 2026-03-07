@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { ResultGallery } from '@/components/generation/ResultGallery'
+import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -99,8 +100,9 @@ export function AestheticMirrorForm() {
   const [batchProduct, setBatchProduct] = useState<UImg | null>(null)
   const [userPrompt, setUserPrompt] = useState('')
   const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
+  const { promptProfile } = usePromptProfile(model)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
-  const [imageSize, setImageSize] = useState<ImageSize>('2K')
+  const [imageSize, setImageSize] = useState<ImageSize>('1K')
   const [imageCount, setImageCount] = useState(1)
   const [groupCount, setGroupCount] = useState(1)
   const [phase, setPhase] = useState<Phase>('idle')
@@ -109,6 +111,9 @@ export function AestheticMirrorForm() {
   const [cards, setCards] = useState<Card[]>([])
   const {
     assets: resultAssets,
+    activeAssets: activeResultAssets,
+    activeBatchId,
+    activeBatchTimestamp,
     appendAssets: appendResultAssets,
     clearAssets: clearResultAssets,
   } = useResultAssetSession('aesthetic-mirror')
@@ -142,7 +147,6 @@ export function AestheticMirrorForm() {
   const resultPanelSubtitle = phase === 'running'
     ? (isZh ? '正在分析参考图并生成设计规范' : 'Analyzing references and generating design specs')
     : (isZh ? '上传产品图并点击分析开始' : "Upload product images and click 'Analyze' to start.")
-  const resolutionOptions = getSupportedImageSizes(model)
   const canGenerate = mode === 'single'
     ? !!singleRefFile && singleProducts.length > 0 && !isRunning && !insufficientCredits
     : batchRefs.length > 0 && !!batchProduct && !isRunning && !insufficientCredits
@@ -167,9 +171,16 @@ export function AestheticMirrorForm() {
     return job.result_url ? [{ url: job.result_url, status: 'success', referenceIndex: 0, groupIndex: 0 }] : []
   }
 
-  const runRequest = useCallback(async (request: Record<string, unknown>, slots: number, mergeIdx?: number[]) => {
+  const runRequest = useCallback(async (
+    request: Record<string, unknown>,
+    slots: number,
+    mergeIdx?: number[],
+    batchMeta?: { batchId: string; batchTimestamp: number },
+  ) => {
     const abort = new AbortController()
     abortRef.current = abort
+    const resolvedBatchId = batchMeta?.batchId ?? uid()
+    const resolvedBatchTimestamp = batchMeta?.batchTimestamp ?? Date.now()
     setPhase('running'); setProgress(10); setStatusLine(t('runningText1')); setErrorMessage(null)
     if (!mergeIdx?.length) {
       const loadingCards: Card[] = Array.from({ length: Math.max(1, slots) }, (_, i) => ({ url: null, status: 'loading' as const, referenceIndex: i, groupIndex: 0 }))
@@ -178,7 +189,13 @@ export function AestheticMirrorForm() {
     const progressTimer = setInterval(() => setProgress((p) => Math.min(90, p + 7)), 900)
     const statusTimer = setInterval(() => setStatusLine((s) => s === t('runningText1') ? t('runningText2') : s === t('runningText2') ? t('runningText3') : t('runningText1')), 1800)
     try {
-      const { job_id } = await analyzeSingle({ ...request, trace_id: uid(), client_job_id: uid(), fe_attempt: 1 } as any)
+      const { job_id } = await analyzeSingle({
+        ...request,
+        promptProfile,
+        trace_id: uid(),
+        client_job_id: uid(),
+        fe_attempt: 1,
+      } as any)
       const job = await waitForJob(job_id, abort.signal)
       const next = parseCards(job)
       if (!next.length) throw new Error(t('noResultError'))
@@ -186,6 +203,8 @@ export function AestheticMirrorForm() {
         .filter((card) => card.status === 'success' && card.url)
         .map((card) => createResultAsset({
           url: card.url!,
+          batchId: resolvedBatchId,
+          batchTimestamp: resolvedBatchTimestamp,
           ...extractResultAssetMetadata(job.result_data),
           originModule: 'aesthetic-mirror',
         }))
@@ -199,7 +218,10 @@ export function AestheticMirrorForm() {
         setCards(next)
       }
       if (successAssets.length > 0) {
-        appendResultAssets(successAssets)
+        appendResultAssets(successAssets, {
+          activeBatchId: resolvedBatchId,
+          activeBatchTimestamp: resolvedBatchTimestamp,
+        })
       }
       setProgress(100); setPhase('success')
     } catch (e: unknown) {
@@ -207,7 +229,7 @@ export function AestheticMirrorForm() {
     } finally {
       clearInterval(progressTimer); clearInterval(statusTimer); refreshCredits()
     }
-  }, [appendResultAssets, isZh, t, tc])
+  }, [appendResultAssets, isZh, promptProfile, t, tc])
 
   const handleSubmit = useCallback(async () => {
     // Set running state immediately so the button disables on click
@@ -230,6 +252,8 @@ export function AestheticMirrorForm() {
             userPrompt: finalPrompt,
           },
           products.length * imageCount,
+          undefined,
+          { batchId: uid(), batchTimestamp: Date.now() },
         )
         return
       }
@@ -246,7 +270,7 @@ export function AestheticMirrorForm() {
         aspectRatio,
         imageSize,
         userPrompt: finalPrompt,
-      }, refUrls.length * groupCount)
+      }, refUrls.length * groupCount, undefined, { batchId: uid(), batchTimestamp: Date.now() })
     } catch (e: unknown) {
       if ((e as Error).name !== 'AbortError') { setErrorMessage(friendlyError(e instanceof Error ? e.message : 'Upload failed', isZh)); setPhase('failed'); setProgress(0) }
     }
@@ -267,13 +291,16 @@ export function AestheticMirrorForm() {
       aspectRatio,
       imageSize,
       userPrompt: ctx.prompt,
-    }, refs.length, failed.map((x) => x.i))
-  }, [cards, runRequest, model, aspectRatio, imageSize])
+    }, refs.length, failed.map((x) => x.i), {
+      batchId: activeBatchId ?? uid(),
+      batchTimestamp: activeBatchTimestamp ?? Date.now(),
+    })
+  }, [activeBatchId, activeBatchTimestamp, cards, runRequest, model, aspectRatio, imageSize])
 
   const downloadAll = async () => {
     try {
       setDownloadingAll(true)
-      const urls = resultAssets.map((asset) => asset.url)
+      const urls = activeResultAssets.map((asset) => asset.url)
       for (let i = 0; i < urls.length; i++) {
         const res = await fetch(urls[i])
         if (!res.ok) continue
@@ -492,19 +519,6 @@ export function AestheticMirrorForm() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{tc('imageSize')}</Label>
-                  <Select value={imageSize} onValueChange={(v) => setImageSize(v as ImageSize)}>
-                    <SelectTrigger className="h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {resolutionOptions.map((size) => (
-                        <SelectItem key={size} value={size}>{size}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
                   <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{mode === 'batch' ? t('groupCountLabel') : tc('imageCount')}</Label>
                   <Select value={String(mode === 'batch' ? groupCount : imageCount)} onValueChange={(v) => mode === 'batch' ? setGroupCount(Number(v)) : setImageCount(Number(v))}>
                     <SelectTrigger className="h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px]">
@@ -587,9 +601,11 @@ export function AestheticMirrorForm() {
               <div className="space-y-3">
                 <ResultGallery
                   images={resultAssets}
+                  activeBatchId={activeBatchId}
                   aspectRatio={aspectRatio}
                   editorSessionKey="aesthetic-mirror"
                   originModule="aesthetic-mirror"
+                  onClear={clearResultAssets}
                 />
                 {cards.some((card) => card.status === 'failed') && (
                   <div className="flex flex-wrap content-start items-start gap-3">
@@ -601,7 +617,7 @@ export function AestheticMirrorForm() {
                   </div>
                 )}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-                  <Button variant="outline" onClick={downloadAll} disabled={resultAssets.length === 0 || downloadingAll}>{downloadingAll ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}{t('downloadAllSuccess')}</Button>
+                  <Button variant="outline" onClick={downloadAll} disabled={activeResultAssets.length === 0 || downloadingAll}>{downloadingAll ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}{t('downloadAllSuccess')}</Button>
                   <Button variant="outline" onClick={retryFailed} disabled={!cards.some((x) => x.status === 'failed') || downloadingAll}>{t('retryFailed')}</Button>
                   <Button variant="outline" onClick={handleSubmit} disabled={!canGenerate || downloadingAll}><Sparkles className="mr-1 h-4 w-4" />{t('regenerateAll')}</Button>
                   <Button variant="outline" onClick={clearResultAssets} disabled={resultAssets.length === 0 || downloadingAll}>{isZh ? '清除历史' : 'Clear History'}</Button>
@@ -616,6 +632,7 @@ export function AestheticMirrorForm() {
                 {resultAssets.length > 0 && (
                   <ResultGallery
                     images={resultAssets}
+                    activeBatchId={activeBatchId}
                     aspectRatio={aspectRatio}
                     editorSessionKey="aesthetic-mirror"
                     originModule="aesthetic-mirror"
@@ -638,6 +655,7 @@ export function AestheticMirrorForm() {
             {phase === 'idle' && resultAssets.length > 0 && (
               <ResultGallery
                 images={resultAssets}
+                activeBatchId={activeBatchId}
                 aspectRatio={aspectRatio}
                 editorSessionKey="aesthetic-mirror"
                 originModule="aesthetic-mirror"

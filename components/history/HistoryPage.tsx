@@ -176,15 +176,6 @@ function mapHistoryAssetToResultAsset(asset: HistoryAsset): ResultAsset | null {
   })
 }
 
-function formatResolutionMeta(item: HistoryAsset, isZh: boolean): string | null {
-  const parts: string[] = []
-  if (item.requestedSize) parts.push(`${isZh ? '请求' : 'Requested'} ${item.requestedSize}`)
-  if (item.deliveredSize) parts.push(`${isZh ? '交付' : 'Delivered'} ${item.deliveredSize}`)
-  if (!item.deliveredSize && item.actualSize) parts.push(`${isZh ? '实际' : 'Actual'} ${item.actualSize}`)
-  if (item.normalizedByServer) parts.push(isZh ? '已归一化' : 'Normalized')
-  return parts.length > 0 ? parts.join(' · ') : null
-}
-
 export function HistoryPage() {
   const t = useTranslations('history')
   const tEditor = useTranslations('studio.editor')
@@ -211,7 +202,6 @@ export function HistoryPage() {
     minute: '2-digit',
     hour12: false,
   }), [locale])
-  const isZh = locale.startsWith('zh')
   const displayItems = useMemo(() => {
     const merged = [...items]
     const existingIds = new Set(merged.map((item) => item.id))
@@ -400,10 +390,6 @@ export function HistoryPage() {
 
             {item.prompt && (
               <p className="line-clamp-2 text-xs leading-5 text-[#5d6372]">{item.prompt}</p>
-            )}
-
-            {formatResolutionMeta(item, isZh) && (
-              <p className="text-[11px] leading-5 text-[#6b7280]">{formatResolutionMeta(item, isZh)}</p>
             )}
 
             {item.errorMessage && (

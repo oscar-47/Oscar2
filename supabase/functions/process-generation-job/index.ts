@@ -15,6 +15,8 @@ import {
   normalizeRequestedModel,
   OPENROUTER_MODEL_MAP,
 } from "../_shared/generation-config.ts";
+import { applyPromptVariant, buildPromptRegistryKey } from "../_shared/prompt-registry.ts";
+import { sanitizePromptProfile } from "../_shared/prompt-profile.ts";
 import Jimp from "npm:jimp@0.22.12";
 import { Buffer } from "node:buffer";
 
@@ -40,12 +42,16 @@ type BlueprintImagePlan = {
   title: string;
   description: string;
   design_content: string;
+  type?: string;
 };
 
 type AnalysisBlueprint = {
   images: BlueprintImagePlan[];
   design_specs: string;
   _ai_meta: Record<string, unknown>;
+  subject_profile?: Record<string, unknown>;
+  garment_profile?: Record<string, unknown>;
+  tryon_strategy?: Record<string, unknown>;
 };
 
 type GenesisStyleDirectionKey = "sceneStyle" | "lighting" | "composition";
@@ -70,6 +76,10 @@ type GenesisAnalysisResult = {
   copy_plan: string;
   _ai_meta: Record<string, unknown>;
 };
+
+function promptLocaleFromValue(value: string): "en" | "zh" {
+  return value.startsWith("zh") ? "zh" : "en";
+}
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -254,6 +264,7 @@ function normalizeBlueprint(
           title: sanitizeString(item.title, fallbackTitle(i)),
           description: sanitizeString(item.description, fallbackDesc),
           design_content: sanitizeString(item.design_content, fallbackDesignContent(i)),
+          type: sanitizeString(item.type, ""),
         };
       })
     : [];
@@ -287,10 +298,23 @@ function normalizeBlueprint(
       : `# Overall Design Specifications\n\n## Color System\n- Primary color: Product-led\n- Secondary color: Accent based on brand tone\n- Background color: Clean neutral\n\n## Font System\n- Heading Font: Sans-serif commercial display\n- Body Font: Sans-serif readability\n- Hierarchy: Heading:Subtitle:Body = 3:1.8:1\n\n## Copy Language Guardrail\n- ${buildVisibleCopyLanguageRule(outputLanguage, false)}\n- If examples for copy, text hierarchy, or text zones are needed, write those examples directly in the target language instead of English placeholders.\n\n## Visual Language\n- Decorative Elements: Minimal geometric accents\n- Icon Style: Thin-line icons when needed\n- Negative Space Principle: High whitespace utilization\n\n## Photography Style\n- Lighting: Soft-box diffused light with rim highlights\n- Depth of Field: Product-focused with soft background blur\n- Camera Parameter Reference: ISO 100, 85mm prime\n\n## Quality Requirements\n- Resolution: 4K/HD\n- Style: Professional e-commerce photography\n- Realism: Hyper-realistic`,
   );
 
+  const subjectProfile = parsed.subject_profile && typeof parsed.subject_profile === "object" && !Array.isArray(parsed.subject_profile)
+    ? parsed.subject_profile as Record<string, unknown>
+    : undefined;
+  const garmentProfile = parsed.garment_profile && typeof parsed.garment_profile === "object" && !Array.isArray(parsed.garment_profile)
+    ? parsed.garment_profile as Record<string, unknown>
+    : undefined;
+  const tryOnStrategy = parsed.tryon_strategy && typeof parsed.tryon_strategy === "object" && !Array.isArray(parsed.tryon_strategy)
+    ? parsed.tryon_strategy as Record<string, unknown>
+    : undefined;
+
   return {
     images,
     design_specs: designSpecs,
     _ai_meta: {},
+    ...(subjectProfile ? { subject_profile: subjectProfile } : {}),
+    ...(garmentProfile ? { garment_profile: garmentProfile } : {}),
+    ...(tryOnStrategy ? { tryon_strategy: tryOnStrategy } : {}),
   };
 }
 
@@ -883,6 +907,7 @@ type StyleOutputItem = {
   delivered_size?: { w: number; h: number } | null;
   normalized_by_server?: boolean;
   size_status?: SizeStatus;
+  prompt_source?: "analysis" | "fallback";
   reference_index: number;
   group_index: number;
   product_index?: number;
@@ -981,6 +1006,47 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+const TASK_HEARTBEAT_INTERVAL_MS = 30_000;
+
+function startTaskHeartbeat(
+  supabase: ReturnType<typeof createServiceClient>,
+  taskId: string,
+): { stop: () => Promise<void> } {
+  let stopped = false;
+  let pending = Promise.resolve();
+
+  const beat = async () => {
+    const lockedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("generation_job_tasks")
+      .update({ locked_at: lockedAt })
+      .eq("id", taskId)
+      .eq("status", "running");
+    if (error) {
+      console.warn(`TASK_HEARTBEAT_FAILED task_id=${taskId} error=${error.message}`);
+    }
+  };
+
+  const enqueueBeat = () => {
+    if (stopped) return;
+    pending = pending
+      .then(() => beat())
+      .catch((error) => {
+        console.warn(`TASK_HEARTBEAT_CHAIN_FAILED task_id=${taskId} error=${String(error)}`);
+      });
+  };
+
+  const interval = setInterval(enqueueBeat, TASK_HEARTBEAT_INTERVAL_MS);
+
+  return {
+    stop: async () => {
+      stopped = true;
+      clearInterval(interval);
+      await pending;
+    },
+  };
 }
 
 async function runWithConcurrency<T>(
@@ -1179,6 +1245,8 @@ async function processAnalysisJob(
   const payload = job.payload ?? {};
   const uiLanguage = String(payload.uiLanguage ?? payload.targetLanguage ?? "en");
   const outputLanguage = String(payload.outputLanguage ?? payload.targetLanguage ?? uiLanguage ?? "en");
+  const promptProfile = sanitizePromptProfile(payload.promptProfile ?? payload.prompt_profile);
+  const promptLocale = promptLocaleFromValue(uiLanguage);
   const imageCount = Math.max(1, Math.min(15, Number(payload.imageCount ?? 1)));
   const requirements = sanitizeString(payload.requirements, "");
   const studioType = sanitizeString(payload.studioType, "");
@@ -1352,12 +1420,22 @@ User brief:
 ${requirements || "(No extra brief provided. Analyze from product images only.)"}
 `;
 
+    const genesisAnalysisRegistryKey = buildPromptRegistryKey({
+      flow: "genesis",
+      stage: "analysis",
+      locale: promptLocale,
+      profile: promptProfile,
+    });
+
     const genesisMessages: Array<Record<string, unknown>> = [
-      { role: "system", content: genesisSystemPrompt },
+      {
+        role: "system",
+        content: applyPromptVariant(genesisAnalysisRegistryKey, "system", genesisSystemPrompt),
+      },
       {
         role: "user",
         content: [
-          { type: "text", text: genesisUserPrompt },
+          { type: "text", text: applyPromptVariant(genesisAnalysisRegistryKey, "user", genesisUserPrompt) },
           { type: "text", text: "Product reference images:" },
           ...imageDataUrls.map((url) => ({ type: "image_url", image_url: { url } })),
         ],
@@ -1397,6 +1475,7 @@ ${requirements || "(No extra brief provided. Analyze from product images only.)"
       provider: "qnaigc",
       image_count: imageCount,
       target_language: outputLanguage,
+      prompt_profile: promptProfile,
       studio_type: studioType,
       parse_failed: parseFailed,
       parse_warning: parseFailed ? "ANALYSIS_JSON_PARSE_FAILED_FALLBACK_USED" : null,
@@ -1540,12 +1619,22 @@ User brief:
 ${requirements || "(No extra brief provided. Infer the plan from the references and selected modules.)"}
 `;
 
+    const ecomDetailAnalysisRegistryKey = buildPromptRegistryKey({
+      flow: "ecom-detail",
+      stage: "analysis",
+      locale: promptLocale,
+      profile: promptProfile,
+    });
+
     const detailMessages: Array<Record<string, unknown>> = [
-      { role: "system", content: ecomDetailSystemPrompt },
+      {
+        role: "system",
+        content: applyPromptVariant(ecomDetailAnalysisRegistryKey, "system", ecomDetailSystemPrompt),
+      },
       {
         role: "user",
         content: [
-          { type: "text", text: ecomDetailUserPrompt },
+          { type: "text", text: applyPromptVariant(ecomDetailAnalysisRegistryKey, "user", ecomDetailUserPrompt) },
           { type: "text", text: "Product reference images:" },
           ...imageDataUrls.map((url) => ({ type: "image_url", image_url: { url } })),
         ],
@@ -1585,6 +1674,7 @@ ${requirements || "(No extra brief provided. Infer the plan from the references 
       provider: "qnaigc",
       image_count: imageCount,
       target_language: outputLanguage,
+      prompt_profile: promptProfile,
       studio_type: studioType,
       module_count: modules.length,
       parse_failed: parseFailed,
@@ -1616,8 +1706,12 @@ ${requirements || "(No extra brief provided. Infer the plan from the references 
     return;
   }
 
+  const isZhUi = uiLanguage.startsWith("zh");
+
   const defaultSystemPrompt = isModelStrategy
-    ? "你是一位顶级电商视觉导演。你的任务是分析上传的服装图片和模特参考图，并根据用户的设计需求，为一次模特拍摄活动制定一套完整的视觉指南。你需要先定义全局的视觉调性，然后针对每一张照片（镜头）制定极具营销感的构图、卖点展示方案。必须且仅输出一个合法的 JSON 对象，不要包含 Markdown 代码块标签或任何说明文字。"
+    ? (isZhUi
+      ? "你是一位顶级电商视觉导演与试穿策划专家。你的任务是分析上传的服装图片与参考主体图，为一次参考主体试穿拍摄制定完整视觉蓝图。主体可能是人类、宠物或其他非人主体，严禁强行解释成人类模特。必须先识别主体类型，再锁定主体身份/物种/体态，再为每一种已选图片类型输出独立镜头方案。服装必须自然穿在参考主体身上，不能漂浮、不能改款、不能把动物变成人，也不能把人变成动物。必须且仅输出合法 JSON，不要 Markdown 代码块或说明文字。"
+      : "You are a top-tier e-commerce visual director and try-on planning expert. Analyze the uploaded garment images and the reference subject image, then build a complete try-on blueprint. The subject may be a human, a pet, or another non-human subject, so never force the subject into a human fashion-model interpretation. Identify the subject type first, lock subject identity/species/body traits, and produce one independent plan for each selected image type. The garment must be naturally worn by the reference subject. Do not let the garment float, do not redesign it, do not turn animals into humans, and do not turn humans into animals. Return valid JSON only with no markdown fences or explanation.")
     : uiLanguage === "zh"
     ? isClothingMode
       ? "你是顶级电商视觉总监与服装分析专家。你的任务是对服装产品图进行深度视觉解构，输出精确的商业图片蓝图。分析时必须识别面料类型、提取精确颜色色值（十六进制）、记录关键设计细节，并为每种图片类型制定专业的拍摄方案。只输出 JSON，不要 markdown 代码块。"
@@ -1652,37 +1746,114 @@ Important Logic Rules:
 
 Return only the raw JSON string. No markdown fences. No explanatory text.`;
 
-  const isZhUi = uiLanguage.startsWith("zh");
-
-  const modelStrategyUserPrompt = `
-你需要基于服装调性和模特特质，输出如下 JSON 结构（不要 Markdown 代码块）：
+  const modelStrategyUserPrompt = isZhUi
+    ? `
+你需要基于服装图片与参考主体图，输出如下 JSON 结构（不要 Markdown 代码块）：
 {
   "design_specs": "...",
+  "subject_profile": {
+    "subject_type": "human | pet | other | unknown",
+    "identity_anchor": "主体身份/物种锚点",
+    "body_anchor": "体态与轮廓锚点",
+    "pose_anchor": "当前姿态锚点",
+    "species_notes": "当主体不是人类时，对物种/毛色/头部/四肢特征的补充说明",
+    "lock_rules": ["主体不可偏离规则 1", "主体不可偏离规则 2", "主体不可偏离规则 3"]
+  },
+  "garment_profile": {
+    "category": "服装品类",
+    "color_anchor": "主色与十六进制色值",
+    "material": "面料/材质",
+    "key_features": ["关键特征 1", "关键特征 2", "关键特征 3"]
+  },
+  "tryon_strategy": {
+    "selected_type_count": ${imageCount},
+    "summary": "整组试穿策略摘要",
+    "wear_region": "upper | lower | full_body | accessory | mixed",
+    "per_image_rules": [
+      { "title": "方案标题", "type": "方案类型", "strategy": "该类型的试穿策略摘要" }
+    ]
+  },
   "images": [{ "title": "...", "description": "...", "design_content": "..." }]
 }
 
+强规则：
+- 必须先识别 subject_type。若参考主体是狗、猫或其他动物，必须明确写 pet 或 other，严禁写成人类模特。
+- 主体锁定优先级最高：必须保持参考主体的物种、身份感、体态、姿势方向、头部与四肢结构特征一致。
+- 服装锁定优先级同样极高：必须保持上传服装的颜色、材质、轮廓、版型、图案、logo、结构和关键工艺细节。
+- 服装必须穿在参考主体身上，不能漂浮，不能作为悬挂静物，不能变成人台展示，不能换成其他服装。
+- 若主体为非人类，禁止出现“肤色/人种/发型/五官相似度”这类只适用于人类模特的描述；必须改用物种、毛色、头部特征、四肢比例、体态等锚点。
+- 若主体为人类，可以写身份一致性，但不能把这条规则泛化到所有主体。
+- images 数组必须严格输出正好 ${imageCount} 个方案，顺序必须与下面给定的类型顺序一致：
+${clothingRuleBlock}
+
 design_specs 必须包含以下五个维度：
-
-**1. 核心视觉基调 (Overall Visual Theme)**
-基于图片特征定义整组照片的视觉灵魂、背景环境设定、全局色彩调性。
-
-**2. 全局摄影参数建议 (Global Photography Specs)**
-镜头焦段建议、全局布光原则、画质与技术参数标准。
-
-**3. 模特基础画像 (Model Profile)**
-基于模特参考图，识别并提取 4 个核心特征：性别、肤色/人种、发色、发型。表述极其精炼（如：亚裔女性，肤色白皙，棕黑色直短发），仅作为身份锁定的锚点，严禁过度描述。
-
-**4. 服装基础特征 (Garment Core Features)**
-服装核心特征：色彩 + 材质 + 版型的（服装名称），仅作为服装锚点，严禁过度描述。
-
-**5. 文字系统规范 (Typography System)**
-标题字体类型与颜色（十六进制）、正文字体、字号层级（3:1.8:1）、字体风格。
+1. 核心视觉基调
+2. 全局摄影参数建议
+3. 主体识别摘要（强调主体类型与锁定特征）
+4. 服装基础特征（颜色/材质/版型/关键细节）
+5. 文字系统规范
 ${outputLanguage === "none" ? "当前目标语言为纯视觉（无文字），文字内容统一输出 None。" : `文字内容使用 ${outputLanguageLabel(outputLanguage)}。`}
 
-images 数组输出正好 ${imageCount} 个镜头方案，每个方案 design_content 必须包含：
-**设计目标** | **模特要求**（姿势/表情/动作，并强调必须与模特参考图保持绝对的面部和身份一致性）| **服饰工艺焦点** | **构图方案**（景别+占比+布局）| **光影方案** | **背景描述** | **配色方案**（含精确 hex 色值）| **文字内容** | **视觉氛围关键词**
+每个 images[i].design_content 必须明确包含：
+**图片类型** | **主体识别** | **服装识别** | **试穿策略** | **构图方案** | **光影方案** | **背景描述** | **配色方案**（含精确 hex 色值） | **文字内容** | **视觉氛围关键词**
+
+如果标题为“人台图”，在主体试穿场景里必须把它解释为“主体标准展示图”，不能真的改成无人台。
 
 用户需求：${requirements || "（无额外需求）"}
+`
+    : `
+Analyze the garment images together with the reference subject image and return this JSON shape only:
+{
+  "design_specs": "...",
+  "subject_profile": {
+    "subject_type": "human | pet | other | unknown",
+    "identity_anchor": "identity or species anchor",
+    "body_anchor": "body shape anchor",
+    "pose_anchor": "pose anchor",
+    "species_notes": "extra notes for non-human subjects",
+    "lock_rules": ["subject lock rule 1", "subject lock rule 2", "subject lock rule 3"]
+  },
+  "garment_profile": {
+    "category": "garment category",
+    "color_anchor": "dominant color with hex value",
+    "material": "fabric/material",
+    "key_features": ["feature 1", "feature 2", "feature 3"]
+  },
+  "tryon_strategy": {
+    "selected_type_count": ${imageCount},
+    "summary": "set-level try-on strategy summary",
+    "wear_region": "upper | lower | full_body | accessory | mixed",
+    "per_image_rules": [
+      { "title": "plan title", "type": "plan type", "strategy": "per-image try-on strategy" }
+    ]
+  },
+  "images": [{ "title": "...", "description": "...", "design_content": "..." }]
+}
+
+Hard rules:
+- Identify subject_type first. If the reference subject is a dog, cat, or any animal, mark it as pet or other. Never force it into a human fashion-model interpretation.
+- Subject lock is highest priority: preserve species, identity feel, body shape, facing direction, head traits, and limb structure from the reference subject.
+- Garment lock is equally strict: preserve garment color, material, silhouette, construction, logo, print, and key details from the uploaded garment references.
+- The garment must be worn naturally by the reference subject. It must not float, hang separately, become a mannequin-only display, or turn into another garment.
+- For non-human subjects, do not use human-only descriptors such as skin tone, ethnicity, hairstyle, or facial-feature similarity. Use species, coat/fur color, head traits, limb proportions, and body posture instead.
+- If the subject is human, identity consistency can be stated, but do not generalize human-only constraints to every subject.
+- The images array must contain exactly ${imageCount} plans and follow this exact order:
+${clothingRuleBlock}
+
+design_specs must cover:
+1. Overall visual theme
+2. Global photography specs
+3. Subject recognition summary
+4. Garment core traits
+5. Typography system
+${outputLanguage === "none" ? "The target output is visual-only. Keep text content as None." : `Visible text must use ${outputLanguageLabel(outputLanguage)}.`}
+
+Each images[i].design_content must explicitly include:
+Shot type | Subject recognition | Garment recognition | Try-on strategy | Composition | Lighting | Background | Color system with exact hex values | Text content | Atmosphere keywords
+
+If a title is “人台图”, reinterpret it as a standardized subject showcase in this try-on flow rather than a literal mannequin-only shot.
+
+User brief: ${requirements || "(no extra brief provided)"}
 `;
 
   const defaultUserPrompt = isModelStrategy
@@ -1834,8 +2005,21 @@ ${requirements || "(no extra brief provided)"}
       defaultUserPrompt,
     ),
   );
+  const analysisFlow = isModelStrategy
+    ? "clothing-tryon"
+    : isClothingMode
+    ? "clothing-basic"
+    : "default";
+  const analysisPromptRegistryKey = buildPromptRegistryKey({
+    flow: analysisFlow,
+    stage: "analysis",
+    locale: promptLocale,
+    profile: promptProfile,
+  });
+  const finalSystemPrompt = applyPromptVariant(analysisPromptRegistryKey, "system", systemPrompt);
+  const finalUserPrompt = applyPromptVariant(analysisPromptRegistryKey, "user", userPrompt);
 
-  const contentParts: Array<Record<string, unknown>> = [{ type: "text", text: userPrompt }];
+  const contentParts: Array<Record<string, unknown>> = [{ type: "text", text: finalUserPrompt }];
   if (clothingMode === "model_strategy" && modelImageDataUrl) {
     contentParts.push({ type: "text", text: "Reference model image (identity/body/pose guidance):" });
     contentParts.push({ type: "image_url", image_url: { url: modelImageDataUrl } });
@@ -1846,7 +2030,7 @@ ${requirements || "(no extra brief provided)"}
   }
 
   const messages: Array<Record<string, unknown>> = [
-    { role: "system", content: systemPrompt },
+    { role: "system", content: finalSystemPrompt },
     {
       role: "user",
       content: contentParts,
@@ -1887,6 +2071,7 @@ ${requirements || "(no extra brief provided)"}
     provider: "qnaigc",
     image_count: imageCount,
     target_language: outputLanguage,
+    prompt_profile: promptProfile,
     prompt_config_key: promptConfigKey,
     clothing_mode: clothingMode || null,
     mannequin_enabled: mannequinEnabled,
@@ -1927,6 +2112,7 @@ async function processImageGenJob(
   const startedAt = Date.now();
   const payload = job.payload ?? {};
   const model = normalizeRequestedModel(String(payload.model ?? "or-gemini-3.1-flash"));
+  const promptProfile = sanitizePromptProfile(payload.promptProfile ?? payload.prompt_profile);
   const imageRoute = resolveImageRoute(model);
   const imageSize = payload.imageSize == null
     ? getDefaultImageSizeForModel(model)
@@ -2124,6 +2310,11 @@ async function processImageGenJob(
       normalized_by_server: persisted.normalizedByServer,
       mime_type: persisted.mimeType,
       object_path: persisted.objectPath,
+      metadata: {
+        prompt_profile: promptProfile,
+        style_constraint_applied: Boolean(styleConstraintPrompt),
+        style_constraint_source: styleConstraintSource,
+      },
     };
 
     const resultData: Record<string, unknown> = resultDataBase;
@@ -2161,21 +2352,33 @@ async function processImageGenJob(
 }
 
 const REFINEMENT_ANALYSIS_SYSTEM_PROMPT =
-  `你是一名专业的商业产品精修师，需要对所有品类的产品进行专业级精修处理，以达到崭新、高级且极具吸引力的视觉效果。必须强调：产品外观需与原图完全一致，包含造型、尺寸比例、细节结构、标识/Logo的位置与样式，不得随意修改产品原有形态、细节与核心特征。
+  `你是一名专业的商业产品精修策略师。你的任务不是直接生成图片，而是先根据输入产品图生成一条可用于图像模型的中文精修提示词。
 
-核心精修要求：
-1. 背景规范：将背景统一替换为纯净无杂色的纯白，色号为 #FFFFFF（RGB: 255, 255, 255），确保背景无渐变、无阴影、无任何干扰元素，让产品主体成为绝对视觉焦点。
-2. 质感还原与强化：强化产品材质的原始特性，如玻璃的通透感、布料的柔软纹理、塑料的细腻哑光等，并全面优化，去除表面划痕、污渍、指纹、氧化痕迹等所有瑕疵，使其呈现崭新无瑕的状态。
-3. 光影与立体感优化：采用专业商业棚拍级布光，通过添加柔和渐变的底部倒影、细腻的高光层次和自然的阴影过渡，增强产品的立体感与悬浮感，让产品从背景中脱颖而出，光影贴合产品原有形态，层次自然不突兀。
-4. 细节精致度提升：强化产品上的文字、Logo、标签等元素的锐利度，确保边缘干净利落、颜色均匀饱满；处理接缝、螺丝、边角等细节，使其整齐无痕，精准还原产品本身的精致肌理。
-5. 色彩与氛围营造：根据产品的定位与目标受众，调整整体色调至舒适高级的状态，做到无偏色、不发灰、色彩饱和度适中；美妆类可营造清新治愈感，电子类可营造科技未来感，家居类可营造温暖氛围感。添加轻微的空气感光晕或环境光效提升吸引力，光效不抢占产品主体视觉。
-6. 构图优化：构图上遵循居中或黄金分割原则，确保画面平衡、专业，产品在画面中占比合理，无裁切不全、位置偏移等问题。
+最高优先级规则：
+1. 产品身份锁定：产品外观必须与原图完全一致，包括品类、造型、尺寸比例、轮廓、结构、开孔、Logo/文字位置、标签、印花、硬件、纹理、缝线与所有关键设计特征，不得改形、改色、改结构、改 Logo。
+2. 精修提示词必须具体，不能泛化，必须准确描述产品主体、材质特征、细节部位、干扰物、修复动作、质感增强方式和商业布光要求。
+3. 不要把背景统一写死为纯白。背景处理会在下游流程中追加，你这里专注于产品主体识别、干扰识别、材质修复、细节强化和商业级质感提升。
 
-金属材质特殊要求：金属材质按原图特性还原并强化，普通金属必须统一加上一句：完美镀铬表面。哑光/拉丝/磨砂等金属需强化其低反光、细腻的原始材质质感，无额外反光干扰。
+提示词必须尽量覆盖以下信息：
+- 产品主体识别：品类、主色、材质、结构、关键部件、Logo/文字位置
+- 非主体干扰识别：手部、支架、背景杂物、污渍、指纹、反射污染、压痕、划痕、褶皱、脏污
+- 材质专项处理：皮革、金属、玻璃、布料、塑料、橡胶、木质、纸盒等真实质感还原与强化
+- 细节强化：边缘、接缝、标签、品牌字样、局部锐度、镜头框、扣件、螺丝、切边
+- 商业布光：高光层次、阴影过渡、立体感、悬浮感、空气感，但不能抢主体
 
-输出格式：单行文本精修提示词，中文描述，不要输出 JSON，直接输出文本即可。`;
+额外强规则：
+- 若图中存在遮挡物、手持、道具、支撑件、背景杂物或脏污，必须明确写出“去除”或“清理”动作。
+- 金属材质要区分镜面镀铬、拉丝、磨砂、哑光等，不可一概而论。
+- Logo、文字、标签、印花若可见，必须要求边缘锐利、位置不变、内容不变。
+- 输出必须是单行中文提示词，不要 JSON，不要 Markdown，不要解释，不要分点。`;
 
 async function generateRefinementPrompt(productDataUrl: string): Promise<string> {
+  const refinementAnalysisTimeoutMs = clampInt(
+    Deno.env.get("REFINEMENT_ANALYSIS_TIMEOUT_MS") ?? 20_000,
+    5_000,
+    60_000,
+    20_000,
+  );
   const response = await callQnChatAPI({
     messages: [
       { role: "system", content: REFINEMENT_ANALYSIS_SYSTEM_PROMPT },
@@ -2183,11 +2386,16 @@ async function generateRefinementPrompt(productDataUrl: string): Promise<string>
         role: "user",
         content: [
           { type: "image_url", image_url: { url: productDataUrl } },
-          { type: "text", text: "请分析这张产品图，生成一段专业的商业级精修提示词，描述如何对该产品进行精修处理。" },
+          {
+            type: "text",
+            text:
+              "请分析这张产品图，生成一段专业的商业级精修提示词。请务必识别产品主体、材质、颜色、结构、Logo/文字位置、可见瑕疵、遮挡物或道具，并明确写出对应的去除、修复、锐化、质感增强和商业布光要求。",
+          },
         ],
       },
     ],
     maxTokens: 600,
+    timeoutMsOverride: refinementAnalysisTimeoutMs,
   });
   // deno-lint-ignore no-explicit-any
   const content = (response as any)?.choices?.[0]?.message?.content;
@@ -2200,10 +2408,12 @@ async function generateRefinementPrompt(productDataUrl: string): Promise<string>
 async function processStyleReplicateJob(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
+  taskAttempts = 1,
 ): Promise<void> {
   const startedAt = Date.now();
   const payload = job.payload ?? {};
   const modelName = normalizeRequestedModel(String(payload.model ?? "or-gemini-3.1-flash"));
+  const promptProfile = sanitizePromptProfile(payload.promptProfile ?? payload.prompt_profile);
   const imageRoute = resolveImageRoute(modelName);
   const imageSize = payload.imageSize == null
     ? getDefaultImageSizeForModel(modelName)
@@ -2290,13 +2500,21 @@ async function processStyleReplicateJob(
   const userPrompt = typeof payload.userPrompt === "string" ? payload.userPrompt.trim() : "";
   const styleConstraintPrompt = normalizeStyleConstraintPrompt(payload.styleConstraint);
   const styleConstraintSource = normalizeStyleConstraintSource(payload.styleConstraint);
+  const stylePromptRegistryKey = buildPromptRegistryKey({
+    flow: mode === "refinement" ? "refinement" : mode === "batch" ? "aesthetic-batch" : "aesthetic-single",
+    stage: "transfer",
+    locale: mode === "refinement" ? "zh" : "en",
+    profile: promptProfile,
+  });
   const refinementBasePrompt =
     "作为专业电商图片精修模型,在不改变产品本体的前提下，对单张产品图进行商业级精修。仅做精修优化,允许进行瑕疵清理、边缘优化、光影校正、色彩与清晰度增强。";
   const refinementWhiteBackgroundPrompt = "除产品主体外的背景与非主体元素统一为纯白背景干净无杂物。";
+  const refinementOriginalBackgroundPrompt =
+    "保留原图背景结构与场景关系，仅清理杂物、污渍、手部、支架或其他非主体干扰，整体提升为商业级成片质感。";
   const requestSize = scaledRequestSize(aspectRatio, imageSize);
   const styleTimeoutMs = Number(
     mode === "refinement"
-      ? (Deno.env.get("REFINEMENT_IMAGE_TIMEOUT_MS") ?? "90000")
+      ? (Deno.env.get("REFINEMENT_IMAGE_TIMEOUT_MS") ?? "45000")
       : (Deno.env.get("STYLE_REPLICATE_IMAGE_TIMEOUT_MS")
         ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS")
         ?? "120000"),
@@ -2326,10 +2544,25 @@ async function processStyleReplicateJob(
   };
 
   // Refinement analysis: cache by productUrl to avoid duplicate vision calls per product image
-  const refinementPromptCache = new Map<string, Promise<string>>();
-  const getRefinementPrompt = (productUrl: string): Promise<string> => {
+  const refinementPromptCache = new Map<string, Promise<{ prompt: string | null; source: "analysis" | "fallback" }>>();
+  const refinementAnalysisStats = {
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+  };
+  const getRefinementPrompt = (productUrl: string): Promise<{ prompt: string | null; source: "analysis" | "fallback" }> => {
     if (!refinementPromptCache.has(productUrl)) {
-      refinementPromptCache.set(productUrl, generateRefinementPrompt(productUrl));
+      refinementPromptCache.set(productUrl, (async () => {
+        refinementAnalysisStats.attempted += 1;
+        try {
+          const prompt = await generateRefinementPrompt(productUrl);
+          refinementAnalysisStats.succeeded += 1;
+          return { prompt, source: "analysis" };
+        } catch {
+          refinementAnalysisStats.failed += 1;
+          return { prompt: null, source: "fallback" };
+        }
+      })());
     }
     return refinementPromptCache.get(productUrl)!;
   };
@@ -2345,6 +2578,7 @@ async function processStyleReplicateJob(
     object_path: null,
     mime_type: null,
     provider_size: null,
+    prompt_source: undefined,
     reference_index: unit.reference_index,
     group_index: unit.group_index,
     product_index: unit.product_index,
@@ -2383,6 +2617,7 @@ async function processStyleReplicateJob(
         },
         metadata: {
           requested_aspect_ratio: aspectRatio,
+          prompt_profile: promptProfile,
           reference_style_summary: mode === "refinement" ? null : "Style transfer from reference image",
           style_constraint_applied: Boolean(styleConstraintPrompt),
           style_constraint_source: styleConstraintSource,
@@ -2397,6 +2632,15 @@ async function processStyleReplicateJob(
           unit_cost: unitCost,
           total_requested_cost: unitCost * units.length,
           batch_size: progressBatchSize,
+          refinement_prompt_mode: mode === "refinement"
+            ? refinementAnalysisStats.succeeded > 0
+              ? (refinementAnalysisStats.failed > 0 ? "analysis+fallback" : "analysis_only")
+              : "fallback_only"
+            : null,
+          refinement_analysis_attempted_count: mode === "refinement" ? refinementAnalysisStats.attempted : 0,
+          refinement_analysis_succeeded_count: mode === "refinement" ? refinementAnalysisStats.succeeded : 0,
+          refinement_analysis_failed_count: mode === "refinement" ? refinementAnalysisStats.failed : 0,
+          worker_nudge_retry_count: Math.max(0, Number(taskAttempts ?? 1) - 1),
         },
       },
     };
@@ -2426,26 +2670,23 @@ async function processStyleReplicateJob(
 
   const buildPrompt = (unit: StyleReplicateUnit, refinementAnalysisPrompt?: string): string => {
     if (unit.mode === "refinement") {
+      const promptParts: string[] = [];
       if (refinementAnalysisPrompt) {
-        // Two-stage: use vision-model-generated product-specific refinement prompt
-        const parts = [refinementAnalysisPrompt];
-        if (styleConstraintPrompt) parts.push(styleConstraintPrompt);
-        if (userPrompt) parts.push(userPrompt);
-        return parts.join("\n");
+        promptParts.push(refinementAnalysisPrompt);
+      } else {
+        promptParts.push(refinementBasePrompt);
       }
-      // Fallback: use hardcoded generic prompt
-      const promptParts = [refinementBasePrompt];
-      if (backgroundMode === "white") {
-        promptParts.push(refinementWhiteBackgroundPrompt);
-      }
+      promptParts.push(backgroundMode === "white"
+        ? refinementWhiteBackgroundPrompt
+        : refinementOriginalBackgroundPrompt);
       promptParts.push(`输出比例为 ${aspectRatio}，参考尺寸为 ${requestSize}。`);
-      if (styleConstraintPrompt) {
-        promptParts.push(styleConstraintPrompt);
-      }
       if (userPrompt) {
         promptParts.push(userPrompt);
       }
-      return promptParts.join("\n");
+      if (styleConstraintPrompt) {
+        promptParts.push(styleConstraintPrompt);
+      }
+      return applyPromptVariant(stylePromptRegistryKey, "prompt", promptParts.join("\n"));
     }
 
     // Direct style transfer prompt — product image is Image 1 (primary), reference image is Image 2.
@@ -2463,7 +2704,7 @@ async function processStyleReplicateJob(
       promptParts.push(`Additional instructions: ${userPrompt}`);
     }
     promptParts.push("ABSOLUTE CONSTRAINT: Regardless of any other instructions above, the product from Image 1 must remain visually identical in shape, color, material, texture, logo, and all design details. Product identity is non-negotiable.");
-    return promptParts.join(" ");
+    return applyPromptVariant(stylePromptRegistryKey, "prompt", promptParts.join(" "));
   };
 
   await runWithConcurrency(units, batchConcurrency, async (unit, index) => {
@@ -2487,7 +2728,15 @@ async function processStyleReplicateJob(
       const productDataUrl = await getCachedDataUrl(unit.product_image);
       const referenceDataUrl = unit.reference_image ? await getCachedDataUrl(unit.reference_image) : null;
 
-      const prompt = buildPrompt(unit);
+      let refinementPrompt: string | null = null;
+      let promptSource: "analysis" | "fallback" | undefined = undefined;
+      if (unit.mode === "refinement") {
+        const promptResult = await getRefinementPrompt(unit.product_image);
+        refinementPrompt = promptResult.prompt;
+        promptSource = promptResult.source;
+      }
+
+      const prompt = buildPrompt(unit, refinementPrompt ?? undefined);
       let chosen: Omit<StyleOutputItem, "reference_index" | "group_index" | "unit_status" | "error_message"> | null = null;
       let lastProviderSize: string | null = null;
 
@@ -2536,6 +2785,7 @@ async function processStyleReplicateJob(
           delivered_size: persisted.deliveredSize,
           normalized_by_server: persisted.normalizedByServer,
           size_status: persisted.sizeStatus,
+          prompt_source: promptSource,
         };
         break;
       }
@@ -2564,6 +2814,7 @@ async function processStyleReplicateJob(
         object_path: null,
         mime_type: null,
         provider_size: null,
+        prompt_source: promptSource,
         reference_index: unit.reference_index,
         group_index: unit.group_index,
         product_index: unit.product_index,
@@ -2657,16 +2908,19 @@ Deno.serve(async (req) => {
   if (!claimed) return ok({ ok: true, status: "no_available_task", job_id: job.id });
 
   const task = claimed as TaskRow;
+  const heartbeat = startTaskHeartbeat(supabase, task.id);
   try {
     if (task.task_type === "ANALYSIS") {
       await processAnalysisJob(supabase, job as GenerationJobRow);
     } else if (task.task_type === "IMAGE_GEN") {
       await processImageGenJob(supabase, job as GenerationJobRow);
     } else if (task.task_type === "STYLE_REPLICATE") {
-      await processStyleReplicateJob(supabase, job as GenerationJobRow);
+      await processStyleReplicateJob(supabase, job as GenerationJobRow, Number(task.attempts ?? 1));
     } else {
       throw new Error(`UNSUPPORTED_TASK_TYPE ${task.task_type}`);
     }
+
+    await heartbeat.stop();
 
     const { error: taskSuccessError } = await supabase
       .from("generation_job_tasks")
@@ -2682,6 +2936,7 @@ Deno.serve(async (req) => {
 
     return ok({ ok: true, status: "processed", job_id: job.id, task_type: task.task_type });
   } catch (e) {
+    await heartbeat.stop();
     const attempts = Number(task.attempts ?? 1);
     const retryable = attempts < 3;
     const runAfter = new Date(Date.now() + 10_000).toISOString();

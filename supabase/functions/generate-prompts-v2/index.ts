@@ -2,6 +2,9 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { options, err } from "../_shared/http.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { getQnChatConfig } from "../_shared/qn-image.ts";
+import { applyPromptVariant, buildPromptRegistryKey } from "../_shared/prompt-registry.ts";
+import { resolvePromptProfile, TA_PRO_PROMPT_PROFILE_FLAG } from "../_shared/prompt-profile.ts";
+import { getBooleanSystemConfig } from "../_shared/system-config.ts";
 
 function sanitizeLanguage(value: unknown): string {
   const v = String(value ?? "en").toLowerCase();
@@ -62,6 +65,21 @@ function buildVisibleCopyLanguageRule(value: string, isZh: boolean): string {
     : `All added visible copy must use ${languageLabel} only and must not mix in other languages. Existing product text such as logos, original packaging text, model numbers, ingredient tables, and technical units is not added design copy.`;
 }
 
+function parseAnalysisRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
   if (req.method !== "POST") return err("BAD_REQUEST", "Method not allowed", 405);
@@ -79,9 +97,16 @@ Deno.serve(async (req) => {
     clothingMode?: string;
     styleConstraint?: unknown;
     module?: string;
+    promptProfile?: string;
+    prompt_profile?: string;
   } | null;
   if (!body?.analysisJson) return err("BAD_REQUEST", "analysisJson is required");
 
+  const taProPromptProfileEnabled = await getBooleanSystemConfig(TA_PRO_PROMPT_PROFILE_FLAG, false);
+  const promptProfile = resolvePromptProfile({
+    requestedProfile: body.promptProfile ?? body.prompt_profile,
+    enabled: taProPromptProfileEnabled,
+  });
   const language = sanitizeLanguage(body.outputLanguage ?? body.targetLanguage ?? "en");
   const clothingModeVal = typeof body.clothingMode === "string" ? body.clothingMode.trim() : "";
   const module = typeof body.module === "string" ? body.module.trim() : "";
@@ -89,6 +114,8 @@ Deno.serve(async (req) => {
   const isModelTryOn = clothingModeVal === "model_prompt_generation";
   const isGenesisModule = module === "genesis";
   const isEcomDetailModule = module === "ecom-detail";
+  const analysisRecord = parseAnalysisRecord(body.analysisJson);
+  const isGenesisBlueprintMode = isGenesisModule && Array.isArray(analysisRecord?.images);
   const ecomDetailCopyRuleZh = buildVisibleCopyLanguageRule(language, true);
   const ecomDetailCopyRuleEn = buildVisibleCopyLanguageRule(language, false);
   const analysisJson = typeof body.analysisJson === "string"
@@ -160,31 +187,109 @@ Universal requirements:
 - End every prompt with: 8K resolution, ultra-clear, maximum sharpness, commercial photography quality, zero visual artifacts.
 - Output a strict JSON array only; each element must contain prompt, title, negative_prompt, marketing_hook, priority fields; no Markdown; no explanations.`;
 
-  const systemPromptModelTryOn =
-    `你是顶级电商模特试穿图提示词工程专家。根据拍摄策略蓝图，为每个镜头生成一段极具指导性的图像生成提示词。
+  const systemPromptModelTryOnZh =
+    `你是顶级电商主体试穿图提示词工程专家。根据拍摄策略蓝图，为每个镜头生成一段可直接出图的高约束提示词。
 
-每段提示词必须严格按以下11条编号格式输出（中文），最后加强制约束：
+核心原则：
+- 主体可能是人类、宠物或其他非人主体，绝不能默认解释为真人模特。
+- 必须严格保持参考主体的物种/身份感/体态/姿势方向一致。
+- 必须严格保持上传服装的颜色、材质、版型、图案、logo、结构与关键工艺细节一致。
+- 服装必须真实穿在参考主体身上，不能漂浮、不能挂拍、不能变成人台、不能换款。
+- 如果蓝图标题是“人台图”，在主体试穿场景中应解释为“主体标准展示图”，而不是无人台。
+- 对非人主体，必须使用物种、毛色、头部特征、四肢比例、体态等锚点；禁止使用肤色、人种、发型、五官相似度等人类专属表达。
 
-1.主体：[模特身份描述（从蓝图模特画像提取，强调必须与参考图保持绝对一致性）+ 姿势/神态，穿着[服装全称，含颜色/材质/关键设计细节]]
-2.构图：[景别（七分身/全身/半身），布局方式（黄金分割/居中等），模特占比（如65%-70%），预留空间方向]
-3.背景：[场景类型 + 前景/中景/背景三层描述 + 景深效果（浅景深/Bokeh等）]
-4.光影：[光源类型 + 方向（如左上方45度侧逆光）+ 补光方案 + 突出效果]
-5.配色方案：[主色调（含hex色值）+ 辅助色（含hex色值）+ 文字色值]
-6.材质细节：[面料类型 + 视觉特征（哑光/光泽/纹理）+ 需要精准呈现的关键工艺细节]
-7.文字布局：[文字位置 + 内容描述，若无文字则写"无文字（纯视觉）"]
-8.嵌入图：[若有嵌入产品图说明位置与尺寸，否则写"此部分省略"]
-9.氛围：[整体视觉氛围关键词 + 营销定位 + 情绪方向]
-10.风格：[摄影风格（如35mm定焦）+ 核心视觉基调]
-11.画质：[分辨率标准，固定写"4K分辨率，超清画质，极致锐度，商业摄影级品质"]
-强制约束：[模特身份的3个核心不可偏离特征] + [服装的3个核心不可偏离特征]
+每条 prompt 必须明确覆盖：
+1. 主体锁定
+2. 服装锁定
+3. 穿着区域与贴合方式
+4. 构图与景别
+5. 背景与场景层次
+6. 光影与材质表现
+7. 颜色体系（含精确 hex 色值）
+8. 文字布局（无文字则明确写纯视觉）
+9. 风格与氛围
+10. 画质要求
+
+negative_prompt 必须显式排除：
+- 物种错误
+- 动物人化 / 人物动物化
+- 衣服漂浮
+- 穿着部位错误
+- 多余肢体
+- 解剖结构扭曲
+- 服装改色改款
+- 关键细节丢失
 
 输出要求：严格 JSON 数组，每个元素包含 prompt, title, negative_prompt, marketing_hook, priority 字段，不含 Markdown，不含解释。`;
+  const systemPromptModelTryOnEn =
+    `You are a top-tier prompt engineer for reference-subject try-on imagery. Generate one production-ready prompt per blueprint shot.
 
-  const genesisCopyRuleZh = buildVisibleCopyLanguageRule(language, true);
-  const genesisCopyRuleEn = buildVisibleCopyLanguageRule(language, false);
+Core principles:
+- The subject may be a human, a pet, or another non-human subject. Never assume the subject is a human fashion model.
+- Preserve the reference subject's species, identity feel, body shape, and pose direction.
+- Preserve the uploaded garment's color, material, silhouette, logo, print, construction, and key details.
+- The garment must be naturally worn by the reference subject. It must not float, hang separately, become a mannequin-only display, or turn into another design.
+- If a blueprint title says "人台图", reinterpret it as a standardized subject showcase within this try-on flow rather than a literal mannequin-only image.
+- For non-human subjects, use species, coat/fur color, head traits, limb proportions, and body posture. Do not use human-only descriptors such as skin tone, ethnicity, hairstyle, or facial-feature similarity.
+
+Each prompt must explicitly cover:
+1. Subject lock
+2. Garment lock
+3. Wear region and fit
+4. Composition and framing
+5. Background and scene depth
+6. Lighting and material rendering
+7. Color system with exact hex values
+8. Text layout rules, or explicit visual-only instruction
+9. Style and atmosphere
+10. Quality requirements
+
+The negative_prompt must explicitly exclude:
+- wrong species
+- humanized animal / animalized human
+- floating garment
+- wrong wear placement
+- extra limbs
+- distorted anatomy
+- recolored or redesigned garment
+- missing product details
+
+Return a strict JSON array only. Each item must contain prompt, title, negative_prompt, marketing_hook, priority. No markdown. No explanations.`;
+
+  const genesisCopyRuleZh = language === "none"
+    ? "若共享文案为空则不得添加任何新增画面文字；若用户手动提供共享文案，必须按原文使用，不得翻译或改写。"
+    : buildVisibleCopyLanguageRule(language, true);
+  const genesisCopyRuleEn = language === "none"
+    ? "If shared copy is empty, do not add any new visible copy. If the user manually provided shared copy, use that exact original copy without translation or paraphrase."
+    : buildVisibleCopyLanguageRule(language, false);
+  const genesisBlueprintSystemPromptZh = `你是顶级电商主图提示词工程专家。现在输入的不是紧凑分析摘要，而是一份已经结构化好的主图蓝图。请严格按蓝图逐张生成 prompt。
+
+规则：
+- images 数组里的每一项都代表同一商品的一张主图方案，输出顺序必须与 images 数组完全一致。
+- 所有 prompt 都必须锁定为同一 SKU、同一商品，不得改色、改材质、改 logo、改五金、改纹理、改轮廓、改比例、改结构。
+- 必须把 design_specs 和每张图片自己的 design_content 都吸收进 prompt。
+- 若蓝图中存在商品身份锁定信息、主色锚定、材质锚定、关键特征，必须在 prompt 正文中明确写出，而不是只放在 negative_prompt。
+- negative_prompt 只用于补充易漂移风险，正向 prompt 本身必须显式声明禁止改款和禁止漂移。
+- 若蓝图要求共享文案，则必须写明原文、位置、层级、留白和可读性，且文案不得遮挡商品。
+- 文案语言硬约束：${genesisCopyRuleZh}
+- 输出严格 JSON 数组，每项包含 prompt, title, negative_prompt, marketing_hook, priority。`;
+  const genesisBlueprintSystemPromptEn = `You are a top-tier e-commerce hero-image prompt engineer. The input is a structured hero-image blueprint, not a compact analysis summary. Generate one prompt per blueprint image in the exact same order.
+
+Rules:
+- Every image in the blueprint is the same exact SKU and same product. Never change color, material, logo, hardware, texture, silhouette, proportions, or construction.
+- Absorb both design_specs and each image's own design_content into the prompt.
+- If the blueprint contains identity-lock details, color anchors, material anchors, or key features, state them explicitly in the positive prompt instead of relying only on negative_prompt.
+- negative_prompt is supplemental only. The positive prompt itself must explicitly forbid redesign, recoloring, and feature drift.
+- If shared copy is required, include the exact copy, placement, hierarchy, whitespace, and readability instructions, and ensure the text does not cover the product.
+- Visible-copy language rule: ${genesisCopyRuleEn}
+- Return a strict JSON array only. Each item must contain prompt, title, negative_prompt, marketing_hook, priority.`;
 
   const systemPrompt = isGenesisModule
-    ? language === "zh"
+    ? isGenesisBlueprintMode
+      ? language === "zh"
+        ? genesisBlueprintSystemPromptZh
+        : genesisBlueprintSystemPromptEn
+      : language === "zh"
       ? `你是顶级电商主图提示词工程专家。请基于主图分析结果，为同一款商品生成一组可直接出图的主图提示词。
 
 规则：
@@ -248,7 +353,9 @@ Rules:
 - The same language rule applies to headlines, subtitles, body copy, spec-table headers, spec values, badges, CTAs, guarantee text, step labels, annotations, and comparison labels.
 - Return a strict JSON array only. Each item must contain prompt, title, negative_prompt, marketing_hook, priority.`
     : isModelTryOn
-    ? systemPromptModelTryOn
+    ? language === "zh"
+      ? systemPromptModelTryOnZh
+      : systemPromptModelTryOnEn
     : language === "zh"
     ? isClothing
       ? systemPromptClothingZh
@@ -287,12 +394,39 @@ Output a strict JSON array only; each element must contain prompt, title, negati
     ? `- 语言硬约束：所有 prompt 中的文案描述、title、marketing_hook 必须使用简体中文，禁止英文单词、英文短语、拼音或双语混排。prompt 字段中描述画面文字内容时也必须使用简体中文。
 - ${genesisCopyRuleZh}`
     : language === "none"
-    ? `- Language: Visual only. No text overlay.`
+    ? `- Language rule: if shared copy is empty, keep the image visual-only with no text overlay. If the user explicitly provided copy, use that exact original copy without translation or paraphrase.`
     : `- Visible-copy language rule: ${genesisCopyRuleEn}
 - The title and marketing_hook fields must also use ${outputLanguageLabel(language)}.`;
 
   const userPrompt = isGenesisModule
+    ? isGenesisBlueprintMode
     ? `
+Generate exactly ${imageCount} prompt objects.
+
+Output schema (v2):
+[{"prompt": "<full detailed prompt text>", "title": "<short purpose title>", "negative_prompt": "<things to avoid, or empty string>", "marketing_hook": "<one-line marketing angle, or empty string>", "priority": <integer 0-10, 0=default>}]
+
+Rules:
+- One prompt object per blueprint image, in the same order as the blueprint images array.
+- Reuse each blueprint title as the prompt title when reasonable.
+- Keep all prompts locked to the exact same product identity across the whole set.
+- The positive prompt must explicitly mention the color anchor, material anchor, and key features whenever they are present in the blueprint.
+- The positive prompt must explicitly say that color, material, logo, hardware, texture, silhouette, proportions, and structure cannot change.
+- If the blueprint requires visible copy, the prompt must include the exact copy instructions, placement, hierarchy, whitespace, readability, and non-occlusion rules.
+- Use negative_prompt to list the most likely drift risks, including wrong colors, wrong materials, missing logo, changed hardware, or simplified structure.
+${genesisLangRule}
+- Return JSON array only. No markdown fences. No explanation text.
+
+Hero blueprint:
+${analysisJson}
+
+Design specs override (if provided):
+${designSpecs ?? "(none)"}
+
+Style constraints (if provided):
+${styleConstraintPrompt || "(none)"}
+`
+    : `
 Generate exactly ${imageCount} prompt objects.
 
 Output schema (v2):
@@ -346,6 +480,56 @@ ${analysisJson}
 Design specs override (if provided):
 ${designSpecs ?? "(none)"}
 `
+    : isModelTryOn
+    ? language === "zh"
+      ? `
+Generate exactly ${imageCount} prompt objects.
+
+Output schema (v2):
+[{"prompt": "<full detailed prompt text>", "title": "<short purpose title>", "negative_prompt": "<things to avoid, or empty string>", "marketing_hook": "<one-line marketing angle, or empty string>", "priority": <integer 0-10, 0=default>}]
+
+Rules:
+- One prompt object per image plan, in the same order as the blueprint images array.
+- Read and use subject_profile, garment_profile, tryon_strategy, design_specs, and each image's own design_content together.
+- The positive prompt must explicitly lock the reference subject. If subject_profile.subject_type is pet or other, the prompt must explicitly keep the subject non-human.
+- The positive prompt must explicitly say the garment is worn by the reference subject, with correct wear region and natural fit.
+- If the plan title is “人台图”, reinterpret it as a standardized subject showcase image, not a mannequin-only shot.
+- Keep the exact same garment identity across the full set. No recolor, redesign, or simplification.
+- title should reuse the image plan title when reasonable.
+- negative_prompt must explicitly include species swap, humanized animal, animalized human, floating garment, wrong wear placement, extra limbs, distorted anatomy, missing logo, wrong color, wrong material, and missing details.
+- If output language is none, require pure visual composition with no added visible text.
+- Return JSON array only. No markdown fences. No explanation text.
+
+Try-on blueprint:
+${analysisJson}
+
+Design specs override (if provided):
+${designSpecs ?? "(none)"}
+`
+      : `
+Generate exactly ${imageCount} prompt objects.
+
+Output schema (v2):
+[{"prompt": "<full detailed prompt text>", "title": "<short purpose title>", "negative_prompt": "<things to avoid, or empty string>", "marketing_hook": "<one-line marketing angle, or empty string>", "priority": <integer 0-10, 0=default>}]
+
+Rules:
+- One prompt object per image plan, in the same order as the blueprint images array.
+- Read and use subject_profile, garment_profile, tryon_strategy, design_specs, and each image's own design_content together.
+- The positive prompt must explicitly lock the reference subject. If subject_profile.subject_type is pet or other, the prompt must explicitly keep the subject non-human.
+- The positive prompt must explicitly state that the garment is worn by the reference subject with the correct wear region and natural fit.
+- If the plan title is “人台图”, reinterpret it as a standardized subject showcase image rather than a mannequin-only shot.
+- Keep the exact same garment identity across the full set. No recolor, redesign, or simplification.
+- Reuse the image plan title as the prompt title when reasonable.
+- negative_prompt must explicitly include species swap, humanized animal, animalized human, floating garment, wrong wear placement, extra limbs, distorted anatomy, missing logo, wrong color, wrong material, and missing details.
+- If output language is none, require pure visual composition with no added visible text.
+- Return JSON array only. No markdown fences. No explanation text.
+
+Try-on blueprint:
+${analysisJson}
+
+Design specs override (if provided):
+${designSpecs ?? "(none)"}
+`
     : `
 Generate exactly ${imageCount} prompt objects.
 
@@ -375,6 +559,25 @@ Style constraints (highest priority, if provided):
 ${styleConstraintPrompt || "(none)"}
 `;
 
+  const promptLocale = language === "zh" ? "zh" : "en";
+  const promptFlow = isGenesisModule
+    ? "genesis"
+    : isEcomDetailModule
+    ? "ecom-detail"
+    : isModelTryOn
+    ? "clothing-tryon"
+    : isClothing
+    ? "clothing-basic"
+    : "default";
+  const promptRegistryKey = buildPromptRegistryKey({
+    flow: promptFlow,
+    stage: "generate",
+    locale: promptLocale,
+    profile: promptProfile,
+  });
+  const finalSystemPrompt = applyPromptVariant(promptRegistryKey, "system", systemPrompt);
+  const finalUserPrompt = applyPromptVariant(promptRegistryKey, "user", userPrompt);
+
   const config = getQnChatConfig();
   const isAzure = config.endpoint.includes(".openai.azure.com") || config.endpoint.includes(".cognitiveservices.azure.com") || config.endpoint.includes(".services.ai.azure.com");
   const encoder = new TextEncoder();
@@ -400,8 +603,8 @@ ${styleConstraintPrompt || "(none)"}
           const body: Record<string, unknown> = {
             stream: true,
             messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
+              { role: "system", content: finalSystemPrompt },
+              { role: "user", content: finalUserPrompt },
             ],
             max_tokens: Math.min(4096, 256 * imageCount + 512),
           };

@@ -11,6 +11,7 @@ import type {
   GenerationModel,
   AspectRatio,
   ImageSize,
+  PromptProfile,
   StyleConstraintPayload,
   StyleAnalysisResult,
   EcomDetailModuleDefinition,
@@ -23,7 +24,7 @@ function supabase() {
 }
 
 function functionUrl(name: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!.trim()
   return `${supabaseUrl}/functions/v1/${name}`
 }
 
@@ -57,7 +58,7 @@ async function getFreshAccessToken(): Promise<string> {
 }
 
 async function getAuthHeaders(contentType = true): Promise<Record<string, string>> {
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!.trim()
   const accessToken = await getFreshAccessToken()
 
   return {
@@ -128,6 +129,7 @@ export async function getOssSts(
 export interface AnalyzeProductParams {
   productImage: string
   productImages?: string[]
+  promptProfile?: PromptProfile
   platformStyle?: string
   studioType?: string
   requirements?: string
@@ -197,6 +199,7 @@ export async function analyzeEcommerceProduct(params: {
 export interface GeneratePromptsParams {
   analysisJson?: unknown
   design_specs?: unknown
+  promptProfile?: PromptProfile
   imageCount?: number
   targetLanguage?: string
   outputLanguage?: string
@@ -245,6 +248,8 @@ export interface GenerateImageParams {
   productImage: string
   productImages?: string[]
   prompt: string
+  negativePrompt?: string
+  promptProfile?: PromptProfile
   model: GenerationModel
   aspectRatio: AspectRatio
   imageSize: ImageSize
@@ -275,6 +280,7 @@ export async function generateImage(
 }
 
 export interface GenerateModelImageParams {
+  model?: GenerationModel
   gender: 'female' | 'male'
   ageRange?: string
   ethnicity?: 'asian' | 'white' | 'black' | 'latino'
@@ -332,6 +338,7 @@ export interface AnalyzeSingleParams {
   productImages?: string[]
   referenceImages?: string[]
   productImage?: string
+  promptProfile?: PromptProfile
   groupCount?: number
   backgroundMode?: 'white' | 'original'
   userPrompt?: string

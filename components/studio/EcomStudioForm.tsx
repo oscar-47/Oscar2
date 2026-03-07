@@ -30,6 +30,7 @@ import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
 import { EcomDetailModuleSelector } from '@/components/studio/EcomDetailModuleSelector'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
+import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { uploadFiles } from '@/lib/api/upload'
 import {
@@ -61,12 +62,9 @@ import type {
   OutputLanguage,
 } from '@/types'
 import {
-  AVAILABLE_MODELS,
   getAvailableModels,
   DEFAULT_MODEL,
   getGenerationCreditCost,
-  getSupportedImageSizes,
-  IMAGE_SIZE_LABELS,
   isValidModel,
   normalizeGenerationModel,
   sanitizeImageSizeForModel,
@@ -316,8 +314,9 @@ export function EcomStudioForm() {
   const [requirements, setRequirements] = useState(defaultRequirements)
   const [selectedDetailModules, setSelectedDetailModules] = useState<EcomDetailModuleId[]>([])
   const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
+  const { promptProfile } = usePromptProfile(model)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4')
-  const [imageSize, setImageSize] = useState<ImageSize>('2K')
+  const [imageSize, setImageSize] = useState<ImageSize>('1K')
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>('none')
 
   const [analysisBlueprint, setAnalysisBlueprint] = useState<AnalysisBlueprint | null>(null)
@@ -329,6 +328,7 @@ export function EcomStudioForm() {
   const [progress, setProgress] = useState(0)
   const {
     assets: results,
+    activeBatchId,
     appendAssets: appendResults,
     clearAssets: clearResults,
   } = useResultAssetSession('ecom-studio')
@@ -345,7 +345,6 @@ export function EcomStudioForm() {
     ? editableImagePlans.length
     : selectedModules.length
   const totalCost = computeCost(model, imageSize, currentImageCount)
-  const resolutionOptions = getSupportedImageSizes(model)
   const insufficientCredits = credits !== null && totalCost > 0 && credits < totalCost
   const currentSnapshot: AnalysisParamSnapshot = {
     imagesSignature: buildImagesSignature(productImages),
@@ -355,6 +354,8 @@ export function EcomStudioForm() {
   }
   const needsReanalyze = phase === 'preview' && isAnalysisStale(currentSnapshot, analysisParams)
   const isProcessing = phase === 'analyzing' || phase === 'generating'
+  const showPersistedResults = phase === 'input' && results.length > 0
+  const showResultsPanel = phase === 'complete' || showPersistedResults
 
   const setStep = useCallback((id: string, patch: Partial<ProgressStep>) => {
     setSteps((prev) => prev.map((step) => (step.id === id ? { ...step, ...patch } : step)))
@@ -396,6 +397,8 @@ export function EcomStudioForm() {
     const abort = new AbortController()
     abortRef.current = abort
     const traceId = uid()
+    const batchId = uid()
+    const batchTimestamp = Date.now()
     const nextSnapshot: AnalysisParamSnapshot = {
       imagesSignature: buildImagesSignature(productImages),
       requirements,
@@ -424,6 +427,7 @@ export function EcomStudioForm() {
       const { job_id } = await analyzeProductV2({
         productImage: urls[0],
         productImages: urls,
+        promptProfile,
         requirements: buildEcomDetailAnalysisRequirements({
           requirements,
           selectedModuleIds: selectedDetailModules,
@@ -464,6 +468,7 @@ export function EcomStudioForm() {
     backendLocale,
     isZh,
     productImages,
+    promptProfile,
     requirements,
     selectedDetailModules,
     selectedModules,
@@ -481,6 +486,8 @@ export function EcomStudioForm() {
     const abort = new AbortController()
     abortRef.current = abort
     const traceId = uid()
+    const batchId = uid()
+    const batchTimestamp = Date.now()
 
     setPhase('generating')
     setSteps([
@@ -507,6 +514,7 @@ export function EcomStudioForm() {
             _ai_meta: analysisBlueprint._ai_meta,
           },
           design_specs: editableDesignSpecs,
+          promptProfile,
           imageCount: editableImagePlans.length,
           targetLanguage: backendLocale,
           outputLanguage,
@@ -552,6 +560,7 @@ export function EcomStudioForm() {
           productImage: productUrls[0],
           productImages: productUrls,
           prompt: prompts[index],
+          promptProfile,
           model,
           aspectRatio,
           imageSize,
@@ -576,6 +585,8 @@ export function EcomStudioForm() {
           ...createResultAsset({
             url: job.result_url!,
             label: editableImagePlans[index]?.title ?? `${isZh ? '模块' : 'Module'} ${index + 1}`,
+            batchId,
+            batchTimestamp,
             ...extractResultAssetMetadata(job.result_data),
             originModule: 'ecom-studio',
           }),
@@ -584,7 +595,10 @@ export function EcomStudioForm() {
       setStep('generate', { status: 'done' })
       setStep('done', { status: 'done' })
       setProgress(100)
-      appendResults(nextResults)
+      appendResults(nextResults, {
+        activeBatchId: batchId,
+        activeBatchTimestamp: batchTimestamp,
+      })
       setPhase('complete')
       refreshCredits()
     } catch (error) {
@@ -605,6 +619,7 @@ export function EcomStudioForm() {
     model,
     needsReanalyze,
     outputLanguage,
+    promptProfile,
     productImages,
     selectedDetailModules,
     setStep,
@@ -650,7 +665,7 @@ export function EcomStudioForm() {
 
   const rightPanelTitle = phase === 'preview'
     ? (isZh ? '详情页规划方案' : 'Detail Page Plan')
-    : phase === 'complete'
+    : showResultsPanel
       ? (isZh ? '生成结果' : 'Results')
       : phase === 'generating'
         ? (isZh ? '生成中...' : 'Generating...')
@@ -660,7 +675,7 @@ export function EcomStudioForm() {
 
   const rightPanelSubtitle = phase === 'preview'
     ? (isZh ? '确认并微调每个详情页模块后再生成图片' : 'Review and refine each detail-page module before generating images')
-    : phase === 'complete'
+    : showResultsPanel
       ? (isZh ? '每个模块对应 1 张结果图' : 'One generated image per module')
       : phase === 'generating'
         ? (isZh ? '正在根据规划生成模块图片' : 'Generating module images from the approved plan')
@@ -810,25 +825,6 @@ export function EcomStudioForm() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('imageSize')}</Label>
-                <Select
-                  value={imageSize}
-                  onValueChange={(value) => setImageSize(value as ImageSize)}
-                  disabled={isProcessing}
-                >
-                  <SelectTrigger className={panelInputClass}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {resolutionOptions.map((resolution) => (
-                      <SelectItem key={resolution} value={resolution}>
-                        {isZh ? IMAGE_SIZE_LABELS[resolution].zh : IMAGE_SIZE_LABELS[resolution].en}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           </div>
 
@@ -959,7 +955,7 @@ export function EcomStudioForm() {
             <p className="mt-1 text-[13px] text-[#7d818d]">{rightPanelSubtitle}</p>
           </div>
 
-          {phase === 'input' && (
+          {phase === 'input' && !showPersistedResults && (
             <div className="flex min-h-[620px] flex-col items-center justify-center px-4 text-center">
               <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#ececef] text-[#7f8390]">
                 <Sparkles className="h-8 w-8" />
@@ -992,10 +988,12 @@ export function EcomStudioForm() {
             />
           )}
 
-          {phase === 'complete' && (
+          {showResultsPanel && (
             <ResultGallery
               images={results}
+              activeBatchId={activeBatchId}
               aspectRatio={aspectRatio}
+              onClear={clearResults}
               editorSessionKey="ecom-studio"
               originModule="ecom-studio"
             />

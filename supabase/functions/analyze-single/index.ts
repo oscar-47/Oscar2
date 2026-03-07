@@ -7,6 +7,11 @@ import {
   isImageSizeSupportedForModel,
   normalizeRequestedModel,
 } from "../_shared/generation-config.ts";
+import {
+  resolvePromptProfile,
+  TA_PRO_PROMPT_PROFILE_FLAG,
+} from "../_shared/prompt-profile.ts";
+import { getBooleanSystemConfig } from "../_shared/system-config.ts";
 
 function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
   void turboEnabled;
@@ -84,6 +89,12 @@ Deno.serve(async (req) => {
   if (isToApisModel(modelName) && !isAdminEmail(authResult.user.email)) {
     return err("MODEL_RESTRICTED", "This model is only available to admin users", 403);
   }
+  const taProPromptProfileEnabled = await getBooleanSystemConfig(TA_PRO_PROMPT_PROFILE_FLAG, false);
+  const promptProfile = resolvePromptProfile({
+    requestedProfile: body.promptProfile ?? body.prompt_profile,
+    model: modelName,
+    enabled: taProPromptProfileEnabled,
+  });
   const effectiveImageSize = body.imageSize == null
     ? getDefaultImageSizeForModel(modelName)
     : String(body.imageSize);
@@ -111,10 +122,13 @@ Deno.serve(async (req) => {
     ...body,
     model: modelName,
     imageSize: effectiveImageSize,
+    promptProfile,
+    prompt_profile: promptProfile,
     mode,
     groupCount,
     metadata: {
       ...(typeof body.metadata === "object" && body.metadata ? body.metadata as Record<string, unknown> : {}),
+      prompt_profile: promptProfile,
     },
   };
 

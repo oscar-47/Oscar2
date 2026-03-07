@@ -2,11 +2,11 @@
 
 import { useTranslations, useLocale } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createCreditCheckout, createOnetimeCheckout } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 
-type Tab = 'subscription' | 'one_time'
+type PlanSlug = 'monthly' | 'quarterly' | 'yearly' | 'topup_5' | 'topup_15' | 'topup_30'
 
 interface DbPackage {
   id: string
@@ -15,32 +15,42 @@ interface DbPackage {
   price_usd: number
   credits: number
   first_sub_bonus: number
+  stripe_price_id: string | null
   is_popular: boolean
   sort_order: number
 }
 
-// Display metadata (model images count = credits / cost-per-image)
-const PLAN_META: Record<number, { modelImages: number; proModelImages: number }> = {
-  250: { modelImages: 83, proModelImages: 50 },
-  1200: { modelImages: 400, proModelImages: 240 },
-  7000: { modelImages: 2333, proModelImages: 1400 },
+const PLAN_ORDER: PlanSlug[] = ['topup_5', 'topup_15', 'topup_30', 'monthly', 'quarterly', 'yearly']
+
+const SECTION_ORDER: Array<{ key: 'oneTime' | 'monthly' | 'quarterly' | 'yearly'; plans: PlanSlug[] }> = [
+  { key: 'oneTime', plans: ['topup_5', 'topup_15', 'topup_30'] },
+  { key: 'monthly', plans: ['monthly'] },
+  { key: 'quarterly', plans: ['quarterly'] },
+  { key: 'yearly', plans: ['yearly'] },
+]
+
+function formatUsd(value: number): string {
+  return Number.isInteger(value) ? `$${value.toFixed(0)}` : `$${value.toFixed(1)}`
 }
 
-// Map subscription name to plan key for i18n
-function planKey(name: string): string {
-  const n = name.toLowerCase()
-  if (n.includes('starter')) return 'starter'
-  if (n.includes('professional')) return 'professional'
-  if (n.includes('enterprise')) return 'enterprise'
-  return n
+function planCycleKey(plan: PlanSlug): 'month' | 'quarter' | 'year' | null {
+  if (plan === 'monthly') return 'month'
+  if (plan === 'quarterly') return 'quarter'
+  if (plan === 'yearly') return 'year'
+  return null
+}
+
+function planLabelKey(plan: PlanSlug): 'monthly' | 'quarterly' | 'yearly' | null {
+  if (plan === 'monthly' || plan === 'quarterly' || plan === 'yearly') return plan
+  return null
 }
 
 export function PricingPage() {
   const t = useTranslations('pricing')
   const locale = useLocale()
   const searchParams = useSearchParams()
-  const [tab, setTab] = useState<Tab>('one_time')
   const [loading, setLoading] = useState<string | null>(null)
+  const [checkoutError, setCheckoutError] = useState<string | null>(null)
   const [packages, setPackages] = useState<DbPackage[]>([])
 
   const successParam = searchParams.get('success')
@@ -51,7 +61,7 @@ export function PricingPage() {
     const supabase = createClient()
     supabase
       .from('packages')
-      .select('id,name,type,price_usd,credits,first_sub_bonus,is_popular,sort_order')
+      .select('id,name,type,price_usd,credits,first_sub_bonus,stripe_price_id,is_popular,sort_order')
       .eq('active', true)
       .order('sort_order')
       .then(({ data }) => {
@@ -59,166 +69,200 @@ export function PricingPage() {
       })
   }, [])
 
-  const subscriptionPlans = packages.filter((p) => p.type === 'subscription')
-  const onetimePlans = packages.filter((p) => p.type === 'one_time')
-  const visiblePlans = tab === 'subscription' ? subscriptionPlans : onetimePlans
+  const packageMap = useMemo(() => {
+    const entries = packages
+      .filter((pkg): pkg is DbPackage & { name: PlanSlug } => PLAN_ORDER.includes(pkg.name as PlanSlug))
+      .map((pkg) => [pkg.name, pkg] as const)
+    return new Map<PlanSlug, DbPackage>(entries)
+  }, [packages])
 
   async function handleChoosePlan(pkg: DbPackage) {
+    if (!pkg.stripe_price_id) return
+
+    setCheckoutError(null)
     setLoading(pkg.id)
+
     try {
       const returnTo = `/${locale}/pricing`
 
-      if (tab === 'subscription') {
+      if (pkg.type === 'subscription') {
         const { url } = await createCreditCheckout(pkg.id, returnTo)
         window.location.href = url
-      } else {
-        const { url } = await createOnetimeCheckout(pkg.id, returnTo)
-        window.location.href = url
+        return
       }
+
+      const { url } = await createOnetimeCheckout(pkg.id, returnTo)
+      window.location.href = url
     } catch (err) {
-      console.error('Checkout failed:', err)
+      setCheckoutError(err instanceof Error ? err.message : t('paymentSetupHint'))
     } finally {
       setLoading(null)
     }
   }
 
   return (
-    <div className="mx-auto max-w-5xl py-8">
-      {/* Success / cancel banners */}
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       {successParam && (
-        <div className="mb-6 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+        <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
           {typeParam === 'onetime' ? t('successOnetime') : t('success')}
         </div>
       )}
       {canceledParam && (
-        <div className="mb-6 rounded-lg bg-secondary px-4 py-3 text-sm text-muted-foreground">
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
           {t('canceled')}
         </div>
       )}
-
-      <div className="text-center mb-10">
-        <h1 className="text-3xl font-bold mb-3">{t('title')}</h1>
-        <p className="text-muted-foreground max-w-lg mx-auto">{t('subtitle')}</p>
-      </div>
-
-      {/* Tab switcher */}
-      <div className="flex justify-center mb-10">
-        <div className="inline-flex rounded-xl border bg-card p-1 gap-1">
-          <button
-            onClick={() => setTab('subscription')}
-            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === 'subscription' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t('subscriptionPlans')}
-          </button>
-          <button
-            onClick={() => setTab('one_time')}
-            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === 'one_time' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t('buyCredits')}
-          </button>
+      {checkoutError && (
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {checkoutError}
         </div>
-      </div>
+      )}
 
-      {/* Plans grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {visiblePlans.map((pkg) => {
-          const meta = PLAN_META[pkg.credits] ?? { modelImages: Math.round(pkg.credits / 3), proModelImages: Math.round(pkg.credits / 5) }
-          const key = planKey(pkg.name)
+      <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top,#f8efe5,transparent_36%),linear-gradient(180deg,#ffffff_0%,#faf8f4_100%)] p-6 shadow-sm sm:p-10">
+        <div className="mx-auto max-w-3xl text-center">
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+            {t('title')}
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
+            {t('subtitle')}
+          </p>
+        </div>
 
-          return (
-            <div
-              key={pkg.id}
-              className={`relative rounded-2xl border p-6 ${
-                pkg.is_popular ? 'border-foreground shadow-lg' : ''
-              }`}
-            >
-              {pkg.is_popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-foreground px-4 py-0.5 text-xs font-bold text-background">
-                  {t('mostPopular')}
+        <div className="mt-10 space-y-8">
+          {SECTION_ORDER.map((section) => (
+            <section key={section.key} className="rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-sm backdrop-blur sm:p-6">
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                    {section.key === 'oneTime' ? 'TOP-UP' : 'SUBSCRIPTION'}
+                  </p>
+                  <h2 className="mt-2 text-xl font-semibold text-slate-950">
+                    {t(`groups.${section.key}`)}
+                  </h2>
                 </div>
-              )}
-
-              {/* Plan header */}
-              <div className="mb-4 flex items-center gap-2">
-                <h3 className="font-semibold text-lg">
-                  {tab === 'subscription'
-                    ? t(`plans.${key}` as Parameters<typeof t>[0])
-                    : `${pkg.credits.toLocaleString()} Credits`}
-                </h3>
               </div>
 
-              {/* Price */}
-              <div className="mb-4">
-                <span className="text-4xl font-bold">${pkg.price_usd}</span>
-                {tab === 'subscription' && (
-                  <span className="text-muted-foreground text-sm">{t('perMonth')}</span>
-                )}
+              <div className={`grid gap-5 ${section.key === 'oneTime' ? 'md:grid-cols-3' : 'md:grid-cols-1'}`}>
+                {section.plans.map((planName) => {
+                  const pkg = packageMap.get(planName)
+                  if (!pkg) return null
+
+                  const cycleKey = planCycleKey(planName)
+                  const labelKey = planLabelKey(planName)
+                  const isSubscription = pkg.type === 'subscription'
+                  const isFeatured = planName === 'yearly'
+                  const isDisabled = !pkg.stripe_price_id || loading !== null
+
+                  return (
+                    <article
+                      key={pkg.id}
+                      className={`relative overflow-hidden rounded-[28px] border p-6 ${
+                        isFeatured
+                          ? 'border-amber-300 bg-[linear-gradient(160deg,#fff7e9_0%,#fffdf8_55%,#ffffff_100%)] shadow-[0_18px_40px_rgba(180,120,28,0.14)]'
+                          : 'border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#fbfbf9_100%)]'
+                      }`}
+                    >
+                      {labelKey && (
+                        <div className="mb-5 flex items-start justify-between gap-3">
+                          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                            isFeatured ? 'bg-amber-900 text-amber-50' : 'bg-slate-900 text-white'
+                          }`}>
+                            {t(`labels.${labelKey}`)}
+                          </span>
+                          {isFeatured && (
+                            <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-700">
+                              {t('stickers.saveMore')}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {!labelKey && <div className="mb-5 h-6" />}
+
+                      <div className="space-y-3">
+                        <div className="flex items-end gap-2">
+                          <span className="text-4xl font-semibold tracking-tight text-slate-950">
+                            {formatUsd(pkg.price_usd)}
+                          </span>
+                          {cycleKey && (
+                            <span className="pb-1 text-sm font-medium text-slate-500">
+                              {t(`cycles.${cycleKey}`)}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-lg font-semibold text-slate-900">
+                          {t('creditsValue', {
+                            count: pkg.credits.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US'),
+                          })}
+                        </p>
+                      </div>
+
+                      <div className="mt-6 space-y-3 text-sm text-slate-600">
+                        <p>{isSubscription ? t('subscriptionRule') : t('singlePurchase')}</p>
+                        {isSubscription && <p>{t('cancelAnytime')}</p>}
+                      </div>
+
+                      <div className="mt-8 space-y-3">
+                        <button
+                          onClick={() => handleChoosePlan(pkg)}
+                          disabled={isDisabled}
+                          className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                            isFeatured
+                              ? 'bg-slate-950 text-white hover:bg-slate-800'
+                              : 'bg-slate-100 text-slate-950 hover:bg-slate-200'
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          {loading === pkg.id
+                            ? '...'
+                            : isSubscription
+                              ? t('buttons.subscribe')
+                              : t('buttons.topup')}
+                        </button>
+
+                        {!pkg.stripe_price_id && (
+                          <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            <p className="font-semibold">{t('paymentSetupPending')}</p>
+                            <p className="mt-1">{t('paymentSetupHint')}</p>
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  )
+                })}
               </div>
+            </section>
+          ))}
+        </div>
 
-              {/* Credits & bonus */}
-              <ul className="space-y-2 mb-6 text-sm">
-                <li className="flex items-center gap-2">
-                  <span className="text-foreground">✓</span>
-                  <span>{pkg.credits.toLocaleString()} Credits</span>
-                </li>
-                {tab === 'subscription' && pkg.first_sub_bonus > 0 && (
-                  <li className="flex items-center gap-2 text-amber-600 font-medium">
-                    <span>✦</span>
-                    <span>{t('firstSubBonus', { bonus: pkg.first_sub_bonus })}</span>
-                  </li>
-                )}
-                <li className="flex items-center gap-2 text-muted-foreground">
-                  <span>✓</span>
-                  <span>{t('modelImages', { count: meta.modelImages })}</span>
-                </li>
-                <li className="flex items-center gap-2 text-muted-foreground">
-                  <span>✓</span>
-                  <span>{t('proModelImages', { count: meta.proModelImages })}</span>
-                </li>
-                <li className="flex items-center gap-2 text-muted-foreground">
-                  <span>✓</span>
-                  <span>{t('neverExpires')}</span>
-                </li>
-              </ul>
+        <div className="mt-10 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-950">{t('faq.title')}</h2>
+            <div className="mt-5 space-y-4">
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-950">{t('faq.autoRenewQ')}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{t('faq.autoRenewA')}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-950">{t('faq.cancelQ')}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{t('faq.cancelA')}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-950">{t('faq.expiryQ')}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{t('faq.expiryA')}</p>
+              </div>
+            </div>
+          </section>
 
-              <button
-                onClick={() => handleChoosePlan(pkg)}
-                disabled={!!loading}
-                className={`w-full rounded-xl py-2.5 text-sm font-medium transition-colors ${
-                  pkg.is_popular
-                    ? 'bg-foreground text-background hover:bg-foreground/90'
-                    : 'border hover:bg-secondary'
-                } disabled:opacity-50`}
-              >
-                {loading === pkg.id ? '...' : t('choosePlan')}
-              </button>
+          <section className="rounded-[28px] border border-slate-200 bg-slate-950 p-6 text-white shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">CREDITS</p>
+            <h2 className="mt-2 text-xl font-semibold">{t('usage.title')}</h2>
+            <div className="mt-6 space-y-3">
+              <div className="rounded-2xl bg-white/10 px-4 py-4 text-sm">{t('usage.speed')}</div>
+              <div className="rounded-2xl bg-white/10 px-4 py-4 text-sm">{t('usage.balanced')}</div>
+              <div className="rounded-2xl bg-white/10 px-4 py-4 text-sm">{t('usage.quality')}</div>
             </div>
-          )
-        })}
-      </div>
-
-      {/* Included in every plan */}
-      <div className="mt-16 text-center">
-        <h2 className="text-xl font-bold mb-8">{t('included.title')}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto text-left">
-          <div className="flex gap-3">
-            <span className="text-foreground mt-0.5">✓</span>
-            <div>
-              <p className="font-medium">{t('included.aiVisualStrategy')}</p>
-              <p className="text-sm text-muted-foreground">{t('included.aiVisualStrategyDesc')}</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-foreground mt-0.5">✓</span>
-            <div>
-              <p className="font-medium">{t('included.globalMarketplace')}</p>
-              <p className="text-sm text-muted-foreground">{t('included.globalMarketplaceDesc')}</p>
-            </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ import { generateModelImage, processGenerationJob } from '@/lib/api/edge-functio
 import { uploadFile } from '@/lib/api/upload'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationJob } from '@/types'
+import { getGenerationCreditCost } from '@/types'
 import type { UploadedImage } from '@/components/upload/MultiImageUploader'
 import type { AIModelHistoryItem } from './types'
 import { friendlyError } from '@/lib/utils'
@@ -39,6 +40,9 @@ type ModelHistoryRow = {
   error_message: string | null
   created_at: string
 }
+
+const AI_MODEL_GENERATION_MODEL = 'ta-gemini-3-pro' as const
+const AI_MODEL_GENERATION_COST = getGenerationCreditCost(AI_MODEL_GENERATION_MODEL, '1K')
 
 function uid() {
   return crypto.randomUUID()
@@ -255,6 +259,7 @@ export function AIModelGeneratorDialog({
       const { publicUrl: uploadedProductUrl } = await uploadFile(productImages[0].file)
       const tasks = Array.from({ length: count }, async (_, index) => {
         const { job_id } = await generateModelImage({
+          model: AI_MODEL_GENERATION_MODEL,
           gender,
           ageRange,
           ethnicity,
@@ -416,7 +421,9 @@ export function AIModelGeneratorDialog({
                   {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                   {isGenerating ? '生成中...' : '立即生成'}
                 </Button>
-                <p className="mt-2 text-center text-xs text-muted-foreground">消耗 {count * 6} 积分</p>
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  使用 TA 3 Pro，消耗 {count * AI_MODEL_GENERATION_COST} 积分
+                </p>
               </div>
 
               {error && (

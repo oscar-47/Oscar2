@@ -44,9 +44,10 @@
 
 1. Create one `STYLE_REPLICATE` job with `mode=refinement` and `productImages[]`.
 2. Worker processes each product image as one refinement unit (`1 input -> 1 output`).
-3. Worker writes batched progress snapshots to `generation_jobs.result_data` while status remains `processing`.
-4. Worker finalizes the same job to `success` (at least one unit success) or `failed` (all units failed).
-5. Credits are deducted per successful unit only; failed units are not deducted.
+3. For each unique product image, worker first tries a vision analysis step to synthesize a product-specific refinement prompt; if analysis fails, worker falls back to the generic refinement prompt for that image.
+4. Worker writes batched progress snapshots to `generation_jobs.result_data` while status remains `processing`, including refinement prompt-source metadata.
+5. Worker finalizes the same job to `success` (at least one unit success) or `failed` (all units failed).
+6. Credits are deducted per successful unit only; failed units are not deducted.
 
 ## Realtime
 
@@ -57,3 +58,4 @@ Frontend subscribes to `generation_jobs` update events filtered by `id=eq.<job_i
 1. Frontend nudges worker once after `analyze-product-v2` / `generate-image` / `analyze-single` ack.
 2. `waitForJob` uses Realtime subscription + periodic polling.
 3. If polling shows `processing` for consecutive checks, frontend sends another nudge.
+4. In real traffic, refinement jobs may receive multiple nudge retries before final success; this is treated as a secondary observability concern rather than the primary output-quality path.

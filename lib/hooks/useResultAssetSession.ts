@@ -6,42 +6,88 @@ import type { ResultAsset } from '@/types'
 import {
   clearResultAssets,
   mergeResultAssets,
-  readResultAssets,
-  writeResultAssets,
+  readResultAssetSession,
+  splitResultAssetsByActiveBatch,
+  subscribeToResultAssetChanges,
+  writeResultAssetSession,
+  type ResultAssetSessionState,
 } from '@/lib/utils/result-assets'
 
 export function useResultAssetSession(key: string) {
-  const [assets, setAssetsState] = useState<ResultAsset[]>([])
+  const [sessionState, setSessionState] = useState<ResultAssetSessionState>({ assets: [] })
   const [restored, setRestored] = useState(false)
 
   useEffect(() => {
-    setAssetsState(readResultAssets(key))
+    const syncFromStorage = () => {
+      setSessionState(readResultAssetSession(key))
+    }
+
+    syncFromStorage()
     setRestored(true)
+
+    const unsubscribe = subscribeToResultAssetChanges(key, syncFromStorage)
+    const handleFocus = () => syncFromStorage()
+    const handleVisibilityChange = () => {
+      if (!document.hidden) syncFromStorage()
+    }
+
+    window.addEventListener('focus', handleFocus)
+    window.addEventListener('pageshow', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      unsubscribe()
+      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('pageshow', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [key])
 
   useEffect(() => {
     if (!restored) return
-    writeResultAssets(key, assets)
-  }, [assets, key, restored])
+    writeResultAssetSession(key, sessionState)
+  }, [key, restored, sessionState])
 
   const setAssets = useCallback<Dispatch<SetStateAction<ResultAsset[]>>>((value) => {
-    setAssetsState((prev) => {
-      const next = typeof value === 'function' ? value(prev) : value
-      return mergeResultAssets([], next)
+    setSessionState((prev) => {
+      const nextAssets = typeof value === 'function' ? value(prev.assets) : value
+      return {
+        ...prev,
+        assets: mergeResultAssets([], nextAssets),
+      }
     })
   }, [])
 
-  const appendAssets = useCallback((incoming: ResultAsset[]) => {
-    setAssetsState((prev) => mergeResultAssets(prev, incoming))
+  const appendAssets = useCallback((
+    incoming: ResultAsset[],
+    options?: {
+      activeBatchId?: string
+      activeBatchTimestamp?: number
+    },
+  ) => {
+    setSessionState((prev) => ({
+      assets: mergeResultAssets(prev.assets, incoming),
+      activeBatchId: options?.activeBatchId ?? prev.activeBatchId,
+      activeBatchTimestamp: options?.activeBatchTimestamp ?? prev.activeBatchTimestamp,
+    }))
   }, [])
 
   const clearAssets = useCallback(() => {
     clearResultAssets(key)
-    setAssetsState([])
+    setSessionState({ assets: [] })
   }, [key])
 
+  const { activeAssets, historicalAssets, activeBatchId, activeBatchTimestamp } = splitResultAssetsByActiveBatch(
+    sessionState.assets,
+    sessionState.activeBatchId,
+  )
+
   return {
-    assets,
+    assets: sessionState.assets,
+    activeAssets,
+    historicalAssets,
+    activeBatchId,
+    activeBatchTimestamp,
     setAssets,
     appendAssets,
     clearAssets,

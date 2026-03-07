@@ -19,6 +19,7 @@ import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStat
 import { ResultGallery, type ResultImage } from '@/components/generation/ResultGallery'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
+import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { uploadFiles } from '@/lib/api/upload'
 import {
@@ -45,11 +46,9 @@ import type {
   GenesisStyleDirectionKey,
 } from '@/types'
 import {
-  AVAILABLE_MODELS,
   getAvailableModels,
   DEFAULT_MODEL,
   getGenerationCreditCost,
-  getSupportedImageSizes,
   isValidModel,
   normalizeGenerationModel,
   sanitizeImageSizeForModel,
@@ -1015,17 +1014,12 @@ export function StudioGenesisForm() {
   const [requirements, setRequirements] = useState(defaultRequirements)
   const [imageCount, setImageCount] = useState(1)
   const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
+  const { promptProfile } = usePromptProfile(model)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
-  const [imageSize, setImageSize] = useState<ImageSize>('2K')
+  const [imageSize, setImageSize] = useState<ImageSize>('1K')
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>(isZh ? 'zh' : 'en')
   // Locale-aware constants
   const ASPECT_RATIOS = locale === 'zh' ? ASPECT_RATIOS_ZH : ASPECT_RATIOS_EN
-  const RESOLUTION_OPTIONS = getSupportedImageSizes(model).map((value) => ({
-    value,
-    label: locale === 'zh'
-      ? `${value} ${value === '1K' ? '标清' : value === '2K' ? '高清' : '超清'} (${value === '1K' ? '1024px' : value === '2K' ? '2048px' : '4096px'})`
-      : `${value} (${value === '1K' ? '1024px' : value === '2K' ? '2048px' : '4096px'})`,
-  }))
   const OUTPUT_LANGUAGES = locale === 'zh' ? OUTPUT_LANGUAGES_ZH : OUTPUT_LANGUAGES_EN
 
   // ── Preview state ──
@@ -1044,6 +1038,8 @@ export function StudioGenesisForm() {
   const [progress, setProgress] = useState(0)
   const {
     assets: results,
+    activeBatchId,
+    activeBatchTimestamp,
     appendAssets: appendResults,
     clearAssets: clearResults,
   } = useResultAssetSession('studio-genesis-v2')
@@ -1168,6 +1164,7 @@ export function StudioGenesisForm() {
       const { job_id: analysisJobId } = await analyzeProductV2({
         productImage: urls[0],
         productImages: urls,
+        promptProfile,
         requirements: requirements || undefined,
         imageCount,
         uiLanguage: backendLocale,
@@ -1207,7 +1204,7 @@ export function StudioGenesisForm() {
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase(fallbackPhase)
     }
-  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, t, tc, genesisAnalysis])
+  }, [productImages, requirements, imageCount, outputLanguage, backendLocale, isZh, t, tc, genesisAnalysis, promptProfile])
 
   // ── Phase 2: Confirm & Generate ──
   const handleGenerate = useCallback(async () => {
@@ -1261,6 +1258,7 @@ export function StudioGenesisForm() {
           module: 'genesis',
           analysisJson: blueprint,
           design_specs: blueprint.design_specs,
+          promptProfile,
           imageCount: blueprint.images.length,
           targetLanguage: backendLocale,
           outputLanguage,
@@ -1319,6 +1317,7 @@ export function StudioGenesisForm() {
             productImages: uploadedUrls,
             prompt: promptTask.prompt,
             negativePrompt: promptTask.negativePrompt || undefined,
+            promptProfile,
             model,
             aspectRatio,
             imageSize,
@@ -1400,7 +1399,10 @@ export function StudioGenesisForm() {
       set('generate', { status: 'done' })
       set('done', { status: 'done' })
       setProgress(100)
-      appendResults(successResults)
+      appendResults(successResults, {
+        activeBatchId: batchId,
+        activeBatchTimestamp: batchTimestamp,
+      })
       setFailedSlotIndices(failedIndices)
 
       if (successResults.length === 0) {
@@ -1416,7 +1418,7 @@ export function StudioGenesisForm() {
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
     }
-  }, [analysisParams, appendResults, aspectRatio, backendLocale, copyPlan, genesisAnalysis, imageCount, imageSize, isZh, model, outputLanguage, productImages, requirements, styleSelections, t, tc, uploadedUrls])
+  }, [analysisParams, appendResults, aspectRatio, backendLocale, copyPlan, genesisAnalysis, imageCount, imageSize, isZh, model, outputLanguage, productImages, requirements, styleSelections, t, tc, uploadedUrls, promptProfile])
 
   const handleBackToInput = useCallback(() => {
     setPhase('input')
@@ -1493,6 +1495,7 @@ export function StudioGenesisForm() {
           productImages: uploadedUrls,
           prompt: prompts[slotIdx]?.prompt ?? '',
           negativePrompt: prompts[slotIdx]?.negativePrompt || undefined,
+          promptProfile,
           model, aspectRatio, imageSize,
           imageCount: 1,
           client_job_id: `${uid()}_retry_${slotIdx}`,
@@ -1535,7 +1538,12 @@ export function StudioGenesisForm() {
         retryJobMap.map(({ slotIdx, jobId }) => {
           if (!jobId) return Promise.reject(new Error('Submission failed'))
           return waitForJob(jobId, abort.signal).then((job) => {
-            const result = extractResultFromJob(job, slotIdx)
+            const result = extractResultFromJob(
+              job,
+              slotIdx,
+              activeBatchId,
+              activeBatchTimestamp,
+            )
             setImageSlots((prev) =>
               prev.map((s, i) => i === slotIdx ? { ...s, status: 'done', result: result ?? undefined } : s)
             )
@@ -1560,7 +1568,10 @@ export function StudioGenesisForm() {
           newFailedIndices.push(retryJobMap[ri].slotIdx)
         }
       })
-      appendResults(retryResults)
+      appendResults(retryResults, {
+        activeBatchId,
+        activeBatchTimestamp,
+      })
       setFailedSlotIndices(newFailedIndices)
       refreshCredits()
 
@@ -1575,7 +1586,7 @@ export function StudioGenesisForm() {
         setPhase('complete')
       }
     }
-  }, [appendResults, retryContext, failedSlotIndices, uploadedUrls, model, aspectRatio, imageSize, isZh, t, genesisAnalysis])
+  }, [activeBatchId, activeBatchTimestamp, appendResults, retryContext, failedSlotIndices, uploadedUrls, model, aspectRatio, imageSize, isZh, t, genesisAnalysis, promptProfile])
 
   const handleStyleSelect = useCallback((key: GenesisStyleDirectionKey, value: string) => {
     setStyleSelections((prev) => ({
@@ -1760,6 +1771,7 @@ export function StudioGenesisForm() {
           <div className="space-y-6">
             <ResultGallery
               images={results}
+              activeBatchId={activeBatchId}
               aspectRatio={aspectRatio}
               onClear={clearResults}
               editorSessionKey="studio-genesis-v2"
@@ -1943,6 +1955,7 @@ export function StudioGenesisForm() {
         {results.length > 0 && (
           <ResultGallery
             images={results}
+            activeBatchId={activeBatchId}
             aspectRatio={aspectRatio}
             onClear={clearResults}
             editorSessionKey="studio-genesis-v2"
@@ -2108,27 +2121,6 @@ export function StudioGenesisForm() {
                     <SelectContent>
                       {ASPECT_RATIOS.map((r) => (
                         <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('imageSize')}</Label>
-                  <Select
-                    value={imageSize}
-                    onValueChange={(v) => setImageSize(v as ImageSize)}
-                    disabled={genParamsDisabled}
-                  >
-                    <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {RESOLUTION_OPTIONS.map((opt) => (
-                        <SelectItem
-                          key={opt.value}
-                          value={opt.value}
-                          disabled={false}
-                        >
-                          {opt.label}
-                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

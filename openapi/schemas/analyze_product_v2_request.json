@@ -5,6 +5,7 @@
   "properties": {
     "productImage": { "type": "string" },
     "productImages": { "type": "array", "items": { "type": "string" } },
+    "promptProfile": { "type": "string", "enum": ["default", "ta-pro"], "default": "default" },
     "requirements": { "type": "string", "default": "" },
     "imageCount": { "type": "integer", "minimum": 1, "default": 1 },
     "targetLanguage": { "type": "string", "default": "en" },

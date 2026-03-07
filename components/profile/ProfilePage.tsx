@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslations, useLocale } from 'next-intl'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { createPortalSession } from '@/lib/api/edge-functions'
@@ -35,6 +35,22 @@ interface RpcResult {
   credits?: number
 }
 
+function subscriptionPlanLabel(
+  plan: string | null | undefined,
+  t: ReturnType<typeof useTranslations>
+) {
+  switch (plan) {
+    case 'monthly':
+      return t('planNames.monthly')
+    case 'quarterly':
+      return t('planNames.quarterly')
+    case 'yearly':
+      return t('planNames.yearly')
+    default:
+      return plan
+  }
+}
+
 export function ProfilePage() {
   const t = useTranslations('profile')
   const tCommon = useTranslations('common')
@@ -62,7 +78,7 @@ export function ProfilePage() {
   const [redeemMessage, setRedeemMessage] = useState<string | null>(null)
   const [redeemError, setRedeemError] = useState<string | null>(null)
 
-  const errorMap = (t.raw('errors') as Record<string, string>) ?? {}
+  const errorMap = useMemo(() => ((t.raw('errors') as Record<string, string>) ?? {}), [t])
 
   const resolveRpcError = useCallback((result: RpcResult | null | undefined) => {
     if (result?.code && errorMap[result.code]) return errorMap[result.code]
@@ -272,8 +288,8 @@ export function ProfilePage() {
             {hasSubscription ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
-                  <p className="font-semibold text-lg capitalize">
-                    {profile!.subscription_plan}
+                  <p className="font-semibold text-lg">
+                    {subscriptionPlanLabel(profile!.subscription_plan, t)}
                   </p>
                   <StatusBadge status={profile!.subscription_status!} t={t} />
                 </div>

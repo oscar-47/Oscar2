@@ -14,11 +14,9 @@ import { SectionIcon } from '@/components/shared/SectionIcon'
 import { SlidersHorizontal } from 'lucide-react'
 import type { GenerationModel, AspectRatio, ImageSize, OutputLanguage } from '@/types'
 import {
-  AVAILABLE_MODELS,
   getAvailableModels,
   getDefaultImageSize,
   getSupportedImageSizes,
-  IMAGE_SIZE_LABELS,
   normalizeGenerationModel,
 } from '@/types'
 
@@ -111,7 +109,6 @@ export function GenerationParametersCard({
   const userEmail = useUserEmail()
 
   const ratios = aspectRatioOptions ?? DEFAULT_ASPECT_RATIOS
-  const resolutionOptions = getSupportedImageSizes(model)
 
   const selectTriggerClass =
     'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] text-[#1b1f26] shadow-none'
@@ -187,33 +184,6 @@ export function GenerationParametersCard({
                 }
               >
                 {ASPECT_RATIO_LABELS[r]?.[isZh ? 'zh' : 'en'] ?? r}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Resolution — button group */}
-      <div className="mt-4 space-y-1.5">
-        <Label className="text-[13px] font-medium text-[#5a5e6b]">
-          {isZh ? '分辨率' : 'Resolution'}
-        </Label>
-        <div className="flex gap-2">
-          {resolutionOptions.map((s) => {
-            const active = imageSize === s
-            return (
-              <button
-                key={s}
-                type="button"
-                disabled={disabled}
-                onClick={() => onImageSizeChange(s)}
-                className={
-                  active
-                    ? 'rounded-full bg-[#191b22] px-3 py-1.5 text-[13px] font-medium text-white transition-colors'
-                    : 'rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-1.5 text-[13px] font-medium text-[#5a5e6b] transition-colors hover:border-[#191b22] disabled:opacity-50'
-                }
-              >
-                {isZh ? IMAGE_SIZE_LABELS[s].zh : IMAGE_SIZE_LABELS[s].en}
               </button>
             )
           })}

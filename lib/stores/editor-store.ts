@@ -16,6 +16,14 @@ export interface CanvasObject {
   label?: string
   section: ResultAssetSection
   sourceAssetId?: string
+  batchId?: string
+  batchTimestamp?: number
+  requestedSize?: string
+  providerSize?: string
+  actualSize?: string
+  deliveredSize?: string
+  sizeStatus?: ResultAsset['sizeStatus']
+  normalizedByServer?: boolean
   createdAt: number
   originModule: ResultAssetOrigin
   x: number
@@ -152,7 +160,7 @@ const defaultQuickEdit: QuickEditState = {
   referencePreview: null,
   model: DEFAULT_MODEL,
   aspectRatio: '1:1',
-  imageSize: '2K',
+  imageSize: '1K',
   isProcessing: false,
   jobId: null,
 }
@@ -189,6 +197,14 @@ function buildCanvasObject(asset: ResultAsset, y: number, zIndex: number): Canva
     label: asset.label,
     section: asset.section,
     sourceAssetId: asset.sourceAssetId,
+    batchId: asset.batchId,
+    batchTimestamp: asset.batchTimestamp,
+    requestedSize: asset.requestedSize,
+    providerSize: asset.providerSize,
+    actualSize: asset.actualSize,
+    deliveredSize: asset.deliveredSize,
+    sizeStatus: asset.sizeStatus,
+    normalizedByServer: asset.normalizedByServer,
     createdAt: asset.createdAt,
     originModule: asset.originModule,
     x: 40,
@@ -215,6 +231,14 @@ function nextDerivedObject(source: CanvasObject, input: {
     label: source.label,
     section: 'edited',
     sourceAssetId: source.id,
+    batchId: source.batchId,
+    batchTimestamp: source.batchTimestamp,
+    requestedSize: undefined,
+    providerSize: undefined,
+    actualSize: undefined,
+    deliveredSize: undefined,
+    sizeStatus: undefined,
+    normalizedByServer: undefined,
     createdAt: Date.now(),
     originModule: source.originModule,
     x: source.x + source.width + 40,
@@ -278,6 +302,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           label: undefined,
           section: 'original',
           sourceAssetId: undefined,
+          batchId: undefined,
+          batchTimestamp: undefined,
+          requestedSize: undefined,
+          providerSize: undefined,
+          actualSize: undefined,
+          deliveredSize: undefined,
+          sizeStatus: undefined,
+          normalizedByServer: undefined,
           createdAt: Date.now(),
           originModule: 'image-editor',
           x: 40,
@@ -480,6 +512,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       label: object.label,
       section: object.section,
       sourceAssetId: object.sourceAssetId,
+      batchId: object.batchId,
+      batchTimestamp: object.batchTimestamp,
+      requestedSize: object.requestedSize,
+      providerSize: object.providerSize,
+      actualSize: object.actualSize,
+      deliveredSize: object.deliveredSize,
+      sizeStatus: object.sizeStatus,
+      normalizedByServer: object.normalizedByServer,
       createdAt: object.createdAt,
       originModule: object.originModule,
     }))

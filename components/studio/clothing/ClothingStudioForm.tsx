@@ -67,20 +67,21 @@ export function ClothingStudioForm() {
 
   const current = activeTab === 'model-tryon' ? tab1 : tab2
   const previewCount = current.previewCount ?? 0
+  const isModelTryOnTab = activeTab === 'model-tryon'
   const tabLocked = current.phase === 'analyzing' || current.phase === 'generating'
   const rightPanelTitle = current.phase === 'analyzing'
     ? '分析中...'
     : current.phase === 'generating'
       ? '生成中...'
       : current.phase === 'preview'
-        ? '生成结果'
+        ? (isModelTryOnTab ? '方案预览' : '生成结果')
         : '生成结果'
   const rightPanelSubtitle = current.phase === 'analyzing'
-    ? '正在分析产品并生成设计规范'
+    ? (isModelTryOnTab ? '正在分析产品与主体并生成文字方案' : '正在分析产品并生成设计规范')
     : current.phase === 'generating'
-      ? '正在根据规划生成图片'
+      ? (isModelTryOnTab ? '正在根据方案逐项生成图片' : '正在根据规划生成图片')
       : current.phase === 'preview'
-        ? `${previewCount} 张图片规划`
+        ? (isModelTryOnTab ? `${previewCount} 条试穿方案` : `${previewCount} 张图片规划`)
         : '上传产品图片点击分析开始'
 
   return (

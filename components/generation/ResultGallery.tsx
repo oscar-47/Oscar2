@@ -4,10 +4,20 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Download, Pencil, Trash2, X, ZoomIn } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Pencil,
+  Trash2,
+  X,
+  ZoomIn,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createEditorSession } from '@/lib/utils/editor-session'
+import { groupResultAssetsByBatch, splitResultAssetsByActiveBatch } from '@/lib/utils/result-assets'
 import type { ResultAsset, ResultAssetOrigin } from '@/types'
 
 export type ResultImage = ResultAsset
@@ -22,6 +32,12 @@ interface ResultGalleryProps {
   onClear?: () => void
   editorSessionKey?: string
   originModule?: ResultAssetOrigin
+  activeBatchId?: string
+}
+
+interface LightboxState {
+  images: ResultImage[]
+  index: number
 }
 
 function toCssAspectRatio(aspectRatio: string): string {
@@ -36,38 +52,9 @@ function SkeletonCard({ aspectRatio }: { aspectRatio: string }) {
   )
 }
 
-function groupByBatch(images: ResultImage[]) {
-  const groups: Array<{ batchId?: string; batchTimestamp?: number; images: ResultImage[] }> = []
-  let current: (typeof groups)[number] | null = null
-
-  for (const image of images) {
-    if (!current || image.batchId !== current.batchId) {
-      current = {
-        batchId: image.batchId,
-        batchTimestamp: image.batchTimestamp,
-        images: [image],
-      }
-      groups.push(current)
-      continue
-    }
-    current.images.push(image)
-  }
-
-  return groups
-}
-
 function formatBatchTime(timestamp: number): string {
   const date = new Date(timestamp)
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-}
-
-function formatResolutionMeta(image: ResultImage, isZh: boolean): string | null {
-  const parts: string[] = []
-  if (image.requestedSize) parts.push(`${isZh ? '请求' : 'Requested'} ${image.requestedSize}`)
-  if (image.deliveredSize) parts.push(`${isZh ? '交付' : 'Delivered'} ${image.deliveredSize}`)
-  if (!image.deliveredSize && image.actualSize) parts.push(`${isZh ? '实际' : 'Actual'} ${image.actualSize}`)
-  if (image.normalizedByServer) parts.push(isZh ? '已归一化' : 'Normalized')
-  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 export function ResultGallery({
@@ -80,37 +67,52 @@ export function ResultGallery({
   onClear,
   editorSessionKey,
   originModule = 'unknown',
+  activeBatchId,
 }: ResultGalleryProps) {
   const t = useTranslations('studio.editor')
   const locale = useLocale()
   const router = useRouter()
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null)
+  const [historyExpanded, setHistoryExpanded] = useState(false)
   const cssAspectRatio = toCssAspectRatio(aspectRatio)
-  const isZh = locale.startsWith('zh')
 
-  const originalImages = useMemo(
-    () => images.filter((image) => image.section !== 'edited'),
-    [images],
+  const {
+    activeAssets,
+    historicalAssets,
+    activeBatchTimestamp,
+  } = useMemo(
+    () => splitResultAssetsByActiveBatch(images, activeBatchId),
+    [activeBatchId, images],
   )
-  const editedImages = useMemo(
-    () => [...images.filter((image) => image.section === 'edited')]
+
+  const currentOriginalImages = useMemo(
+    () => activeAssets.filter((image) => image.section !== 'edited'),
+    [activeAssets],
+  )
+  const currentEditedImages = useMemo(
+    () => [...activeAssets.filter((image) => image.section === 'edited')]
       .sort((left, right) => right.createdAt - left.createdAt),
-    [images],
+    [activeAssets],
   )
-  const displayImages = useMemo(
-    () => [...originalImages, ...editedImages],
-    [editedImages, originalImages],
+  const currentDisplayImages = useMemo(
+    () => [...currentOriginalImages, ...currentEditedImages],
+    [currentEditedImages, currentOriginalImages],
   )
-  const displayIndexById = useMemo(
-    () => new Map(displayImages.map((image, index) => [image.id, index])),
-    [displayImages],
+  const historicalGroups = useMemo(
+    () => groupResultAssetsByBatch(historicalAssets),
+    [historicalAssets],
   )
 
-  const openLightbox = (index: number) => setLightboxIndex(index)
-  const closeLightbox = () => setLightboxIndex(null)
-  const prev = () => setLightboxIndex((index) => (index !== null ? Math.max(0, index - 1) : null))
-  const next = () => setLightboxIndex((index) => (
-    index !== null ? Math.min(displayImages.length - 1, index + 1) : null
+  const openLightbox = (batchImages: ResultImage[], index: number) => {
+    setLightbox({ images: batchImages, index })
+  }
+
+  const closeLightbox = () => setLightbox(null)
+  const prev = () => setLightbox((state) => (
+    state ? { ...state, index: Math.max(0, state.index - 1) } : null
+  ))
+  const next = () => setLightbox((state) => (
+    state ? { ...state, index: Math.min(state.images.length - 1, state.index + 1) } : null
   ))
 
   const openAssetsInEditor = (assets: ResultImage[]) => {
@@ -127,17 +129,11 @@ export function ResultGallery({
     openAssetsInEditor([image])
   }
 
-  const openAllInEditor = () => {
-    openAssetsInEditor(displayImages)
-  }
+  if (!isLoading && images.length === 0) return null
 
-  if (!isLoading && displayImages.length === 0) return null
+  const hasHistory = historicalGroups.length > 0
 
-  const originalBatches = originalImages.some((image) => image.batchId)
-    ? groupByBatch(originalImages)
-    : null
-
-  const renderImageCard = (image: ResultImage, index: number) => (
+  const renderImageCard = (image: ResultImage, index: number, batchImages: ResultImage[]) => (
     <motion.div
       key={image.id}
       initial={{ opacity: 0, scale: 0.95 }}
@@ -157,14 +153,9 @@ export function ResultGallery({
         className="h-full w-full object-cover"
       />
 
-      {(image.label || formatResolutionMeta(image, isZh)) && (
+      {image.label && (
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 px-3 py-2">
-          {image.label && (
-            <p className="text-xs font-medium text-white">{image.label}</p>
-          )}
-          {formatResolutionMeta(image, isZh) && (
-            <p className="mt-1 text-[10px] text-white/80">{formatResolutionMeta(image, isZh)}</p>
-          )}
+          <p className="text-xs font-medium text-white">{image.label}</p>
         </div>
       )}
 
@@ -173,7 +164,7 @@ export function ResultGallery({
           type="button"
           onClick={(event) => {
             event.stopPropagation()
-            openLightbox(index)
+            openLightbox(batchImages, index)
           }}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm transition-colors hover:bg-white/30"
         >
@@ -204,9 +195,50 @@ export function ResultGallery({
     </motion.div>
   )
 
+  const renderSection = (
+    sectionTitle: string,
+    sectionImages: ResultImage[],
+    sectionKey: string,
+  ) => {
+    if (!isLoading && sectionImages.length === 0) return null
+
+    return (
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-[11px] text-muted-foreground">{sectionTitle}</span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+        <div className={cn('flex flex-wrap content-start items-start gap-3', className)}>
+          {isLoading && sectionKey === 'current-original' && Array.from({ length: loadingCount }).map((_, index) => (
+            <SkeletonCard key={`original-skel-${index}`} aspectRatio={cssAspectRatio} />
+          ))}
+          {sectionImages.map((image, index) => renderImageCard(image, index, sectionImages))}
+        </div>
+      </section>
+    )
+  }
+
+  const renderBatchHeader = (batchIndex: number, batchTimestamp?: number, isLegacy?: boolean) => {
+    const baseLabel = isLegacy
+      ? t('legacyBatch')
+      : t('batchLabel', { index: batchIndex + 1 })
+
+    return (
+      <div className="flex items-center gap-2">
+        <div className="h-px flex-1 bg-border" />
+        <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+          {baseLabel}
+          {batchTimestamp ? ` · ${formatBatchTime(batchTimestamp)}` : ''}
+        </span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+    )
+  }
+
   return (
     <>
-      {onClear && displayImages.length > 0 && !isLoading && (
+      {onClear && images.length > 0 && !isLoading && (
         <div className="mb-2 flex justify-end">
           <button
             type="button"
@@ -220,67 +252,82 @@ export function ResultGallery({
       )}
 
       <div className="space-y-5">
-        {(isLoading || originalImages.length > 0) && (
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-[11px] text-muted-foreground">{t('originalSection')}</span>
-              <div className="h-px flex-1 bg-border" />
+        {hasHistory && (
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3">
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <span>{t('currentBatch')}</span>
+              {activeBatchTimestamp ? <span>· {formatBatchTime(activeBatchTimestamp)}</span> : null}
             </div>
+          </div>
+        )}
 
-            {originalBatches ? (
-              originalBatches.map((batch, batchIndex) => (
-                <div key={batch.batchId ?? `original-batch-${batchIndex}`} className="space-y-3">
-                  {originalBatches.length > 1 && (
-                    <div className="flex items-center gap-2">
-                      <div className="h-px flex-1 bg-border" />
-                      <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                        {locale === 'zh' ? `第${batchIndex + 1}批` : `Batch ${batchIndex + 1}`}
-                        {batch.batchTimestamp ? ` · ${formatBatchTime(batch.batchTimestamp)}` : ''}
-                      </span>
-                      <div className="h-px flex-1 bg-border" />
-                    </div>
-                  )}
-                  <div className={cn('flex flex-wrap content-start items-start gap-3', className)}>
-                    {batch.images.map((image) => renderImageCard(image, displayIndexById.get(image.id) ?? 0))}
-                  </div>
+        {renderSection(t('originalSection'), currentOriginalImages, 'current-original')}
+        {renderSection(t('editedSection'), currentEditedImages, 'current-edited')}
+
+        {hasHistory && (
+          <section className="rounded-2xl border border-border/70 bg-muted/10">
+            <button
+              type="button"
+              onClick={() => setHistoryExpanded((prev) => !prev)}
+              className="flex w-full items-center justify-between px-4 py-3 text-left"
+            >
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  {t('historySection')}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {locale === 'zh'
+                    ? `${historicalGroups.length} 批结果`
+                    : `${historicalGroups.length} batch${historicalGroups.length === 1 ? '' : 'es'}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{historyExpanded ? t('hideHistory') : t('showHistory')}</span>
+                <ChevronDown className={cn('h-4 w-4 transition-transform', historyExpanded && 'rotate-180')} />
+              </div>
+            </button>
+
+            {historyExpanded && (
+              <div className="border-t border-border/70 px-4 py-4">
+                <div className="space-y-5">
+                  {historicalGroups.map((group, batchIndex) => {
+                    const historicalOriginalImages = group.images.filter((image) => image.section !== 'edited')
+                    const historicalEditedImages = [...group.images.filter((image) => image.section === 'edited')]
+                      .sort((left, right) => right.createdAt - left.createdAt)
+
+                    return (
+                      <div key={group.key} className="space-y-4">
+                        {renderBatchHeader(batchIndex, group.batchTimestamp, group.isLegacy)}
+                        {historicalOriginalImages.length > 0 && renderSection(
+                          t('originalSection'),
+                          historicalOriginalImages,
+                          `${group.key}-original`,
+                        )}
+                        {historicalEditedImages.length > 0 && renderSection(
+                          t('editedSection'),
+                          historicalEditedImages,
+                          `${group.key}-edited`,
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-              ))
-            ) : (
-              <div className={cn('flex flex-wrap content-start items-start gap-3', className)}>
-                {isLoading && Array.from({ length: loadingCount }).map((_, index) => (
-                  <SkeletonCard key={`original-skel-${index}`} aspectRatio={cssAspectRatio} />
-                ))}
-                {originalImages.map((image) => renderImageCard(image, displayIndexById.get(image.id) ?? 0))}
               </div>
             )}
           </section>
         )}
-
-        {editedImages.length > 0 && (
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-[11px] text-muted-foreground">{t('editedSection')}</span>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-            <div className={cn('flex flex-wrap content-start items-start gap-3', className)}>
-              {editedImages.map((image) => renderImageCard(image, displayIndexById.get(image.id) ?? 0))}
-            </div>
-          </section>
-        )}
       </div>
 
-      {displayImages.length > 0 && !isLoading && (
+      {currentDisplayImages.length > 0 && !isLoading && (
         <div className="mt-3">
-          <Button variant="outline" size="sm" onClick={openAllInEditor} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => openAssetsInEditor(currentDisplayImages)} className="gap-1.5">
             <Pencil className="h-3.5 w-3.5" />
             {t('batchEdit')}
           </Button>
         </div>
       )}
 
-      {lightboxIndex !== null && displayImages[lightboxIndex] && (
+      {lightbox && lightbox.images[lightbox.index] && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
           onClick={closeLightbox}
@@ -293,7 +340,7 @@ export function ResultGallery({
             <X className="h-5 w-5 text-white" />
           </button>
 
-          {lightboxIndex > 0 && (
+          {lightbox.index > 0 && (
             <button
               type="button"
               onClick={(event) => {
@@ -306,7 +353,7 @@ export function ResultGallery({
             </button>
           )}
 
-          {lightboxIndex < displayImages.length - 1 && (
+          {lightbox.index < lightbox.images.length - 1 && (
             <button
               type="button"
               onClick={(event) => {
@@ -325,13 +372,13 @@ export function ResultGallery({
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={displayImages[lightboxIndex].url}
-              alt={displayImages[lightboxIndex].label ?? `Result ${lightboxIndex + 1}`}
+              src={lightbox.images[lightbox.index].url}
+              alt={lightbox.images[lightbox.index].label ?? `Result ${lightbox.index + 1}`}
               className="max-h-[80vh] max-w-full rounded-xl object-contain"
             />
             <div className="flex gap-2">
               <a
-                href={displayImages[lightboxIndex].url}
+                href={lightbox.images[lightbox.index].url}
                 download
                 target="_blank"
                 rel="noopener noreferrer"
@@ -344,7 +391,7 @@ export function ResultGallery({
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => openSingleInEditor(displayImages[lightboxIndex])}
+                onClick={() => openSingleInEditor(lightbox.images[lightbox.index])}
               >
                 <Pencil className="mr-1.5 h-4 w-4" />
                 {t('editInEditor')}

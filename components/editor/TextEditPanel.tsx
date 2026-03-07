@@ -123,7 +123,7 @@ export function TextEditPanel() {
         prompt,
         model: 'gpt-image',
         aspectRatio: '1:1',
-        imageSize: '2K',
+        imageSize: '1K',
         editMode: true,
         editType: 'text',
         originalImage: obj.url,

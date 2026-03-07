@@ -8,15 +8,13 @@ import { generateImage } from '@/lib/api/edge-functions'
 import { uploadFile } from '@/lib/api/upload'
 import { useWaitForJob } from '@/lib/hooks/useWaitForJob'
 import {
-  AVAILABLE_MODELS,
   getAvailableModels,
   getGenerationCreditCost,
-  getSupportedImageSizes,
   normalizeGenerationModel,
   sanitizeImageSizeForModel,
 } from '@/types'
 import { useUserEmail } from '@/lib/hooks/useUserEmail'
-import type { GenerationModel, AspectRatio, ImageSize } from '@/types'
+import type { GenerationModel, AspectRatio } from '@/types'
 
 const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
   { value: '1:1', label: '1:1' },
@@ -107,7 +105,6 @@ export function QuickEditPanel() {
   if (!quickEdit.open) return null
 
   const cost = computeCost()
-  const resolutionOptions = getSupportedImageSizes(quickEdit.model)
 
   return (
     <div className="absolute right-4 top-16 z-[10000] w-[340px] rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl">
@@ -160,44 +157,24 @@ export function QuickEditPanel() {
           />
         </div>
 
-        {/* Model & Resolution */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[#6b7280]">
-              {t('quickEditModel')}
-            </label>
-            <select
-              value={quickEdit.model}
-              onChange={(e) => {
-                const nextModel = normalizeGenerationModel(e.target.value) as GenerationModel
-                setQuickEditField('model', nextModel)
-                setQuickEditField('imageSize', sanitizeImageSizeForModel(nextModel, quickEdit.imageSize))
-              }}
-              className="w-full rounded-lg border border-[#d1d5db] bg-white px-2.5 py-1.5 text-sm text-[#111827] focus:border-[#6366f1] focus:outline-none"
-            >
-              {getAvailableModels(userEmail).map((opt) => (
-                <option key={opt.value} value={opt.value}>{locale.startsWith('zh') ? opt.tierLabel.zh : opt.tierLabel.en}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-[#6b7280]">
-              {t('quickEditResolution')}
-            </label>
-            <select
-              value={quickEdit.imageSize}
-              onChange={(e) => setQuickEditField('imageSize', e.target.value as ImageSize)}
-              className="w-full rounded-lg border border-[#d1d5db] bg-white px-2.5 py-1.5 text-sm text-[#111827] focus:border-[#6366f1] focus:outline-none"
-            >
-              {resolutionOptions.map((opt) => (
-                <option key={opt} value={opt}>
-                  {locale === 'zh'
-                    ? `${opt} (${opt === '1K' ? '1024px' : opt === '2K' ? '2048px' : '4096px'})`
-                    : `${opt} (${opt === '1K' ? '1024px' : opt === '2K' ? '2048px' : '4096px'})`}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Model */}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-[#6b7280]">
+            {t('quickEditModel')}
+          </label>
+          <select
+            value={quickEdit.model}
+            onChange={(e) => {
+              const nextModel = normalizeGenerationModel(e.target.value) as GenerationModel
+              setQuickEditField('model', nextModel)
+              setQuickEditField('imageSize', sanitizeImageSizeForModel(nextModel, quickEdit.imageSize))
+            }}
+            className="w-full rounded-lg border border-[#d1d5db] bg-white px-2.5 py-1.5 text-sm text-[#111827] focus:border-[#6366f1] focus:outline-none"
+          >
+            {getAvailableModels(userEmail).map((opt) => (
+              <option key={opt.value} value={opt.value}>{locale.startsWith('zh') ? opt.tierLabel.zh : opt.tierLabel.en}</option>
+            ))}
+          </select>
         </div>
 
         {/* Aspect Ratio */}

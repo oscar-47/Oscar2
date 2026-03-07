@@ -23,7 +23,7 @@ export function ModelImageSection({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label>模特图片</Label>
+        <Label>主体图片</Label>
         <Button
           type="button"
           variant="outline"
@@ -48,7 +48,7 @@ export function ModelImageSection({
         onRemove={() => onModelImageChange(null)}
         maxImages={1}
         disabled={disabled}
-        label="上传模特图片或使用AI生成"
+        label="上传主体图片或使用AI生成真人模特"
       />
     </div>
   )

@@ -31,7 +31,7 @@ export interface GenerationJob {
 
 // --- User profile ---
 
-export type SubscriptionPlan = 'starter' | 'professional' | 'enterprise'
+export type SubscriptionPlan = 'monthly' | 'quarterly' | 'yearly'
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due'
 
 export interface Profile {
@@ -71,7 +71,7 @@ export interface Package {
   price_usd: number
   credits: number
   first_sub_bonus: number
-  stripe_price_id: string
+  stripe_price_id: string | null
   is_popular: boolean
   sort_order: number
 }
@@ -122,6 +122,8 @@ export type GenerationModel =
   | 'sd-3.5-ultra'
   | 'dall-e-4'
   | 'ideogram-3'
+
+export type PromptProfile = 'default' | 'ta-pro'
 
 export type ModelTier = 'high' | 'balanced' | 'fast'
 export type ModelRolloutStage = 'public' | 'internal_only' | 'disabled'
@@ -181,9 +183,9 @@ export const MODEL_CAPABILITIES: Partial<Record<GenerationModel, ModelCapability
     rolloutStage: 'public',
   },
   'or-gemini-3.1-flash': {
-    supportedSizes: ['1K', '2K', '4K'],
-    publicSizes: ['1K', '2K'],
-    defaultSize: '2K',
+    supportedSizes: ['1K'],
+    publicSizes: ['1K'],
+    defaultSize: '1K',
     rolloutStage: 'public',
   },
   'or-gemini-3-pro': {
@@ -199,9 +201,9 @@ export const MODEL_CAPABILITIES: Partial<Record<GenerationModel, ModelCapability
     rolloutStage: 'internal_only',
   },
   'ta-gemini-3.1-flash': {
-    supportedSizes: ['1K', '2K'],
-    publicSizes: ['1K', '2K'],
-    defaultSize: '2K',
+    supportedSizes: ['1K'],
+    publicSizes: ['1K'],
+    defaultSize: '1K',
     rolloutStage: 'internal_only',
   },
   'ta-gemini-3-pro': {
@@ -217,7 +219,7 @@ export const MODEL_CREDIT_COSTS: Partial<Record<GenerationModel, Partial<Record<
   'or-gemini-3.1-flash': { '1K': 5, '2K': 8, '4K': 15 },
   'or-gemini-3-pro': { '1K': 10 },
   'ta-gemini-2.5-flash': { '1K': 3 },
-  'ta-gemini-3.1-flash': { '1K': 3, '2K': 5 },
+  'ta-gemini-3.1-flash': { '1K': 3 },
   'ta-gemini-3-pro': { '1K': 5 },
 }
 
@@ -268,13 +270,13 @@ export function getSupportedImageSizes(
   opts?: { includeInternal?: boolean }
 ): ImageSize[] {
   const capability = getModelCapability(model)
-  if (!capability) return ['1K', '2K']
+  if (!capability) return ['1K']
   return (opts?.includeInternal ? capability.supportedSizes : capability.publicSizes).slice()
 }
 
 export function getDefaultImageSize(model: GenerationModel | string): ImageSize {
   const capability = getModelCapability(model)
-  return capability?.defaultSize ?? '2K'
+  return capability?.defaultSize ?? '1K'
 }
 
 export function isImageSizeSupportedForModel(
@@ -334,7 +336,7 @@ export const DEFAULT_CREDIT_COSTS: Record<string, number> = {
   'or-gemini-3.1-flash': getGenerationCreditCost('or-gemini-3.1-flash', getDefaultImageSize('or-gemini-3.1-flash')),
   'or-gemini-3-pro': getGenerationCreditCost('or-gemini-3-pro', getDefaultImageSize('or-gemini-3-pro')),
   'ta-gemini-2.5-flash': 3,
-  'ta-gemini-3.1-flash': getGenerationCreditCost('ta-gemini-3.1-flash', '2K'),
+  'ta-gemini-3.1-flash': getGenerationCreditCost('ta-gemini-3.1-flash', '1K'),
   'ta-gemini-3-pro': 5,
   'midjourney': 15,
   'sd-3.5-ultra': 8,
@@ -391,12 +393,43 @@ export interface AnalysisAiMeta {
   provider: string
   image_count: number
   target_language: string
+  prompt_profile?: PromptProfile
+  prompt_config_key?: string
+}
+
+export interface SubjectProfile {
+  subject_type?: 'human' | 'pet' | 'other' | 'unknown' | string
+  identity_anchor?: string
+  body_anchor?: string
+  pose_anchor?: string
+  species_notes?: string
+  lock_rules?: string[]
+  [key: string]: unknown
+}
+
+export interface GarmentProfile {
+  category?: string
+  color_anchor?: string
+  material?: string
+  key_features?: string[]
+  [key: string]: unknown
+}
+
+export interface TryOnStrategy {
+  selected_type_count?: number
+  summary?: string
+  wear_region?: string
+  per_image_rules?: Array<Record<string, unknown>>
+  [key: string]: unknown
 }
 
 export interface AnalysisBlueprint {
   images: BlueprintImagePlan[]
   design_specs: string
   _ai_meta: AnalysisAiMeta
+  subject_profile?: SubjectProfile
+  garment_profile?: GarmentProfile
+  tryon_strategy?: TryOnStrategy
 }
 
 export type EcomDetailModuleId =
@@ -712,6 +745,7 @@ export interface PublicConfig {
   credit_costs: Record<string, number | Record<string, number>>
   signup_bonus_credits: number
   batch_concurrency: number
+  ta_pro_prompt_profile_enabled?: boolean
   release_notes?: {
     en: string
     zh: string

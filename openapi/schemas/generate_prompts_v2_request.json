@@ -5,6 +5,7 @@
   "properties": {
     "analysisJson": { "type": ["object", "string"] },
     "design_specs": { "type": ["object", "string"] },
+    "promptProfile": { "type": "string", "enum": ["default", "ta-pro"], "default": "default" },
     "imageCount": { "type": "integer", "minimum": 1, "maximum": 15, "default": 1 },
     "targetLanguage": { "type": "string", "default": "en" },
     "outputLanguage": {

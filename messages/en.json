@@ -312,9 +312,11 @@
       "creditCost": "Cost: {cost} credits",
       "waiting": "Upload product images to view refinement results",
       "waitingActionHint": "Click the left-side \"Start One-Click Refinement\" button",
-      "runningText1": "Analyzing product details and edges...",
-      "runningText2": "Enhancing lighting and texture quality...",
-      "runningText3": "Rendering high-fidelity refined outputs...",
+      "runningTitle": "Refinement In Progress...",
+      "runningSubtitle": "Analyzing product details, generating retouch prompts, and rendering commercial-grade outputs",
+      "runningText1": "Analyzing product details and material traits...",
+      "runningText2": "Generating a tailored refinement prompt...",
+      "runningText3": "Rendering commercial-grade refined outputs...",
       "retryFailed": "Retry Failed",
       "downloadAllSuccess": "Download All Success",
       "regenerateAll": "Regenerate All",
@@ -355,7 +357,13 @@
       "batchEdit": "Batch Edit",
       "editInEditor": "Open in Editor",
       "originalSection": "Original",
-      "editedSection": "Edited"
+      "editedSection": "Edited",
+      "currentBatch": "Current Batch",
+      "historySection": "History",
+      "showHistory": "Show History",
+      "hideHistory": "Hide History",
+      "legacyBatch": "Legacy Batch",
+      "batchLabel": "Batch {index}"
     },
     "common": {
       "results": "Results",
@@ -381,30 +389,51 @@
     }
   },
   "pricing": {
-    "title": "Empower Your E-commerce Visuals",
-    "subtitle": "Flexible credit system. Simple, predictable, and scales with your business.",
-    "totalCredits": "Total Credits",
-    "subscriptionPlans": "Subscription Plans",
-    "buyCredits": "Buy Credits",
-    "mostPopular": "MOST POPULAR",
-    "choosePlan": "Choose Plan",
-    "firstSubBonus": "+{bonus} credits (First Sub)",
-    "perMonth": "/mo",
-    "modelImages": "~{count} model images",
-    "proModelImages": "~{count} Pro model images",
-    "neverExpires": "Never expires, use anytime",
-    "oneTimePurchase": "One-time purchase, lifetime valid",
-    "plans": {
-      "starter": "Starter",
-      "professional": "Professional",
-      "enterprise": "Enterprise"
+    "title": "Choose the credit plan that fits you best",
+    "subtitle": "Top up anytime with one-time purchases, or subscribe for a lower effective credit cost and uninterrupted creation.",
+    "groups": {
+      "oneTime": "One-Time Purchase (Standard Price)",
+      "monthly": "Monthly Subscription (~5% off)",
+      "quarterly": "Quarterly Subscription (~10% off)",
+      "yearly": "Yearly Subscription (~15% off)"
     },
-    "included": {
-      "title": "Included in Every Plan",
-      "aiVisualStrategy": "AI Visual Strategy",
-      "aiVisualStrategyDesc": "Smart USP extraction for high-converting detail assets.",
-      "globalMarketplace": "Global Marketplace Ready",
-      "globalMarketplaceDesc": "Tailored for Amazon, Shopify, and TikTok Shop."
+    "labels": {
+      "monthly": "Best for light creators",
+      "quarterly": "Better value for steady output",
+      "yearly": "Best deal (Recommended)"
+    },
+    "buttons": {
+      "topup": "Top Up Now",
+      "subscribe": "Subscribe Now"
+    },
+    "stickers": {
+      "saveMore": "Save More"
+    },
+    "cycles": {
+      "month": "/mo",
+      "quarter": "/quarter",
+      "year": "/year"
+    },
+    "creditsValue": "{count} credits",
+    "singlePurchase": "One-time credits never expire",
+    "subscriptionRule": "Subscription bonus credits follow platform rules",
+    "cancelAnytime": "Auto-renews, cancel anytime",
+    "paymentSetupPending": "Payment Setup Pending",
+    "paymentSetupHint": "Stripe pricing is not configured yet, so checkout is temporarily unavailable.",
+    "faq": {
+      "title": "FAQ",
+      "autoRenewQ": "Does it renew automatically?",
+      "autoRenewA": "Yes. It renews automatically based on the selected billing cycle, and you can cancel anytime.",
+      "cancelQ": "Will it stop immediately after cancellation?",
+      "cancelA": "No. Your subscription stays active until the current billing period ends.",
+      "expiryQ": "Do credits expire?",
+      "expiryA": "One-time purchase credits never expire. Subscription bonus credits follow platform rules."
+    },
+    "usage": {
+      "title": "Generation Cost Reference",
+      "speed": "Fast: 15 credits/image",
+      "balanced": "Balanced: 30 credits/image",
+      "quality": "High Quality: 50 credits/image"
     },
     "success": "Payment successful! Credits added to your account.",
     "canceled": "Payment canceled.",
@@ -447,13 +476,18 @@
     "pastDue": "Past Due",
     "renewsOn": "Renews on {date}",
     "canceledInfo": "Access until {date}",
+    "planNames": {
+      "monthly": "Monthly Subscription",
+      "quarterly": "Quarterly Subscription",
+      "yearly": "Yearly Subscription"
+    },
     "subscriptionCredits": "Subscription Credits",
     "purchasedCredits": "Purchased Credits",
     "totalCredits": "Total Credits",
     "manageSubscription": "Manage Subscription",
     "managingSubscription": "Opening...",
     "noSubscription": "No active subscription",
-    "noSubscriptionDesc": "Subscribe to get monthly credits and bonus rewards.",
+    "noSubscriptionDesc": "Subscribe monthly, quarterly, or yearly to receive recurring credits.",
     "viewPlans": "View Plans",
     "buyMoreCredits": "Buy More Credits",
     "portalError": "Could not open billing portal. Please try again.",

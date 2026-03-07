@@ -20,6 +20,7 @@ import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStat
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { GenerationParametersCard } from '@/components/studio/GenerationParametersCard'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
+import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
@@ -194,14 +195,18 @@ export function RefinementStudioForm() {
   const [userPrompt, setUserPrompt] = useState('')
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>('white')
   const [model, setModel] = useState<GenerationModel>(DEFAULT_MODEL)
+  const { promptProfile } = usePromptProfile(model)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
-  const [imageSize, setImageSize] = useState<ImageSize>('2K')
+  const [imageSize, setImageSize] = useState<ImageSize>('1K')
   const [phase, setPhase] = useState<Phase>('idle')
   const [progress, setProgress] = useState(0)
   const [statusLine, setStatusLine] = useState('')
   const [cards, setCards] = useState<Card[]>([])
   const {
     assets: resultAssets,
+    activeAssets: activeResultAssets,
+    activeBatchId,
+    activeBatchTimestamp,
     appendAssets: appendResultAssets,
     clearAssets: clearResultAssets,
   } = useResultAssetSession('refinement-studio')
@@ -270,10 +275,16 @@ export function RefinementStudioForm() {
   })
 
   const runRefinement = useCallback(
-    async (productUrls: string[], mergeIndices?: number[]) => {
+    async (
+      productUrls: string[],
+      mergeIndices?: number[],
+      batchMeta?: { batchId: string; batchTimestamp: number },
+    ) => {
       const abort = new AbortController()
       abortRef.current = abort
       const requestCount = productUrls.length
+      const resolvedBatchId = batchMeta?.batchId ?? uid()
+      const resolvedBatchTimestamp = batchMeta?.batchTimestamp ?? Date.now()
 
       setPhase('running')
       setProgress(5)
@@ -301,6 +312,7 @@ export function RefinementStudioForm() {
           mode: 'refinement',
           referenceImage: productUrls[0],
           productImages: productUrls,
+          promptProfile,
           backgroundMode,
           userPrompt: userPrompt.trim() || undefined,
           model,
@@ -358,11 +370,16 @@ export function RefinementStudioForm() {
           .filter((card) => card.status === 'success' && card.url)
           .map((card) => createResultAsset({
             url: card.url!,
+            batchId: resolvedBatchId,
+            batchTimestamp: resolvedBatchTimestamp,
             ...extractResultAssetMetadata(job.result_data),
             originModule: 'refinement-studio',
           }))
         if (successAssets.length > 0) {
-          appendResultAssets(successAssets)
+          appendResultAssets(successAssets, {
+            activeBatchId: resolvedBatchId,
+            activeBatchTimestamp: resolvedBatchTimestamp,
+          })
         }
 
         setProgress(100)
@@ -382,7 +399,7 @@ export function RefinementStudioForm() {
         refreshCredits()
       }
     },
-    [appendResultAssets, aspectRatio, backgroundMode, imageSize, isZh, model, t, tc, userPrompt]
+    [appendResultAssets, aspectRatio, backgroundMode, imageSize, isZh, model, promptProfile, t, tc, userPrompt]
   )
 
   const handleSubmit = useCallback(async () => {
@@ -398,7 +415,10 @@ export function RefinementStudioForm() {
       const uploads = await uploadFiles(productImages.map((x) => x.file))
       const urls = uploads.map((x) => x.publicUrl)
       uploadedUrlsRef.current = urls
-      await runRefinement(urls)
+      await runRefinement(urls, undefined, {
+        batchId: uid(),
+        batchTimestamp: Date.now(),
+      })
     } catch (e: unknown) {
       setErrorMessage(friendlyError(e instanceof Error ? e.message : tc('error'), isZh))
       setPhase('failed')
@@ -417,13 +437,16 @@ export function RefinementStudioForm() {
       .filter((x): x is string => typeof x === 'string' && x.length > 0)
     const mergeIndices = failed.map((x) => x.idx)
     if (retryUrls.length === 0) return
-    await runRefinement(retryUrls, mergeIndices)
-  }, [cards, runRefinement])
+    await runRefinement(retryUrls, mergeIndices, {
+      batchId: activeBatchId ?? uid(),
+      batchTimestamp: activeBatchTimestamp ?? Date.now(),
+    })
+  }, [activeBatchId, activeBatchTimestamp, cards, runRefinement])
 
   const downloadAll = async () => {
     try {
       setDownloadingAll(true)
-      const urls = resultAssets.map((asset) => asset.url)
+      const urls = activeResultAssets.map((asset) => asset.url)
       for (let i = 0; i < urls.length; i++) {
         triggerDirectDownload(urls[i], `refinement-${i + 1}-${Date.now()}.png`)
         await new Promise((resolve) => setTimeout(resolve, 120))
@@ -438,8 +461,8 @@ export function RefinementStudioForm() {
 
   const panelClass = 'rounded-[28px] border border-[#d0d4dc] bg-white'
   const selectTriggerClass = 'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] text-[#1b1f26] shadow-none'
-  const resultPanelTitle = phase === 'running' ? '分析中...' : t('resultTitle')
-  const resultPanelSubtitle = phase === 'running' ? '正在分析产品并生成设计规范' : t('resultSubtitle')
+  const resultPanelTitle = phase === 'running' ? t('runningTitle') : t('resultTitle')
+  const resultPanelSubtitle = phase === 'running' ? t('runningSubtitle') : t('resultSubtitle')
 
   return (
     <>
@@ -613,8 +636,8 @@ export function RefinementStudioForm() {
 
           {phase === 'running' && (
             <CoreProcessingStatus
-              title="分析中..."
-              subtitle="正在分析产品并生成设计规范"
+              title={t('runningTitle')}
+              subtitle={t('runningSubtitle')}
               progress={progress}
               statusLine={statusLine}
               showHeader={false}
@@ -669,6 +692,7 @@ export function RefinementStudioForm() {
               {resultAssets.length > 0 && (
                 <ResultGallery
                   images={resultAssets}
+                  activeBatchId={activeBatchId}
                   aspectRatio={aspectRatio}
                   editorSessionKey="refinement-studio"
                   originModule="refinement-studio"
@@ -693,7 +717,7 @@ export function RefinementStudioForm() {
                 variant="outline"
                 className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
                 onClick={downloadAll}
-                disabled={resultAssets.length === 0 || downloadingAll}
+                disabled={activeResultAssets.length === 0 || downloadingAll}
               >
                 {downloadingAll ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
                 {t('downloadAllSuccess')}

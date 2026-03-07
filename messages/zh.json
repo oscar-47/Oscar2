@@ -312,9 +312,11 @@
       "creditCost": "消耗：{cost} 积分",
       "waiting": "上传产品图片后查看精修效果",
       "waitingActionHint": "点击左侧“开始一键精修”按钮",
-      "runningText1": "正在解析产品细节与边缘...",
-      "runningText2": "正在执行光影与质感增强...",
-      "runningText3": "正在输出高保真精修结果...",
+      "runningTitle": "图片精修中...",
+      "runningSubtitle": "正在分析产品细节、生成精修提示并输出商业级成图",
+      "runningText1": "正在分析产品细节与材质特征...",
+      "runningText2": "正在生成定制化精修提示词...",
+      "runningText3": "正在输出商业级精修结果...",
       "retryFailed": "重试失败项",
       "downloadAllSuccess": "下载全部成功图",
       "regenerateAll": "重新精修全部",
@@ -355,7 +357,13 @@
       "batchEdit": "批量编辑",
       "editInEditor": "在编辑器中打开",
       "originalSection": "原图",
-      "editedSection": "修改图"
+      "editedSection": "修改图",
+      "currentBatch": "当前批次",
+      "historySection": "历史结果",
+      "showHistory": "展开历史",
+      "hideHistory": "收起历史",
+      "legacyBatch": "历史批次",
+      "batchLabel": "第{index}批"
     },
     "common": {
       "results": "生成结果",
@@ -381,30 +389,51 @@
     }
   },
   "pricing": {
-    "title": "赋能你的电商视觉",
-    "subtitle": "灵活的积分体系，简单可预测，随业务扩展。",
-    "totalCredits": "总积分",
-    "subscriptionPlans": "订阅套餐",
-    "buyCredits": "购买积分",
-    "mostPopular": "最受欢迎",
-    "choosePlan": "选择套餐",
-    "firstSubBonus": "+{bonus} 积分（首次订阅）",
-    "perMonth": "/月",
-    "modelImages": "约{count}张基础模型图",
-    "proModelImages": "约{count}张Pro模型图",
-    "neverExpires": "永不过期，随时使用",
-    "oneTimePurchase": "一次性购买，终身有效",
-    "plans": {
-      "starter": "入门版",
-      "professional": "专业版",
-      "enterprise": "企业版"
+    "title": "选择最适合你的积分方案",
+    "subtitle": "单次购买灵活充值；连续订阅享受更低单价，创作不断档",
+    "groups": {
+      "oneTime": "单次购买（原价）",
+      "monthly": "月订阅（约95折）",
+      "quarterly": "季订阅（约9折）",
+      "yearly": "年订阅（约8.5折）"
     },
-    "included": {
-      "title": "每个套餐均包含",
-      "aiVisualStrategy": "AI视觉策略",
-      "aiVisualStrategyDesc": "智能USP提取，生成高转化率的细节素材。",
-      "globalMarketplace": "全球市场就绪",
-      "globalMarketplaceDesc": "专为亚马逊、Shopify和TikTok Shop优化。"
+    "labels": {
+      "monthly": "轻度创作首选",
+      "quarterly": "稳定创作更划算",
+      "yearly": "最高优惠（推荐）"
+    },
+    "buttons": {
+      "topup": "立即充值",
+      "subscribe": "立即开通"
+    },
+    "stickers": {
+      "saveMore": "省更多"
+    },
+    "cycles": {
+      "month": "/ 月",
+      "quarter": "/ 季",
+      "year": "/ 年"
+    },
+    "creditsValue": "{count}积分",
+    "singlePurchase": "单次购买积分不过期",
+    "subscriptionRule": "订阅赠送积分按平台规则有效",
+    "cancelAnytime": "自动续费，可随时取消",
+    "paymentSetupPending": "支付配置中",
+    "paymentSetupHint": "Stripe 价格尚未配置，暂时无法购买。",
+    "faq": {
+      "title": "FAQ",
+      "autoRenewQ": "自动续费吗？",
+      "autoRenewA": "是，按所选周期自动续费，可随时取消。",
+      "cancelQ": "取消后立即失效吗？",
+      "cancelA": "不会，当前周期到期后停止续费。",
+      "expiryQ": "积分会过期吗？",
+      "expiryA": "单次购买积分不过期；订阅赠送积分按平台规则有效。"
+    },
+    "usage": {
+      "title": "生成消耗参考",
+      "speed": "极速：15积分/张",
+      "balanced": "均衡：30积分/张",
+      "quality": "高质：50积分/张"
     },
     "success": "支付成功！积分已到账。",
     "canceled": "支付已取消。",
@@ -447,13 +476,18 @@
     "pastDue": "逾期",
     "renewsOn": "续费日期：{date}",
     "canceledInfo": "有效期至：{date}",
+    "planNames": {
+      "monthly": "月订阅",
+      "quarterly": "季订阅",
+      "yearly": "年订阅"
+    },
     "subscriptionCredits": "订阅积分",
     "purchasedCredits": "购买积分",
     "totalCredits": "总积分",
     "manageSubscription": "管理订阅",
     "managingSubscription": "正在打开...",
     "noSubscription": "暂无订阅",
-    "noSubscriptionDesc": "订阅套餐可获得每月积分和首次订阅奖励。",
+    "noSubscriptionDesc": "订阅套餐可按月、按季或按年获得积分。",
     "viewPlans": "查看套餐",
     "buyMoreCredits": "购买更多积分",
     "portalError": "无法打开账单管理页面，请重试。",

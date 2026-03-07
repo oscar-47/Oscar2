@@ -17,11 +17,26 @@ const MODEL_IMAGE_SIZES: Record<string, { publicSizes: EdgeImageSize[]; internal
     defaultSize: "1K",
   },
   "or-gemini-3.1-flash": {
-    publicSizes: ["1K", "2K"],
-    internalSizes: ["1K", "2K", "4K"],
-    defaultSize: "2K",
+    publicSizes: ["1K"],
+    internalSizes: ["1K"],
+    defaultSize: "1K",
   },
   "or-gemini-3-pro": {
+    publicSizes: ["1K"],
+    internalSizes: ["1K"],
+    defaultSize: "1K",
+  },
+  "ta-gemini-2.5-flash": {
+    publicSizes: ["1K"],
+    internalSizes: ["1K"],
+    defaultSize: "1K",
+  },
+  "ta-gemini-3.1-flash": {
+    publicSizes: ["1K"],
+    internalSizes: ["1K"],
+    defaultSize: "1K",
+  },
+  "ta-gemini-3-pro": {
     publicSizes: ["1K"],
     internalSizes: ["1K"],
     defaultSize: "1K",
@@ -32,6 +47,9 @@ const MODEL_CREDIT_COSTS: Record<string, Partial<Record<EdgeImageSize, number>>>
   "or-gemini-2.5-flash": { "1K": 3, "2K": 5 },
   "or-gemini-3.1-flash": { "1K": 5, "2K": 8, "4K": 15 },
   "or-gemini-3-pro": { "1K": 10 },
+  "ta-gemini-2.5-flash": { "1K": 3 },
+  "ta-gemini-3.1-flash": { "1K": 3 },
+  "ta-gemini-3-pro": { "1K": 5 },
 };
 
 export function normalizeRequestedModel(model: string | null | undefined): string {
@@ -46,13 +64,13 @@ export function getSupportedImageSizesForModel(
 ): EdgeImageSize[] {
   const normalizedModel = normalizeRequestedModel(model);
   const capability = MODEL_IMAGE_SIZES[normalizedModel];
-  if (!capability) return ["1K", "2K"];
+  if (!capability) return ["1K"];
   return (opts?.includeInternal ? capability.internalSizes : capability.publicSizes).slice();
 }
 
 export function getDefaultImageSizeForModel(model: string | null | undefined): EdgeImageSize {
   const normalizedModel = normalizeRequestedModel(model);
-  return MODEL_IMAGE_SIZES[normalizedModel]?.defaultSize ?? "2K";
+  return MODEL_IMAGE_SIZES[normalizedModel]?.defaultSize ?? "1K";
 }
 
 export function isImageSizeSupportedForModel(

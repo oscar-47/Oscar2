@@ -15,7 +15,7 @@
       ]
     },
     "job_id": { "type": "string", "format": "uuid" },
-    "task_type": { "type": "string", "enum": ["ANALYSIS", "IMAGE_GEN"] },
+    "task_type": { "type": "string", "enum": ["ANALYSIS", "IMAGE_GEN", "STYLE_REPLICATE"] },
     "error": { "type": "string" }
   },
   "required": ["status", "job_id"],

@@ -32,14 +32,20 @@ Deno.serve(async (req) => {
 
   const stripe = new Stripe(stripeKey, { apiVersion: "2024-06-20" });
   const appUrl = Deno.env.get("APP_URL") ?? "https://shopix.ai";
-  const returnTo = body.returnTo ?? "/pricing";
+  const returnTo = typeof body.returnTo === "string" && body.returnTo.startsWith("/")
+    ? body.returnTo
+    : "/pricing";
+  const successUrl = new URL(returnTo, appUrl);
+  successUrl.searchParams.set("success", "true");
+  const cancelUrl = new URL(returnTo, appUrl);
+  cancelUrl.searchParams.set("canceled", "true");
 
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: pkg.stripe_price_id, quantity: 1 }],
-      success_url: `${appUrl}/pricing?success=true&return_to=${encodeURIComponent(returnTo)}`,
-      cancel_url: `${appUrl}/pricing?canceled=true&return_to=${encodeURIComponent(returnTo)}`,
+      success_url: successUrl.toString(),
+      cancel_url: cancelUrl.toString(),
       customer_email: user.email,
       allow_promotion_codes: true,
       metadata: {

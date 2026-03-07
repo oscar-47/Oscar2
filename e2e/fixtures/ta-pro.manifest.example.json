@@ -1,0 +1,254 @@
+{
+  "locale": "zh",
+  "reportPath": "test-results/ta-pro-production-report.md",
+  "flows": [
+    {
+      "id": "genesis",
+      "samples": [
+        {
+          "id": "genesis-pure-visual",
+          "kind": "pure-visual",
+          "productImages": ["/absolute/path/to/genesis/pure-visual-product-1.jpg"],
+          "requirements": "纯视觉主图，突出商品核心卖点，不添加额外设计文案。",
+          "outputLanguage": "none",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "检查商品颜色、材质、轮廓、logo、结构是否一致" }
+        },
+        {
+          "id": "genesis-exact-copy-zh",
+          "kind": "exact-copy-zh",
+          "productImages": ["/absolute/path/to/genesis/exact-copy-product-1.jpg"],
+          "requirements": "主标题：春季轻氧防晒衣；副标题：UPF50+ 全面防晒；卖点：轻薄透气 不闷汗",
+          "outputLanguage": "zh",
+          "ocr": { "mode": "exact-match", "expectedText": "春季轻氧防晒衣\nUPF50+ 全面防晒\n轻薄透气 不闷汗" },
+          "manualReview": { "status": "pending", "notes": "检查文案逐字对齐且主体特征未漂移" }
+        },
+        {
+          "id": "genesis-identity-stress",
+          "kind": "identity-stress",
+          "productImages": ["/absolute/path/to/genesis/identity-product-1.jpg"],
+          "requirements": "保留同一 SKU、同一主色和 logo，生成纯视觉高转化主图。",
+          "outputLanguage": "none",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "重点检查 SKU、主色、logo 与结构是否保持一致" }
+        }
+      ]
+    },
+    {
+      "id": "aesthetic-single",
+      "samples": [
+        {
+          "id": "aesthetic-single-pure-visual",
+          "kind": "pure-visual",
+          "productImages": ["/absolute/path/to/aesthetic-single/product-1.jpg"],
+          "referenceImages": ["/absolute/path/to/aesthetic-single/reference-1.jpg"],
+          "userPrompt": "仅借参考图风格，不复制参考图主体和构图内容。",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "确认只借风格，不借主体/道具/版式内容" }
+        },
+        {
+          "id": "aesthetic-single-exact-copy-zh",
+          "kind": "exact-copy-zh",
+          "productImages": ["/absolute/path/to/aesthetic-single/product-2.jpg"],
+          "referenceImages": ["/absolute/path/to/aesthetic-single/reference-2.jpg"],
+          "userPrompt": "文案必须逐字渲染：匠心材质 更轻更稳",
+          "ocr": { "mode": "exact-match", "expectedText": "匠心材质 更轻更稳" },
+          "manualReview": { "status": "pending", "notes": "确认商品主体与参考图主体没有混淆" }
+        },
+        {
+          "id": "aesthetic-single-identity-stress",
+          "kind": "identity-stress",
+          "productImages": ["/absolute/path/to/aesthetic-single/product-3.jpg"],
+          "referenceImages": ["/absolute/path/to/aesthetic-single/reference-3.jpg"],
+          "userPrompt": "保留原商品 logo、轮廓与材质，仅迁移风格氛围。",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "检查商品 identity 未被参考图内容污染" }
+        }
+      ]
+    },
+    {
+      "id": "aesthetic-batch",
+      "samples": [
+        {
+          "id": "aesthetic-batch-pure-visual",
+          "kind": "pure-visual",
+          "productImages": ["/absolute/path/to/aesthetic-batch/product-1.jpg"],
+          "referenceImages": [
+            "/absolute/path/to/aesthetic-batch/reference-1.jpg",
+            "/absolute/path/to/aesthetic-batch/reference-2.jpg"
+          ],
+          "groupCount": 1,
+          "userPrompt": "批量复刻仅迁移风格，不得复制参考图主体或版式元素。",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "检查所有结果均保持商品一致性" }
+        },
+        {
+          "id": "aesthetic-batch-exact-copy-zh",
+          "kind": "exact-copy-zh",
+          "productImages": ["/absolute/path/to/aesthetic-batch/product-2.jpg"],
+          "referenceImages": [
+            "/absolute/path/to/aesthetic-batch/reference-3.jpg",
+            "/absolute/path/to/aesthetic-batch/reference-4.jpg"
+          ],
+          "groupCount": 1,
+          "userPrompt": "每张图必须带文案：官方正品 限时加赠",
+          "ocr": { "mode": "exact-match", "expectedText": "官方正品 限时加赠" },
+          "manualReview": { "status": "pending", "notes": "检查文案与商品 identity 同时满足" }
+        },
+        {
+          "id": "aesthetic-batch-identity-stress",
+          "kind": "identity-stress",
+          "productImages": ["/absolute/path/to/aesthetic-batch/product-3.jpg"],
+          "referenceImages": [
+            "/absolute/path/to/aesthetic-batch/reference-5.jpg",
+            "/absolute/path/to/aesthetic-batch/reference-6.jpg"
+          ],
+          "groupCount": 1,
+          "userPrompt": "保留同一 SKU 与 logo，只变换风格氛围。",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "检查批量结果没有复制参考图人物或道具" }
+        }
+      ]
+    },
+    {
+      "id": "clothing-basic",
+      "samples": [
+        {
+          "id": "clothing-basic-pure-visual",
+          "kind": "pure-visual",
+          "productImages": ["/absolute/path/to/clothing-basic/product-1.jpg"],
+          "requirements": "白底精修图，突出服装颜色、版型和面料纹理，不新增文案。",
+          "outputLanguage": "none",
+          "generationType": "白底精修图",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "检查服装颜色、材质、版型、车线与 logo 一致" }
+        },
+        {
+          "id": "clothing-basic-exact-copy-zh",
+          "kind": "exact-copy-zh",
+          "productImages": ["/absolute/path/to/clothing-basic/product-2.jpg"],
+          "requirements": "卖点展示图，文案逐字渲染：柔软亲肤 轻松出门",
+          "outputLanguage": "zh",
+          "generationType": "卖点展示图",
+          "ocr": { "mode": "exact-match", "expectedText": "柔软亲肤 轻松出门" },
+          "manualReview": { "status": "pending", "notes": "检查服装主体特征稳定且文案逐字一致" }
+        },
+        {
+          "id": "clothing-basic-identity-stress",
+          "kind": "identity-stress",
+          "productImages": ["/absolute/path/to/clothing-basic/product-3.jpg"],
+          "requirements": "3D立体效果图，但不能改变服装结构和材质。",
+          "outputLanguage": "none",
+          "generationType": "3D立体效果图",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "重点检查版型、结构、五金和 logo 未改变" }
+        }
+      ]
+    },
+    {
+      "id": "clothing-try-on",
+      "samples": [
+        {
+          "id": "clothing-tryon-pure-visual",
+          "kind": "pure-visual",
+          "productImages": ["/absolute/path/to/clothing-tryon/product-1.jpg"],
+          "subjectImage": "/absolute/path/to/clothing-tryon/subject-human-1.jpg",
+          "requirements": "让服装真实穿在原主体身上，不新增文字。",
+          "outputLanguage": "none",
+          "generationType": "白底精修图",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "检查原主体身份与服装穿着位置保持一致" }
+        },
+        {
+          "id": "clothing-tryon-exact-copy-zh",
+          "kind": "exact-copy-zh",
+          "productImages": ["/absolute/path/to/clothing-tryon/product-2.jpg"],
+          "subjectImage": "/absolute/path/to/clothing-tryon/subject-human-2.jpg",
+          "requirements": "卖点图文案必须逐字渲染：显瘦剪裁 自在伸展",
+          "outputLanguage": "zh",
+          "generationType": "卖点展示图",
+          "ocr": { "mode": "exact-match", "expectedText": "显瘦剪裁 自在伸展" },
+          "manualReview": { "status": "pending", "notes": "检查主体不换人，服装不换款，文案逐字正确" }
+        },
+        {
+          "id": "clothing-tryon-identity-stress",
+          "kind": "identity-stress",
+          "productImages": ["/absolute/path/to/clothing-tryon/product-3.jpg"],
+          "subjectImage": "/absolute/path/to/clothing-tryon/subject-nonhuman-1.jpg",
+          "requirements": "非人主体试穿，严格保持主体物种和身份，不要换成人类模特。",
+          "outputLanguage": "none",
+          "generationType": "3D立体效果图",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "必须确认非人主体未被人化、衣服真实穿在原主体身上" }
+        }
+      ]
+    },
+    {
+      "id": "ecom-detail",
+      "samples": [
+        {
+          "id": "ecom-detail-pure-visual",
+          "kind": "pure-visual",
+          "productImages": ["/absolute/path/to/ecom-detail/product-1.jpg"],
+          "requirements": "详情页纯视觉输出，突出同一 SKU 与统一视觉节奏。",
+          "modules": ["首屏主视觉", "商品细节图"],
+          "outputLanguage": "none",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "检查模块职责正确且商品 identity 稳定" }
+        },
+        {
+          "id": "ecom-detail-exact-copy-zh",
+          "kind": "exact-copy-zh",
+          "productImages": ["/absolute/path/to/ecom-detail/product-2.jpg"],
+          "requirements": "规格模块文案逐字渲染：容量 500ml｜食品级材质｜可反复使用",
+          "modules": ["详细规格/参数表", "尺寸/容量/尺码图"],
+          "outputLanguage": "zh",
+          "ocr": { "mode": "exact-match", "expectedText": "容量 500ml 食品级材质 可反复使用" },
+          "manualReview": { "status": "pending", "notes": "检查信息型模块文案逐字正确且商品特征不变" }
+        },
+        {
+          "id": "ecom-detail-identity-stress",
+          "kind": "identity-stress",
+          "productImages": ["/absolute/path/to/ecom-detail/product-3.jpg"],
+          "requirements": "多模块输出时必须保持同一 SKU、主色、材质与 logo。",
+          "modules": ["核心卖点图", "多角度图"],
+          "outputLanguage": "none",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "检查各模块之间商品一致性，不得漂移" }
+        }
+      ]
+    },
+    {
+      "id": "refinement",
+      "samples": [
+        {
+          "id": "refinement-pure-visual",
+          "kind": "pure-visual",
+          "productImages": ["/absolute/path/to/refinement/product-1.jpg"],
+          "userPrompt": "仅做精修，不重绘，不新增文字。",
+          "backgroundMode": "white",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": [] },
+          "manualReview": { "status": "pending", "notes": "检查只修瑕疵/光影/清晰度，不改主体特征" }
+        },
+        {
+          "id": "refinement-exact-copy-zh",
+          "kind": "exact-copy-zh",
+          "productImages": ["/absolute/path/to/refinement/product-2-with-logo.jpg"],
+          "userPrompt": "保留原图文字与 logo，不得改写，逐字保持：官方直营",
+          "backgroundMode": "original",
+          "ocr": { "mode": "exact-match", "expectedText": "官方直营" },
+          "manualReview": { "status": "pending", "notes": "检查可见文字和 logo 完整保留，未被重绘" }
+        },
+        {
+          "id": "refinement-identity-stress",
+          "kind": "identity-stress",
+          "productImages": ["/absolute/path/to/refinement/product-3-with-logo.jpg"],
+          "userPrompt": "只去杂物和提清晰度，禁止改变颜色、材质、logo、文字、配件或结构。",
+          "backgroundMode": "white",
+          "ocr": { "mode": "empty-or-allowed", "allowedTexts": ["官方直营"] },
+          "manualReview": { "status": "pending", "notes": "重点检查带 logo / 可见文字样本未发生漂移" }
+        }
+      ]
+    }
+  ]
+}
