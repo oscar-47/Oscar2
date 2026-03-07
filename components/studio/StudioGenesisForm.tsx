@@ -1763,23 +1763,21 @@ export function StudioGenesisForm() {
     )
   }
 
+  const persistedHistoryGallery = results.length > 0 ? (
+    <ResultGallery
+      images={results}
+      activeBatchId={activeBatchId}
+      aspectRatio={aspectRatio}
+      onClear={clearResults}
+      editorSessionKey="studio-genesis-v2"
+      originModule="studio-genesis"
+    />
+  ) : null
+
   // Right panel content
   const renderRightPanel = () => {
     if (phase === 'input') {
-      if (results.length > 0) {
-        return (
-          <div className="space-y-6">
-            <ResultGallery
-              images={results}
-              activeBatchId={activeBatchId}
-              aspectRatio={aspectRatio}
-              onClear={clearResults}
-              editorSessionKey="studio-genesis-v2"
-              originModule="studio-genesis"
-            />
-          </div>
-        )
-      }
+      if (persistedHistoryGallery) return <div className="space-y-6">{persistedHistoryGallery}</div>
       return (
         <div className="flex min-h-[520px] flex-col items-center justify-center px-4 text-center">
           <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#ececef] text-[#7f8390]">
@@ -1792,14 +1790,17 @@ export function StudioGenesisForm() {
 
     if (phase === 'analyzing') {
       return (
-        <CoreProcessingStatus
-          title={isZh ? '分析中...' : 'Analyzing...'}
-          subtitle={isZh ? '正在分析产品并生成设计规范' : 'Analyzing product and generating design specs'}
-          progress={progress}
-          statusLine={analyzingMessages[analyzingMessageIndex] ?? ''}
-          showHeader={false}
-          statusPlacement="below"
-        />
+        <div className="space-y-6">
+          <CoreProcessingStatus
+            title={isZh ? '分析中...' : 'Analyzing...'}
+            subtitle={isZh ? '正在分析产品并生成设计规范' : 'Analyzing product and generating design specs'}
+            progress={progress}
+            statusLine={analyzingMessages[analyzingMessageIndex] ?? ''}
+            showHeader={false}
+            statusPlacement="below"
+          />
+          {persistedHistoryGallery}
+        </div>
       )
     }
 
@@ -1910,6 +1911,8 @@ export function StudioGenesisForm() {
               placeholder={isZh ? '输入共享文案，所有图片共用；留空则生成纯图片版。' : 'Enter shared copy for all images. Leave empty for a pure visual version.'}
             />
           </div>
+
+          {persistedHistoryGallery}
         </div>
       )
     }
@@ -1945,6 +1948,8 @@ export function StudioGenesisForm() {
               ))}
             </div>
           )}
+
+          {persistedHistoryGallery}
         </div>
       )
     }
@@ -1952,16 +1957,7 @@ export function StudioGenesisForm() {
     // complete
     return (
       <div className="space-y-6">
-        {results.length > 0 && (
-          <ResultGallery
-            images={results}
-            activeBatchId={activeBatchId}
-            aspectRatio={aspectRatio}
-            onClear={clearResults}
-            editorSessionKey="studio-genesis-v2"
-            originModule="studio-genesis"
-          />
-        )}
+        {persistedHistoryGallery}
 
         {/* Show failed slots */}
         {failedSlotIndices.length > 0 && (

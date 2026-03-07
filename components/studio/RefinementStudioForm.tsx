@@ -463,6 +463,16 @@ export function RefinementStudioForm() {
   const selectTriggerClass = 'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] text-[#1b1f26] shadow-none'
   const resultPanelTitle = phase === 'running' ? t('runningTitle') : t('resultTitle')
   const resultPanelSubtitle = phase === 'running' ? t('runningSubtitle') : t('resultSubtitle')
+  const persistedHistoryGallery = resultAssets.length > 0 ? (
+    <ResultGallery
+      images={resultAssets}
+      activeBatchId={activeBatchId}
+      aspectRatio={aspectRatio}
+      editorSessionKey="refinement-studio"
+      originModule="refinement-studio"
+      onClear={clearResultAssets}
+    />
+  ) : null
 
   return (
     <>
@@ -662,43 +672,37 @@ export function RefinementStudioForm() {
               </div>
             </div>
           ) : phase === 'running' ? (
-            <div className="flex flex-wrap content-start items-start gap-3">
-              {cards.map((card, i) =>
-                card.status === 'loading' ? (
-                  <div
-                    key={i}
-                    className="flex w-[220px] max-w-full items-center justify-center rounded-2xl border border-[#d0d4db] bg-[#eff1f4]"
-                    style={{ aspectRatio: previewAspectRatio }}
-                  >
-                    <Loader2 className="h-5 w-5 animate-spin text-[#6f737c]" />
-                  </div>
-                ) : card.status === 'failed' ? (
-                  <div key={i} className="w-[220px] max-w-full rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
-                    {card.error ?? tc('error')}
-                  </div>
-                ) : (
-                  <div
-                    key={i}
-                    className="w-[220px] max-w-full overflow-hidden rounded-2xl border border-[#d2d6de] bg-[#eef0f4] opacity-60"
-                    style={{ aspectRatio: previewAspectRatio }}
-                  >
-                    <img src={card.url!} alt={`result-${i + 1}`} className="w-full object-cover" />
-                  </div>
-                )
-              )}
+            <div className="space-y-3">
+              <div className="flex flex-wrap content-start items-start gap-3">
+                {cards.map((card, i) =>
+                  card.status === 'loading' ? (
+                    <div
+                      key={i}
+                      className="flex w-[220px] max-w-full items-center justify-center rounded-2xl border border-[#d0d4db] bg-[#eff1f4]"
+                      style={{ aspectRatio: previewAspectRatio }}
+                    >
+                      <Loader2 className="h-5 w-5 animate-spin text-[#6f737c]" />
+                    </div>
+                  ) : card.status === 'failed' ? (
+                    <div key={i} className="w-[220px] max-w-full rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+                      {card.error ?? tc('error')}
+                    </div>
+                  ) : (
+                    <div
+                      key={i}
+                      className="w-[220px] max-w-full overflow-hidden rounded-2xl border border-[#d2d6de] bg-[#eef0f4] opacity-60"
+                      style={{ aspectRatio: previewAspectRatio }}
+                    >
+                      <img src={card.url!} alt={`result-${i + 1}`} className="w-full object-cover" />
+                    </div>
+                  )
+                )}
+              </div>
+              {persistedHistoryGallery}
             </div>
           ) : (
             <div className="space-y-3">
-              {resultAssets.length > 0 && (
-                <ResultGallery
-                  images={resultAssets}
-                  activeBatchId={activeBatchId}
-                  aspectRatio={aspectRatio}
-                  editorSessionKey="refinement-studio"
-                  originModule="refinement-studio"
-                  onClear={clearResultAssets}
-                />
-              )}
+              {persistedHistoryGallery}
               {cards.some((card) => card.status === 'failed') && (
                 <div className="flex flex-wrap content-start items-start gap-3">
                   {cards.filter((card) => card.status === 'failed').map((card, index) => (

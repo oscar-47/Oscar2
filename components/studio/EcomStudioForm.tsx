@@ -354,8 +354,7 @@ export function EcomStudioForm() {
   }
   const needsReanalyze = phase === 'preview' && isAnalysisStale(currentSnapshot, analysisParams)
   const isProcessing = phase === 'analyzing' || phase === 'generating'
-  const showPersistedResults = phase === 'input' && results.length > 0
-  const showResultsPanel = phase === 'complete' || showPersistedResults
+  const hasPersistedResults = results.length > 0
 
   const setStep = useCallback((id: string, patch: Partial<ProgressStep>) => {
     setSteps((prev) => prev.map((step) => (step.id === id ? { ...step, ...patch } : step)))
@@ -665,7 +664,7 @@ export function EcomStudioForm() {
 
   const rightPanelTitle = phase === 'preview'
     ? (isZh ? '详情页规划方案' : 'Detail Page Plan')
-    : showResultsPanel
+    : hasPersistedResults
       ? (isZh ? '生成结果' : 'Results')
       : phase === 'generating'
         ? (isZh ? '生成中...' : 'Generating...')
@@ -675,7 +674,7 @@ export function EcomStudioForm() {
 
   const rightPanelSubtitle = phase === 'preview'
     ? (isZh ? '确认并微调每个详情页模块后再生成图片' : 'Review and refine each detail-page module before generating images')
-    : showResultsPanel
+    : hasPersistedResults
       ? (isZh ? '每个模块对应 1 张结果图' : 'One generated image per module')
       : phase === 'generating'
         ? (isZh ? '正在根据规划生成模块图片' : 'Generating module images from the approved plan')
@@ -955,7 +954,7 @@ export function EcomStudioForm() {
             <p className="mt-1 text-[13px] text-[#7d818d]">{rightPanelSubtitle}</p>
           </div>
 
-          {phase === 'input' && !showPersistedResults && (
+          {phase === 'input' && !hasPersistedResults && (
             <div className="flex min-h-[620px] flex-col items-center justify-center px-4 text-center">
               <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#ececef] text-[#7f8390]">
                 <Sparkles className="h-8 w-8" />
@@ -988,7 +987,7 @@ export function EcomStudioForm() {
             />
           )}
 
-          {showResultsPanel && (
+          {hasPersistedResults && (
             <ResultGallery
               images={results}
               activeBatchId={activeBatchId}

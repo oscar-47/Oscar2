@@ -803,8 +803,20 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     </>
   )
 
+  const persistedHistoryGallery = results.length > 0 ? (
+    <ResultGallery
+      images={results}
+      activeBatchId={activeBatchId}
+      aspectRatio={aspectRatio}
+      onClear={clearResults}
+      editorSessionKey="clothing-model-tryon"
+      originModule="clothing-model-tryon"
+    />
+  ) : null
+
   const rightPanel = (() => {
     if (phase === 'input') {
+      if (persistedHistoryGallery) return <div className="space-y-4">{persistedHistoryGallery}</div>
       return (
         <div className="flex min-h-[700px] flex-col items-center justify-center text-center text-[#7f838f]">
           <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#eceef2] text-[#717682]">
@@ -831,20 +843,23 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
 
     if (phase === 'preview') {
       return (
-        <DesignBlueprint
-          designSpecs={editableDesignSpecs}
-          onDesignSpecsChange={setEditableDesignSpecs}
-          imagePlans={editableImagePlans}
-          onImagePlanChange={(index, plan) => {
-            setEditableImagePlans((prev) => prev.map((item, itemIndex) => (itemIndex === index ? plan : item)))
-          }}
-          generatedPrompts={generatedPrompts}
-          onPromptChange={(index, prompt) => {
-            setGeneratedPrompts((prev) => prev.map((item, itemIndex) => (
-              itemIndex === index ? { ...item, prompt } : item
-            )))
-          }}
-        />
+        <div className="space-y-4">
+          <DesignBlueprint
+            designSpecs={editableDesignSpecs}
+            onDesignSpecsChange={setEditableDesignSpecs}
+            imagePlans={editableImagePlans}
+            onImagePlanChange={(index, plan) => {
+              setEditableImagePlans((prev) => prev.map((item, itemIndex) => (itemIndex === index ? plan : item)))
+            }}
+            generatedPrompts={generatedPrompts}
+            onPromptChange={(index, prompt) => {
+              setGeneratedPrompts((prev) => prev.map((item, itemIndex) => (
+                itemIndex === index ? { ...item, prompt } : item
+              )))
+            }}
+          />
+          {persistedHistoryGallery}
+        </div>
       )
     }
 
@@ -856,29 +871,23 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       const subtitle = phase === 'generating' ? '正在根据方案逐项生成图片' : '正在分析产品与主体并生成文字方案'
 
       return (
-        <CoreProcessingStatus
-          title={title}
-          subtitle={subtitle}
-          progress={progress}
-          statusLine={errorMessage ?? activeStep}
-          showHeader={false}
-          statusPlacement="below"
-        />
+        <div className="space-y-4">
+          <CoreProcessingStatus
+            title={title}
+            subtitle={subtitle}
+            progress={progress}
+            statusLine={errorMessage ?? activeStep}
+            showHeader={false}
+            statusPlacement="below"
+          />
+          {persistedHistoryGallery}
+        </div>
       )
     }
 
     return (
       <div className="space-y-4">
-        {results.length > 0 && (
-          <ResultGallery
-            images={results}
-            activeBatchId={activeBatchId}
-            aspectRatio={aspectRatio}
-            onClear={clearResults}
-            editorSessionKey="clothing-model-tryon"
-            originModule="clothing-model-tryon"
-          />
-        )}
+        {persistedHistoryGallery}
         {results.length === 0 && errorMessage && (
           <div className="text-center text-sm text-destructive">{errorMessage}</div>
         )}

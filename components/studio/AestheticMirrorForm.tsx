@@ -595,6 +595,16 @@ export function AestheticMirrorForm() {
                     </div>
                   ))}
                 </div>
+                {resultAssets.length > 0 && (
+                  <ResultGallery
+                    images={resultAssets}
+                    activeBatchId={activeBatchId}
+                    aspectRatio={aspectRatio}
+                    editorSessionKey="aesthetic-mirror"
+                    originModule="aesthetic-mirror"
+                    onClear={clearResultAssets}
+                  />
+                )}
               </div>
             )}
             {phase === 'success' && (
