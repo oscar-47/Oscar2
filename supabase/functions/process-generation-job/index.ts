@@ -2498,29 +2498,14 @@ async function processStyleReplicateJob(
       return promptParts.join("\n");
     }
 
-    if (analysisPrompt) {
-      // Two-stage: use the vision-model-generated detailed style prompt.
-      // Image 1 = reference style, Image 2 = product to preserve.
-      const parts = [
-        analysisPrompt,
-        styleConstraintPrompt,
-        "Image 1 is the reference style image only — do not copy its products or subjects.",
-        "Image 2 contains the product to preserve — maintain its exact shape, material, color, texture, logo, and all key design details.",
-        "Do not simply return Image 2 unchanged or make only a minimal edit.",
-        `Output aspect ratio: ${aspectRatio}, size: ${requestSize}.`,
-      ].filter((v): v is string => Boolean(v && v.trim()));
-      if (userPrompt) parts.push(`Additional instructions: ${userPrompt}`);
-      return parts.join(" ");
-    }
-
-    // Fallback single-stage prompt (used if vision analysis fails)
+    // Direct prompt — the image model sees both images and applies style transfer.
     const promptParts = [
       styleConstraintPrompt,
-      "Image 1 is style reference only. Image 2 contains the product to preserve.",
-      "Create a brand-new high-quality e-commerce image: adopt the visual style, composition, background, lighting direction, color palette, and layout rhythm of Image 1.",
-      "Preserve only the product identity from Image 2 — its shape, material, color, texture, logo, and key design details.",
-      "Do not copy the original composition, pose, or scene from Image 2. Do not simply return Image 2 unchanged.",
-      "Do not copy any product subjects from Image 1 — only borrow its style and presentation.",
+      "Image 1 is the style reference ONLY — learn its visual style, background, lighting, color palette, composition, and atmosphere.",
+      "Image 2 is the product to PRESERVE — you MUST keep the product's exact shape, proportions, material, color, texture, logo, labels, and every design detail 100% identical to Image 2.",
+      "CRITICAL: The product in the output must be recognizably the SAME product as Image 2. Do NOT alter, replace, or reimagine the product itself.",
+      "Do NOT copy any products, objects, or subjects from Image 1 — only borrow its style and presentation.",
+      "Place the preserved product from Image 2 into a new scene that matches the style of Image 1.",
       `Output aspect ratio: ${aspectRatio}, size: ${requestSize}.`,
     ].filter((v): v is string => Boolean(v && v.trim()));
     if (userPrompt) {
@@ -2556,13 +2541,11 @@ async function processStyleReplicateJob(
       // Both fall back gracefully to hardcoded prompt if the analysis call fails.
       let analysisPrompt: string | undefined;
       let refinementAnalysisPrompt: string | undefined;
-      if (unit.mode !== "refinement" && referenceDataUrl) {
-        try {
-          analysisPrompt = await getStyleAnalysisPrompt(productDataUrl, referenceDataUrl);
-        } catch {
-          analysisPrompt = undefined;
-        }
-      } else if (unit.mode === "refinement") {
+      // Skip vision analysis for all modes — send images + direct prompt to the model.
+      // The image generation model can see both images directly; an intermediate
+      // analysis step was over-describing the reference scene and causing the model
+      // to alter the product identity.
+      if (unit.mode === "refinement") {
         // Skip vision analysis for refinement to stay within edge function time limits.
         // The hardcoded refinement prompt is comprehensive and produces good results.
         refinementAnalysisPrompt = undefined;
