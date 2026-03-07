@@ -1,6 +1,6 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
-import { requireUser } from "../_shared/auth.ts";
+import { requireUser, isAdminEmail, isToApisModel } from "../_shared/auth.ts";
 import {
   getCreditCostForModel,
   getDefaultImageSizeForModel,
@@ -81,6 +81,9 @@ Deno.serve(async (req) => {
   }
 
   const modelName = normalizeRequestedModel(String(body.model ?? "or-gemini-3.1-flash"));
+  if (isToApisModel(modelName) && !isAdminEmail(authResult.user.email)) {
+    return err("MODEL_RESTRICTED", "This model is only available to admin users", 403);
+  }
   const effectiveImageSize = body.imageSize == null
     ? getDefaultImageSizeForModel(modelName)
     : String(body.imageSize);

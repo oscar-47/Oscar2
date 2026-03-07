@@ -1,6 +1,6 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
-import { requireUser } from "../_shared/auth.ts";
+import { requireUser, isAdminEmail, isToApisModel } from "../_shared/auth.ts";
 import {
   getCreditCostForModel,
   getDefaultImageSizeForModel,
@@ -26,6 +26,9 @@ Deno.serve(async (req) => {
   }
 
   const normalizedModel = normalizeRequestedModel(String(body.model));
+  if (isToApisModel(normalizedModel) && !isAdminEmail(authResult.user.email)) {
+    return err("MODEL_RESTRICTED", "This model is only available to admin users", 403);
+  }
   const imageSize = body.imageSize == null
     ? getDefaultImageSizeForModel(normalizedModel)
     : String(body.imageSize);

@@ -23,6 +23,19 @@ export type AuthResult = AuthOk | AuthFail;
  * Unified auth guard for verify_jwt=false mode.
  * Every business function should call this at entry.
  */
+const ADMIN_EMAILS: ReadonlySet<string> = new Set([
+  "951454612@qq.com",
+  "1027588424@qq.com",
+]);
+
+export function isAdminEmail(email: string | null | undefined): boolean {
+  return !!email && ADMIN_EMAILS.has(email);
+}
+
+export function isToApisModel(model: string): boolean {
+  return model.startsWith("ta-");
+}
+
 export async function requireUser(req: Request): Promise<AuthResult> {
   const auth = req.headers.get("Authorization");
   if (!auth?.startsWith("Bearer ")) {
