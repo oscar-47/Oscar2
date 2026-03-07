@@ -27,6 +27,11 @@ type GenerationJobRow = {
   status: "processing" | "success" | "failed";
   payload: Record<string, unknown>;
   cost_amount: number;
+  charged_subscription_credits?: number;
+  charged_purchased_credits?: number;
+  is_refunded?: boolean;
+  refund_reason?: string | null;
+  refunded_at?: string | null;
 };
 
 type TaskRow = {
@@ -502,10 +507,23 @@ function computeCost(model: string, turboEnabled: boolean, imageSize: string): n
   return getCreditCostForModel(model, imageSize);
 }
 
+function upstreamHttpStatusFromError(error: unknown): number | null {
+  const message = String(error ?? "");
+  const match = message.match(/(?:API_ERROR|CREATE_ERROR)\s+(\d{3})\b/);
+  if (!match) return null;
+  const status = Number(match[1]);
+  return Number.isFinite(status) ? status : null;
+}
+
+function isRefundableUpstreamRejection(status: number | null): boolean {
+  return status !== null && status >= 400 && status < 500;
+}
+
 function imageGenErrorCodeFromError(error: unknown): string {
   const message = String(error ?? "");
   if (message.includes("AbortError")) return "UPSTREAM_TIMEOUT";
   if (message.includes("IMAGE_INPUT_SOURCE_MISSING")) return "IMAGE_INPUT_SOURCE_MISSING";
+  if (message.includes("SOURCE_IMAGE_FETCH_FAILED")) return "IMAGE_INPUT_SOURCE_MISSING";
   if (message.includes("IMAGE_INPUT_PROMPT_MISSING")) return "IMAGE_INPUT_PROMPT_MISSING";
   if (message.includes("STORAGE_UPLOAD_FAILED")) return "STORAGE_UPLOAD_FAILED";
   if (message.includes("IMAGE_RESULT_MISSING")) return "IMAGE_RESULT_MISSING";
@@ -515,7 +533,14 @@ function imageGenErrorCodeFromError(error: unknown): string {
     message.includes("InvalidEndpointOrModel.NotFound") ||
     message.includes("does not exist or you do not have access to it")
   ) return "MODEL_UNAVAILABLE";
+  if (isRefundableUpstreamRejection(upstreamHttpStatusFromError(error))) return "UPSTREAM_REJECTED";
   return "UPSTREAM_ERROR";
+}
+
+function shouldRefundImageGenFailure(errorCode: string): boolean {
+  return errorCode === "MODEL_UNAVAILABLE" ||
+    errorCode === "UPSTREAM_REJECTED" ||
+    errorCode === "IMAGE_INPUT_SOURCE_MISSING";
 }
 
 type ImageRoute = {
@@ -2130,13 +2155,17 @@ async function processImageGenJob(
     throw new Error("IMAGE_INPUT_PROMPT_MISSING");
   }
 
-  let creditDeducted = false;
   try {
-    const { error: deductError } = await supabase.rpc("deduct_credits", {
+    const { error: chargeError } = await supabase.rpc("charge_generation_job", {
+      p_job_id: job.id,
       p_user_id: job.user_id,
       p_amount: cost,
     });
-    if (deductError) {
+    if (chargeError) {
+      const chargeErrorMessage = String(chargeError.message ?? chargeError);
+      if (!chargeErrorMessage.includes("INSUFFICIENT_CREDITS")) {
+        throw new Error(`CHARGE_GENERATION_JOB_FAILED: ${chargeError.message}`);
+      }
       const { error: insufficientCreditsUpdateError } = await supabase
         .from("generation_jobs")
         .update({
@@ -2156,7 +2185,6 @@ async function processImageGenJob(
       });
       return;
     }
-    creditDeducted = true;
 
     // Quick Edit / Text Edit mode: different image assembly + prompt prefix
     const isQuickEdit = Boolean(payload.editMode) && payload.editType === "quick";
@@ -2340,13 +2368,6 @@ async function processImageGenJob(
       error_message: null,
     });
   } catch (e) {
-    if (creditDeducted) {
-      await supabase.rpc("add_credits", {
-        p_user_id: job.user_id,
-        p_amount: cost,
-        p_type: "purchased",
-      });
-    }
     throw e;
   }
 }
@@ -2938,7 +2959,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     await heartbeat.stop();
     const attempts = Number(task.attempts ?? 1);
-    const retryable = attempts < 3;
+    const retryable = attempts < 5;
     const runAfter = new Date(Date.now() + 10_000).toISOString();
 
     const { error: taskRetryUpdateError } = await supabase
@@ -2975,6 +2996,15 @@ Deno.serve(async (req) => {
         return err("JOB_UPDATE_FAILED", "Failed to update generation job status", 500, jobFailedUpdateError);
       }
       if (task.task_type === "IMAGE_GEN") {
+        if (shouldRefundImageGenFailure(errorCode)) {
+          const { error: refundError } = await supabase.rpc("refund_generation_job", {
+            p_job_id: job.id,
+            p_reason: errorCode,
+          });
+          if (refundError) {
+            return err("JOB_REFUND_FAILED", "Failed to refund generation job", 500, refundError);
+          }
+        }
         await syncModelHistoryStatus(supabase, job.id, job.user_id, {
           status: "failed",
           result_url: null,
