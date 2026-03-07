@@ -2,6 +2,7 @@
 
 import { useLocale } from 'next-intl'
 import { Label } from '@/components/ui/label'
+import { useUserEmail } from '@/lib/hooks/useUserEmail'
 import {
   Select,
   SelectContent,
@@ -14,6 +15,7 @@ import { SlidersHorizontal } from 'lucide-react'
 import type { GenerationModel, AspectRatio, ImageSize, OutputLanguage } from '@/types'
 import {
   AVAILABLE_MODELS,
+  getAvailableModels,
   getDefaultImageSize,
   getSupportedImageSizes,
   IMAGE_SIZE_LABELS,
@@ -106,6 +108,7 @@ export function GenerationParametersCard({
 }: GenerationParametersCardProps) {
   const locale = useLocale()
   const isZh = locale === 'zh'
+  const userEmail = useUserEmail()
 
   const ratios = aspectRatioOptions ?? DEFAULT_ASPECT_RATIOS
   const resolutionOptions = getSupportedImageSizes(model)
@@ -154,7 +157,7 @@ export function GenerationParametersCard({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {AVAILABLE_MODELS.map((m) => (
+            {getAvailableModels(userEmail).map((m) => (
               <SelectItem key={m.value} value={m.value}>
                 {isZh ? m.tierLabel.zh : m.tierLabel.en}
               </SelectItem>

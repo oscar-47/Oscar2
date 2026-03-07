@@ -139,6 +139,25 @@ export const AVAILABLE_MODELS: ReadonlyArray<AvailableModel> = [
   { value: 'or-gemini-2.5-flash', label: 'Nano Banana', tier: 'fast', tierLabel: { en: 'Fast (Nano Banana)', zh: '极速 (Nano Banana)' } },
 ]
 
+const ADMIN_ONLY_MODELS: ReadonlyArray<AvailableModel> = [
+  { value: 'ta-gemini-3.1-flash', label: 'TA 3.1 Flash', tier: 'balanced', tierLabel: { en: 'TA 3.1 Flash (Admin)', zh: 'TA 3.1 Flash (管理员)' } },
+  { value: 'ta-gemini-2.5-flash', label: 'TA 2.5 Flash', tier: 'fast', tierLabel: { en: 'TA 2.5 Flash (Admin)', zh: 'TA 2.5 Flash (管理员)' } },
+  { value: 'ta-gemini-3-pro', label: 'TA 3 Pro', tier: 'high', tierLabel: { en: 'TA 3 Pro (Admin)', zh: 'TA 3 Pro (管理员)' } },
+]
+
+const ADMIN_EMAILS: ReadonlySet<string> = new Set([
+  '951454612@qq.com',
+  '1027588424@qq.com',
+])
+
+export function isAdminUser(email: string | null | undefined): boolean {
+  return !!email && ADMIN_EMAILS.has(email)
+}
+
+export function getAvailableModels(email: string | null | undefined): ReadonlyArray<AvailableModel> {
+  return isAdminUser(email) ? [...AVAILABLE_MODELS, ...ADMIN_ONLY_MODELS] : AVAILABLE_MODELS
+}
+
 export const DEFAULT_MODEL: GenerationModel = 'or-gemini-3.1-flash'
 
 export type AspectRatio =
@@ -173,12 +192,23 @@ export const MODEL_CAPABILITIES: Partial<Record<GenerationModel, ModelCapability
     defaultSize: '1K',
     rolloutStage: 'public',
   },
+  'ta-gemini-2.5-flash': {
+    supportedSizes: ['1K'],
+    publicSizes: ['1K'],
+    defaultSize: '1K',
+    rolloutStage: 'internal_only',
+  },
   'ta-gemini-3.1-flash': {
-    supportedSizes: [],
-    publicSizes: [],
+    supportedSizes: ['1K', '2K'],
+    publicSizes: ['1K', '2K'],
     defaultSize: '2K',
-    rolloutStage: 'disabled',
-    migrateTo: 'or-gemini-2.5-flash',
+    rolloutStage: 'internal_only',
+  },
+  'ta-gemini-3-pro': {
+    supportedSizes: ['1K'],
+    publicSizes: ['1K'],
+    defaultSize: '1K',
+    rolloutStage: 'internal_only',
   },
 }
 
@@ -186,7 +216,9 @@ export const MODEL_CREDIT_COSTS: Partial<Record<GenerationModel, Partial<Record<
   'or-gemini-2.5-flash': { '1K': 3, '2K': 5 },
   'or-gemini-3.1-flash': { '1K': 5, '2K': 8, '4K': 15 },
   'or-gemini-3-pro': { '1K': 10 },
+  'ta-gemini-2.5-flash': { '1K': 3 },
   'ta-gemini-3.1-flash': { '1K': 3, '2K': 5 },
+  'ta-gemini-3-pro': { '1K': 5 },
 }
 
 function knownModelValues(): GenerationModel[] {

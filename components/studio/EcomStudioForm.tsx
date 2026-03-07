@@ -62,6 +62,7 @@ import type {
 } from '@/types'
 import {
   AVAILABLE_MODELS,
+  getAvailableModels,
   DEFAULT_MODEL,
   getGenerationCreditCost,
   getSupportedImageSizes,
@@ -70,6 +71,7 @@ import {
   normalizeGenerationModel,
   sanitizeImageSizeForModel,
 } from '@/types'
+import { useUserEmail } from '@/lib/hooks/useUserEmail'
 
 const ASPECT_RATIOS_EN: { value: AspectRatio; label: string }[] = [
   { value: '1:1', label: '1:1 Square' },
@@ -301,6 +303,7 @@ export function EcomStudioForm() {
   const tc = useTranslations('studio.common')
   const locale = useLocale()
   const isZh = locale.startsWith('zh')
+  const userEmail = useUserEmail()
   const backendLocale = isZh ? 'zh-CN' : 'en'
   const defaultRequirements = isZh ? DEFAULT_REQUIREMENTS_ZH : DEFAULT_REQUIREMENTS_EN
   const aspectRatios = isZh ? ASPECT_RATIOS_ZH : ASPECT_RATIOS_EN
@@ -780,7 +783,7 @@ export function EcomStudioForm() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {AVAILABLE_MODELS.map((availableModel) => (
+                    {getAvailableModels(userEmail).map((availableModel) => (
                       <SelectItem key={availableModel.value} value={availableModel.value}>
                         {isZh ? availableModel.tierLabel.zh : availableModel.tierLabel.en}
                       </SelectItem>

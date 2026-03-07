@@ -20,6 +20,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { GenerationModel, AspectRatio, ImageSize, GenerationJob } from '@/types'
 import {
   AVAILABLE_MODELS,
+  getAvailableModels,
   DEFAULT_MODEL,
   getGenerationCreditCost,
   getSupportedImageSizes,
@@ -27,6 +28,7 @@ import {
   normalizeGenerationModel,
   sanitizeImageSizeForModel,
 } from '@/types'
+import { useUserEmail } from '@/lib/hooks/useUserEmail'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import { friendlyError } from '@/lib/utils'
 import { Loader2, Sparkles, Plus, Download, Image as ImageIcon, ShieldCheck } from 'lucide-react'
@@ -87,6 +89,7 @@ export function AestheticMirrorForm() {
   const locale = useLocale()
   const router = useRouter()
   const { total } = useCredits()
+  const userEmail = useUserEmail()
 
   const [mode, setMode] = useState<Mode>('single')
   const [singleRefFile, setSingleRefFile] = useState<File | null>(null)
@@ -471,7 +474,7 @@ export function AestheticMirrorForm() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {AVAILABLE_MODELS.map((m) => (
+                      {getAvailableModels(userEmail).map((m) => (
                         <SelectItem key={m.value} value={m.value}>{isZh ? m.tierLabel.zh : m.tierLabel.en}</SelectItem>
                       ))}
                     </SelectContent>

@@ -46,6 +46,7 @@ import type {
 } from '@/types'
 import {
   AVAILABLE_MODELS,
+  getAvailableModels,
   DEFAULT_MODEL,
   getGenerationCreditCost,
   getSupportedImageSizes,
@@ -53,6 +54,7 @@ import {
   normalizeGenerationModel,
   sanitizeImageSizeForModel,
 } from '@/types'
+import { useUserEmail } from '@/lib/hooks/useUserEmail'
 import { friendlyError } from '@/lib/utils'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -149,7 +151,12 @@ const BATCH_CONCURRENCY = 4
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface RetryContext {
-  prompts: string[]
+  prompts: Array<{
+    prompt: string
+    negativePrompt: string
+    title: string
+    description: string
+  }>
   trace_id: string
 }
 
@@ -636,6 +643,156 @@ function buildFallbackPrompts(
   }))
 }
 
+function selectedGenesisStyleLabels(
+  analysis: GenesisAnalysisResult,
+  selections: GenesisStyleSelections,
+): string[] {
+  return analysis.style_directions
+    .map((group) => selections[group.key] ?? group.recommended ?? group.options[0] ?? '')
+    .map((value) => value.trim())
+    .filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index)
+}
+
+function buildGenesisIdentityLockBlock(
+  analysis: GenesisAnalysisResult,
+  isZh: boolean,
+): { designSpecs: string; promptBlock: string } {
+  const identity = analysis.product_visual_identity
+  const primaryColor = identity?.primary_color?.trim()
+  const material = identity?.material?.trim()
+  const keyFeatures = (identity?.key_features ?? [])
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const detailLines = [
+    primaryColor
+      ? (isZh ? `- 主色锚定：${primaryColor}` : `- Color anchor: ${primaryColor}`)
+      : (isZh ? '- 主色锚定：严格保持产品图真实主色，不得错色。' : '- Color anchor: keep the true product color from the reference images, no recoloring.'),
+    material
+      ? (isZh ? `- 材质锚定：${material}` : `- Material anchor: ${material}`)
+      : (isZh ? '- 材质锚定：严格保持原始材质，不得替换材质。' : '- Material anchor: preserve the original material, no material swap.'),
+    keyFeatures.length > 0
+      ? (isZh ? `- 关键特征：${keyFeatures.join('、')}` : `- Key features: ${keyFeatures.join(', ')}`)
+      : (isZh ? '- 关键特征：保留产品图中可见的 logo、五金、纹理、车线、轮廓与结构。' : '- Key features: preserve the visible logo, hardware, texture, stitching, silhouette, and structure from the reference images.'),
+    isZh
+      ? '- 硬约束：必须是同一 SKU，同一商品，不得改色、改材质、改 logo、改五金、改纹理、改版型、改结构。'
+      : '- Hard lock: exact same SKU and same product. Do not change color, material, logo, hardware, texture, silhouette, proportions, or structure.',
+  ]
+
+  return {
+    designSpecs: detailLines.join('\n'),
+    promptBlock: isZh
+      ? `【商品身份锁定】${detailLines.map((line) => line.replace(/^- /, '')).join('；')}`
+      : `Product identity lock: ${detailLines.map((line) => line.replace(/^- /, '')).join('; ')}`,
+  }
+}
+
+function buildGenesisSharedCopyRule(copyPlan: string, outputLanguage: OutputLanguage, isZh: boolean): string {
+  const normalizedCopy = copyPlan.trim()
+  if (!normalizedCopy) {
+    return isZh
+      ? '无新增文字叠加，输出纯视觉主图；不得擅自添加任何宣传文案。'
+      : 'No added text overlay. Generate a pure visual hero image and do not invent extra copy.'
+  }
+  if (outputLanguage === 'none') {
+    return isZh
+      ? `虽然当前输出语言为纯视觉，但用户手动提供了文案，必须原文使用以下文字，不得翻译，不得改写：${normalizedCopy}`
+      : `The user manually provided copy in visual-only mode. Use this exact copy verbatim without translation or paraphrase: ${normalizedCopy}`
+  }
+  return isZh
+    ? `必须在画面中呈现以下同一份共享文案原文，不得改写，不得遗漏，并明确文字位置、层级、留白与可读性，且文字不得遮挡商品主体：${normalizedCopy}`
+    : `Render this exact shared copy in the image without paraphrasing or omission. Define text placement, hierarchy, whitespace, readability, and ensure the copy does not block the product: ${normalizedCopy}`
+}
+
+function buildGenesisHeroBlueprint(params: {
+  genesisAnalysis: GenesisAnalysisResult
+  styleSelections: GenesisStyleSelections
+  copyPlan: string
+  imageCount: number
+  isZh: boolean
+  outputLanguage: OutputLanguage
+}): AnalysisBlueprint {
+  const { genesisAnalysis, styleSelections, copyPlan, imageCount, isZh, outputLanguage } = params
+  const styleLabels = selectedGenesisStyleLabels(genesisAnalysis, styleSelections)
+  const styleSummary = styleLabels.length > 0
+    ? (isZh ? `统一风格方向：${styleLabels.join(' / ')}` : `Unified style directions: ${styleLabels.join(' / ')}`)
+    : (isZh ? '统一风格方向：延续分析推荐风格。' : 'Unified style directions: follow the recommended analysis styles.')
+  const identityLock = buildGenesisIdentityLockBlock(genesisAnalysis, isZh)
+  const copyRule = buildGenesisSharedCopyRule(copyPlan, outputLanguage, isZh)
+  const normalizedCount = Math.max(1, Math.min(15, Number(imageCount || 1)))
+
+  const images: BlueprintImagePlan[] = Array.from({ length: normalizedCount }, (_, index) => {
+    const roleIndex = index + 1
+    let title = ''
+    let description = ''
+    let variationRule = ''
+
+    if (roleIndex === 1) {
+      title = isZh ? '主视觉封面' : 'Hero Cover'
+      description = isZh ? '第一张负责稳定建立商品识别与核心卖点，不做激进变化。' : 'Stabilize product recognition and lead with the core selling point without aggressive variation.'
+      variationRule = isZh
+        ? '使用最稳妥的主视觉构图，产品为绝对主体，机位自然，突出完整轮廓与真实颜色。'
+        : 'Use the safest hero composition with the product as the absolute subject, a natural camera angle, and strong emphasis on the full silhouette and true color.'
+    } else if (roleIndex === 2) {
+      title = isZh ? '角度变化图' : 'Angle Variation'
+      description = isZh ? '仅做机位和景别变化，仍保持同款商品身份完全不变。' : 'Vary only camera angle and framing while preserving the exact same product identity.'
+      variationRule = isZh
+        ? '通过轻微角度变化增强立体感，可调整场景和背景，但不得改动商品结构与颜色。'
+        : 'Use a modest camera-angle variation to add dimension. Scene and background may change, but the product structure and color must remain unchanged.'
+    } else if (roleIndex === 3) {
+      title = isZh ? '特征强化图' : 'Feature Reinforcement'
+      description = isZh ? '放大核心五官与材质识别点，证明商品细节没有漂移。' : 'Magnify the signature features and material cues to prove the product details remain stable.'
+      variationRule = isZh
+        ? '聚焦最关键的材质、logo、五金、纹理或结构细节，同时保留完整商品识别。'
+        : 'Focus on the most important material, logo, hardware, texture, or structure details while keeping the product immediately recognizable.'
+    } else {
+      title = isZh ? `构图变化图 ${roleIndex}` : `Composition Variation ${roleIndex}`
+      description = isZh ? '在不改款前提下做构图、景别或场景变化。' : 'Vary composition, framing, or scene without changing the product design.'
+      variationRule = isZh
+        ? `做第 ${roleIndex} 张差异化版本，只允许调整景别、构图、背景和光线，不得改动商品本体。`
+        : `Create variation ${roleIndex} by changing only framing, composition, background, and lighting while keeping the product itself identical.`
+    }
+
+    const designParts = [
+      isZh ? `图片职责：${description}` : `Image role: ${description}`,
+      styleSummary,
+      variationRule,
+      copyRule,
+      identityLock.promptBlock,
+      isZh
+        ? '允许变化：场景、背景、光线、镜头、裁切、构图、景别。'
+        : 'Allowed changes: scene, background, lighting, lens choice, crop, composition, and framing.',
+      isZh
+        ? '禁止变化：商品颜色、材质、logo、印花、五金、纹理、车线、轮廓、比例、结构。'
+        : 'Forbidden changes: product color, material, logo, print, hardware, texture, stitching, silhouette, proportions, and structure.',
+    ]
+
+    return {
+      id: `hero-plan-${roleIndex}`,
+      title,
+      description,
+      design_content: designParts.join('\n'),
+    }
+  })
+
+  return {
+    images,
+    design_specs: [
+      styleSummary,
+      buildGenesisSharedCopyRule(copyPlan, outputLanguage, isZh),
+      identityLock.designSpecs,
+      isZh
+        ? '整组主图必须保持同一商品、同一色号、同一材质、同一结构，只做商业化画面表达变化。'
+        : 'The full hero-image set must preserve the same product, same colorway, same material, and same construction, with only commercial presentation changes.',
+    ].join('\n'),
+    _ai_meta: {
+      ...genesisAnalysis._ai_meta,
+      image_count: normalizedCount,
+      target_language: outputLanguage,
+    },
+  }
+}
+
 function normalizeAnalysisBlueprintResult(
   resultData: unknown,
   expectedCount: number,
@@ -850,6 +1007,7 @@ export function StudioGenesisForm() {
   const locale = useLocale()
   const router = useRouter()
   const isZh = locale.startsWith('zh')
+  const userEmail = useUserEmail()
   const defaultRequirements = getGenesisDefaultRequirements(isZh)
 
   // ── Input state ──
@@ -1088,25 +1246,22 @@ export function StudioGenesisForm() {
       set('prompts', { status: 'active' })
       setProgress(10)
 
+      const blueprint = buildGenesisHeroBlueprint({
+        genesisAnalysis,
+        styleSelections,
+        copyPlan,
+        imageCount,
+        isZh,
+        outputLanguage,
+      })
+
       let promptText = ''
       const promptStream = await generatePromptsV2Stream(
         {
           module: 'genesis',
-          analysisJson: {
-            product_summary: genesisAnalysis.product_summary,
-            product_visual_identity: genesisAnalysis.product_visual_identity,
-            requirements,
-            image_count: imageCount,
-            output_language: outputLanguage,
-            copy_plan: copyPlan.trim(),
-            style_directions: genesisAnalysis.style_directions,
-            selected_styles: GENESIS_STYLE_KEYS.reduce<Record<string, string>>((acc, key) => {
-              const selected = styleSelections[key]
-              if (selected) acc[key] = selected
-              return acc
-            }, {}),
-          },
-          imageCount,
+          analysisJson: blueprint,
+          design_specs: blueprint.design_specs,
+          imageCount: blueprint.images.length,
           targetLanguage: backendLocale,
           outputLanguage,
           stream: true,
@@ -1131,11 +1286,18 @@ export function StudioGenesisForm() {
           }
         }
       }
-      const promptObjects = parsePromptArray(promptText, imageCount)
-      const prompts = Array.from({ length: imageCount }, (_, i) =>
-        promptObjects[i]?.prompt ?? promptObjects[promptObjects.length - 1]?.prompt ?? ''
-      ).filter((prompt) => prompt.trim().length > 0)
-      if (prompts.length === 0) throw new Error('No prompts available — please re-analyze')
+      const promptObjects = parsePromptArray(promptText, blueprint.images.length)
+      const mergedPrompts = mergePromptsWithFallback(promptObjects, blueprint.images, isZh)
+      const prompts = mergedPrompts
+        .map((item, index) => ({
+          prompt: item.prompt.trim(),
+          negativePrompt: item.negative_prompt.trim(),
+          title: item.title.trim() || blueprint.images[index]?.title || '',
+          description: blueprint.images[index]?.description ?? '',
+        }))
+      if (prompts.some((item) => item.prompt.length === 0)) {
+        throw new Error('No prompts available — please re-analyze')
+      }
       setRetryContext({ prompts, trace_id })
       set('prompts', { status: 'done' })
 
@@ -1151,11 +1313,12 @@ export function StudioGenesisForm() {
       setImageSlots(initialSlots)
 
       const submissionResults = await runWithConcurrency(
-        prompts.map((prompt, i) => () =>
+        prompts.map((promptTask, i) => () =>
           generateImage({
             productImage: uploadedUrls[0],
             productImages: uploadedUrls,
-            prompt,
+            prompt: promptTask.prompt,
+            negativePrompt: promptTask.negativePrompt || undefined,
             model,
             aspectRatio,
             imageSize,
@@ -1168,6 +1331,9 @@ export function StudioGenesisForm() {
               batch_index: i,
               image_size: imageSize,
               product_images: uploadedUrls,
+              product_visual_identity: genesisAnalysis.product_visual_identity ?? null,
+              hero_plan_title: promptTask.title,
+              hero_plan_description: promptTask.description,
             },
           }).then((r) => r.job_id)
         ),
@@ -1325,12 +1491,21 @@ export function StudioGenesisForm() {
         generateImage({
           productImage: uploadedUrls[0],
           productImages: uploadedUrls,
-          prompt: prompts[slotIdx],
+          prompt: prompts[slotIdx]?.prompt ?? '',
+          negativePrompt: prompts[slotIdx]?.negativePrompt || undefined,
           model, aspectRatio, imageSize,
           imageCount: 1,
           client_job_id: `${uid()}_retry_${slotIdx}`,
           fe_attempt: 2, trace_id,
-          metadata: { is_batch: true, batch_index: slotIdx, image_size: imageSize, product_images: uploadedUrls },
+          metadata: {
+            is_batch: true,
+            batch_index: slotIdx,
+            image_size: imageSize,
+            product_images: uploadedUrls,
+            product_visual_identity: genesisAnalysis?.product_visual_identity ?? null,
+            hero_plan_title: prompts[slotIdx]?.title ?? '',
+            hero_plan_description: prompts[slotIdx]?.description ?? '',
+          },
         }).then((r) => r.job_id)
       )
 
@@ -1400,7 +1575,7 @@ export function StudioGenesisForm() {
         setPhase('complete')
       }
     }
-  }, [appendResults, retryContext, failedSlotIndices, uploadedUrls, model, aspectRatio, imageSize, isZh, t])
+  }, [appendResults, retryContext, failedSlotIndices, uploadedUrls, model, aspectRatio, imageSize, isZh, t, genesisAnalysis])
 
   const handleStyleSelect = useCallback((key: GenesisStyleDirectionKey, value: string) => {
     setStyleSelections((prev) => ({
@@ -1916,7 +2091,7 @@ export function StudioGenesisForm() {
                   >
                     <SelectTrigger className={panelInputClass}><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {AVAILABLE_MODELS.map((m) => (
+                      {getAvailableModels(userEmail).map((m) => (
                         <SelectItem key={m.value} value={m.value}>{locale.startsWith('zh') ? m.tierLabel.zh : m.tierLabel.en}</SelectItem>
                       ))}
                     </SelectContent>

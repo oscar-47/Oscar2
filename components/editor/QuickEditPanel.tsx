@@ -9,11 +9,13 @@ import { uploadFile } from '@/lib/api/upload'
 import { useWaitForJob } from '@/lib/hooks/useWaitForJob'
 import {
   AVAILABLE_MODELS,
+  getAvailableModels,
   getGenerationCreditCost,
   getSupportedImageSizes,
   normalizeGenerationModel,
   sanitizeImageSizeForModel,
 } from '@/types'
+import { useUserEmail } from '@/lib/hooks/useUserEmail'
 import type { GenerationModel, AspectRatio, ImageSize } from '@/types'
 
 const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
@@ -29,6 +31,7 @@ const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
 export function QuickEditPanel() {
   const t = useTranslations('studio.editor')
   const locale = useLocale()
+  const userEmail = useUserEmail()
   const quickEdit = useEditorStore((s) => s.quickEdit)
   const closeQuickEdit = useEditorStore((s) => s.closeQuickEdit)
   const setQuickEditField = useEditorStore((s) => s.setQuickEditField)
@@ -172,7 +175,7 @@ export function QuickEditPanel() {
               }}
               className="w-full rounded-lg border border-[#d1d5db] bg-white px-2.5 py-1.5 text-sm text-[#111827] focus:border-[#6366f1] focus:outline-none"
             >
-              {AVAILABLE_MODELS.map((opt) => (
+              {getAvailableModels(userEmail).map((opt) => (
                 <option key={opt.value} value={opt.value}>{locale.startsWith('zh') ? opt.tierLabel.zh : opt.tierLabel.en}</option>
               ))}
             </select>
