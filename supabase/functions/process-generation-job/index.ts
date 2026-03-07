@@ -2335,9 +2335,11 @@ async function processStyleReplicateJob(
   const refinementWhiteBackgroundPrompt = "除产品主体外的背景与非主体元素统一为纯白背景干净无杂物。";
   const requestSize = scaledRequestSize(aspectRatio, imageSize);
   const styleTimeoutMs = Number(
-    Deno.env.get("STYLE_REPLICATE_IMAGE_TIMEOUT_MS")
-      ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS")
-      ?? "120000",
+    mode === "refinement"
+      ? (Deno.env.get("REFINEMENT_IMAGE_TIMEOUT_MS") ?? "90000")
+      : (Deno.env.get("STYLE_REPLICATE_IMAGE_TIMEOUT_MS")
+        ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS")
+        ?? "120000"),
   );
   const outputBucket = Deno.env.get("GENERATIONS_BUCKET") ?? "generations";
   const maxRatioRetries = 3;
@@ -2561,11 +2563,9 @@ async function processStyleReplicateJob(
           analysisPrompt = undefined;
         }
       } else if (unit.mode === "refinement") {
-        try {
-          refinementAnalysisPrompt = await getRefinementPrompt(productDataUrl);
-        } catch {
-          refinementAnalysisPrompt = undefined;
-        }
+        // Skip vision analysis for refinement to stay within edge function time limits.
+        // The hardcoded refinement prompt is comprehensive and produces good results.
+        refinementAnalysisPrompt = undefined;
       }
 
       const prompt = buildPrompt(unit, analysisPrompt, refinementAnalysisPrompt);
