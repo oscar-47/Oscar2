@@ -2160,46 +2160,6 @@ async function processImageGenJob(
   }
 }
 
-const STYLE_ANALYSIS_SYSTEM_PROMPT =
-  `作为顶级的电子商务视觉总监与 AI 绘画专家，你负责深度解构"参考图"的视觉基因，并将用户提供的"产品图"中的单个或多个主体元素完美融入该风格中。你生成的提示词必须基于以下维度的精细拆解：
-
-1. 布局拓扑（Layout Topology）：分析参考图的网格系统与空间切割方式。确定所有产品元素在画面中的视觉落点与构架（对称、对角线、F型分布），确保遵循原图物理支撑逻辑。
-2. 视觉流向（Visual Flow）：解构画面的权重层级。明确背景如何引导视线落向产品主体，定义多产品元素间的主次引导顺序，保持原图视觉叙事节奏。
-3. 元素逻辑（Element Logic）：组合关系（排列密度、堆叠/阶梯/散落）+ 语义一致性（材质、装饰物抽象语义）+ 物理交互（遮挡、投影、嵌入）。
-4. 色彩机理（Color Mechanism）：解析配色逻辑与饱和度策略，确保全图色调与参考图高度统一。
-5. 容器排版（Container Typography）：存在性判定（参考图是否含文字，无则严禁包含文本描述）+ 语种一致性（遵循参考图语种）+ 确定性指令（字体描述唯一明确，严禁"或类似"表述）。
-6. 光影质感（Light & Texture）：精准定义光源逻辑与材质属性，统一照亮所有产品元素，形成物理空间感。
-7. 生成要求：保持所有输入产品图主体的核心形态特征与材质细节不失真。最终输出必须是一段高度详细、工程化、无冗余解释的图像生成提示词。仅输出提示词文本，不含 Markdown 格式，不含任何解释说明。`;
-
-async function generateStyleAnalysisPrompt(
-  productDataUrl: string,
-  referenceDataUrl: string,
-): Promise<string> {
-  const response = await callQnChatAPI({
-    messages: [
-      { role: "system", content: STYLE_ANALYSIS_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: [
-          { type: "image_url", image_url: { url: productDataUrl } },
-          { type: "image_url", image_url: { url: referenceDataUrl } },
-          {
-            type: "text",
-            text: "图1是产品图（需完整保留产品主体），图2是参考风格图（只学习其视觉风格）。请生成一段详细的英文图像生成提示词，将图1的产品主体以图2的视觉风格重新呈现。",
-          },
-        ],
-      },
-    ],
-    maxTokens: 800,
-  });
-  // deno-lint-ignore no-explicit-any
-  const content = (response as any)?.choices?.[0]?.message?.content;
-  if (typeof content === "string" && content.trim().length > 0) {
-    return content.trim();
-  }
-  throw new Error("STYLE_ANALYSIS_EMPTY_RESPONSE");
-}
-
 const REFINEMENT_ANALYSIS_SYSTEM_PROMPT =
   `你是一名专业的商业产品精修师，需要对所有品类的产品进行专业级精修处理，以达到崭新、高级且极具吸引力的视觉效果。必须强调：产品外观需与原图完全一致，包含造型、尺寸比例、细节结构、标识/Logo的位置与样式，不得随意修改产品原有形态、细节与核心特征。
 
@@ -2365,16 +2325,6 @@ async function processStyleReplicateJob(
     return pending;
   };
 
-  // Two-stage style analysis: cache by (productUrl || referenceUrl) to avoid duplicate vision calls
-  const stylePromptCache = new Map<string, Promise<string>>();
-  const getStyleAnalysisPrompt = (productUrl: string, referenceUrl: string): Promise<string> => {
-    const key = `${productUrl}||${referenceUrl}`;
-    if (!stylePromptCache.has(key)) {
-      stylePromptCache.set(key, generateStyleAnalysisPrompt(productUrl, referenceUrl));
-    }
-    return stylePromptCache.get(key)!;
-  };
-
   // Refinement analysis: cache by productUrl to avoid duplicate vision calls per product image
   const refinementPromptCache = new Map<string, Promise<string>>();
   const getRefinementPrompt = (productUrl: string): Promise<string> => {
@@ -2474,7 +2424,7 @@ async function processStyleReplicateJob(
       });
   };
 
-  const buildPrompt = (unit: StyleReplicateUnit, analysisPrompt?: string, refinementAnalysisPrompt?: string): string => {
+  const buildPrompt = (unit: StyleReplicateUnit, refinementAnalysisPrompt?: string): string => {
     if (unit.mode === "refinement") {
       if (refinementAnalysisPrompt) {
         // Two-stage: use vision-model-generated product-specific refinement prompt
@@ -2498,34 +2448,21 @@ async function processStyleReplicateJob(
       return promptParts.join("\n");
     }
 
-    if (analysisPrompt) {
-      // Two-stage: use the vision-model-generated detailed style prompt.
-      // Image 1 = reference style, Image 2 = product to preserve.
-      const parts = [
-        analysisPrompt,
-        styleConstraintPrompt,
-        "Image 1 is the reference style image only — do not copy its products or subjects.",
-        "Image 2 contains the product to preserve — maintain its exact shape, material, color, texture, logo, and all key design details.",
-        "Do not simply return Image 2 unchanged or make only a minimal edit.",
-        `Output aspect ratio: ${aspectRatio}, size: ${requestSize}.`,
-      ].filter((v): v is string => Boolean(v && v.trim()));
-      if (userPrompt) parts.push(`Additional instructions: ${userPrompt}`);
-      return parts.join(" ");
-    }
-
-    // Fallback single-stage prompt (used if vision analysis fails)
+    // Direct style transfer prompt — product image is Image 1 (primary), reference image is Image 2.
+    // Image ordering in callQnImageAPI: [productDataUrl, referenceDataUrl]
     const promptParts = [
       styleConstraintPrompt,
-      "Image 1 is style reference only. Image 2 contains the product to preserve.",
-      "Create a brand-new high-quality e-commerce image: adopt the visual style, composition, background, lighting direction, color palette, and layout rhythm of Image 1.",
-      "Preserve only the product identity from Image 2 — its shape, material, color, texture, logo, and key design details.",
-      "Do not copy the original composition, pose, or scene from Image 2. Do not simply return Image 2 unchanged.",
-      "Do not copy any product subjects from Image 1 — only borrow its style and presentation.",
+      "CRITICAL: Image 1 is the product — preserve its EXACT shape, silhouette, proportions, material, color, texture, logo placement, and all design details with absolute fidelity. The product in the output must be visually identical to Image 1.",
+      "Image 2 is the style reference ONLY. Adopt its background scene, composition style, lighting direction, color palette, and overall aesthetic atmosphere.",
+      "DO NOT copy any objects, products, or subjects from Image 2 into the output.",
+      "DO NOT alter, distort, reshape, recolor, or simplify the product from Image 1 in any way.",
+      "Create a high-quality e-commerce product photograph that places the exact product from Image 1 into a new scene inspired by Image 2's visual style.",
       `Output aspect ratio: ${aspectRatio}, size: ${requestSize}.`,
     ].filter((v): v is string => Boolean(v && v.trim()));
     if (userPrompt) {
       promptParts.push(`Additional instructions: ${userPrompt}`);
     }
+    promptParts.push("ABSOLUTE CONSTRAINT: Regardless of any other instructions above, the product from Image 1 must remain visually identical in shape, color, material, texture, logo, and all design details. Product identity is non-negotiable.");
     return promptParts.join(" ");
   };
 
@@ -2550,32 +2487,14 @@ async function processStyleReplicateJob(
       const productDataUrl = await getCachedDataUrl(unit.product_image);
       const referenceDataUrl = unit.reference_image ? await getCachedDataUrl(unit.reference_image) : null;
 
-      // Stage 1: vision model generates a detailed prompt before image gen.
-      // Style replicate: analyze reference+product for style transfer.
-      // Refinement: analyze product for product-specific retouching instructions.
-      // Both fall back gracefully to hardcoded prompt if the analysis call fails.
-      let analysisPrompt: string | undefined;
-      let refinementAnalysisPrompt: string | undefined;
-      if (unit.mode !== "refinement" && referenceDataUrl) {
-        try {
-          analysisPrompt = await getStyleAnalysisPrompt(productDataUrl, referenceDataUrl);
-        } catch {
-          analysisPrompt = undefined;
-        }
-      } else if (unit.mode === "refinement") {
-        // Skip vision analysis for refinement to stay within edge function time limits.
-        // The hardcoded refinement prompt is comprehensive and produces good results.
-        refinementAnalysisPrompt = undefined;
-      }
-
-      const prompt = buildPrompt(unit, analysisPrompt, refinementAnalysisPrompt);
+      const prompt = buildPrompt(unit);
       let chosen: Omit<StyleOutputItem, "reference_index" | "group_index" | "unit_status" | "error_message"> | null = null;
       let lastProviderSize: string | null = null;
 
       for (let attempt = 0; attempt < maxRatioRetries; attempt++) {
         const apiResponse = await callQnImageAPI({
-          imageDataUrl: referenceDataUrl ?? productDataUrl,
-          ...(referenceDataUrl ? { imageDataUrls: [referenceDataUrl, productDataUrl] } : {}),
+          imageDataUrl: productDataUrl,
+          ...(referenceDataUrl ? { imageDataUrls: [productDataUrl, referenceDataUrl] } : {}),
           prompt,
           n: 1,
           model: imageRoute.model,
