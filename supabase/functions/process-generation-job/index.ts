@@ -503,6 +503,7 @@ type ImageRoute = {
 
 const TA_MODEL_MAP: Record<string, string> = {
   "ta-gemini-2.5-flash": "gemini-2.5-flash-image-preview",
+  "ta-gemini-3.1-flash": "gemini-3.1-flash-image-preview",
   "ta-gemini-3-pro": "gemini-3-pro-image-preview",
 };
 

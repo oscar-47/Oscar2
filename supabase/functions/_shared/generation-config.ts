@@ -2,9 +2,7 @@ export type EdgeImageSize = "1K" | "2K" | "4K";
 
 export const DEFAULT_EDGE_MODEL = "or-gemini-3.1-flash";
 
-export const LEGACY_MODEL_ALIASES: Record<string, string> = {
-  "ta-gemini-3.1-flash": "or-gemini-2.5-flash",
-};
+export const LEGACY_MODEL_ALIASES: Record<string, string> = {};
 
 export const OPENROUTER_MODEL_MAP: Record<string, string> = {
   "or-gemini-2.5-flash": "google/gemini-2.5-flash-image",
