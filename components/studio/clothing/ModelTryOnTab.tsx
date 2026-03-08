@@ -19,6 +19,7 @@ import { GenerationTypeSelector, countSelectedTypes } from './GenerationTypeSele
 import type { BasicPhotoTypeState, ClothingPhase } from './types'
 import { uploadFile } from '@/lib/api/upload'
 import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/api/edge-functions'
+import { refreshCredits } from '@/lib/hooks/useCredits'
 import { createClient } from '@/lib/supabase/client'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import type {
@@ -644,6 +645,8 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       setErrorMessage(friendlyError((err as Error).message ?? '生成失败', true))
       setSteps((prev) => prev.map((step) => (step.status === 'active' ? { ...step, status: 'error' } : step)))
       setPhase('preview')
+    } finally {
+      refreshCredits()
     }
   }, [
     analysisBlueprint,

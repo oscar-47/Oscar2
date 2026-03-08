@@ -1,6 +1,6 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
-import { requireUser } from "../_shared/auth.ts";
+import { isInternalWorkerRequest, requireUser } from "../_shared/auth.ts";
 import {
   callQnChatAPI,
   callQnImageAPI,
@@ -17,6 +17,12 @@ import {
 } from "../_shared/generation-config.ts";
 import { applyPromptVariant, buildPromptRegistryKey } from "../_shared/prompt-registry.ts";
 import { sanitizePromptProfile } from "../_shared/prompt-profile.ts";
+import {
+  buildRefinementAnalysisSystemPrompt,
+  buildRefinementAnalysisUserPrompt,
+  buildRefinementPrompt,
+  buildRefinementPromptCacheKey,
+} from "../_shared/refinement-prompts.ts";
 import Jimp from "npm:jimp@0.22.12";
 import { Buffer } from "node:buffer";
 
@@ -57,6 +63,29 @@ type AnalysisBlueprint = {
   subject_profile?: Record<string, unknown>;
   garment_profile?: Record<string, unknown>;
   tryon_strategy?: Record<string, unknown>;
+  copy_analysis?: BlueprintCopyAnalysis;
+};
+
+type BlueprintCopyMode = "user-brief" | "product-inferred" | "visual-only";
+
+type BlueprintCopyRole = "headline" | "headline+support" | "label" | "none";
+
+type BlueprintCopyPlanAdaptation = {
+  plan_index: number;
+  plan_type: string;
+  copy_role: BlueprintCopyRole;
+  adaptation_summary: string;
+};
+
+type BlueprintCopyAnalysis = {
+  mode: BlueprintCopyMode;
+  source_brief: string;
+  brief_summary: string;
+  product_summary: string;
+  resolved_output_language: string;
+  shared_copy: string;
+  can_clear_to_visual_only: true;
+  per_plan_adaptations: BlueprintCopyPlanAdaptation[];
 };
 
 type GenesisStyleDirectionKey = "sceneStyle" | "lighting" | "composition";
@@ -238,10 +267,158 @@ function buildVisibleCopyLanguageRule(outputLanguage: string, isZh: boolean): st
     : `All added visible design copy must use ${languageLabel} only and must not mix in other languages. Existing product text such as logos, original packaging text, model numbers, ingredient tables, and technical units is not considered added design copy.`;
 }
 
+function sanitizeOutputLanguage(value: unknown, fallback: string): string {
+  const candidate = sanitizeString(value, fallback).toLowerCase();
+  if (["none", "en", "zh", "ja", "ko", "es", "fr", "de", "pt", "ar", "ru"].includes(candidate)) {
+    return candidate;
+  }
+  return fallback;
+}
+
+function detectBlueprintPlanType(input: {
+  title?: unknown;
+  description?: unknown;
+  design_content?: unknown;
+  type?: unknown;
+}): string {
+  const explicit = sanitizeString(input.type, "").toLowerCase();
+  if (["refined", "3d", "mannequin", "detail", "selling_point"].includes(explicit)) return explicit;
+
+  const text = `${sanitizeString(input.title, "")} ${sanitizeString(input.description, "")} ${sanitizeString(input.design_content, "")}`.toLowerCase();
+  if (/3d|ghost/.test(text)) return "3d";
+  if (/人台|mannequin/.test(text)) return "mannequin";
+  if (/细节|特写|macro|detail/.test(text)) return "detail";
+  if (/卖点|selling point/.test(text)) return "selling_point";
+  return "refined";
+}
+
+function defaultCopyRole(planType: string, visualOnly: boolean): BlueprintCopyRole {
+  if (visualOnly) return "none";
+  if (planType === "detail") return "label";
+  if (planType === "selling_point") return "headline+support";
+  if (planType === "3d" || planType === "mannequin") return "headline+support";
+  return "headline";
+}
+
+function defaultCopyAdaptationSummary(planType: string, isZh: boolean, visualOnly: boolean): string {
+  if (visualOnly) {
+    return isZh
+      ? "纯视觉优先，不添加任何新增画面文字，只保留商品主体、材质、结构和光影表达。"
+      : "Visual-only priority. Do not add any new in-image text; keep the focus on the product, material, structure, and lighting.";
+  }
+
+  switch (planType) {
+    case "detail":
+      return isZh
+        ? "使用短标签或工艺注释型文案，靠近细节焦点并保留充足留白，文字不能遮挡材质与车线。"
+        : "Use short labels or craft-callout copy near the detail focal point with enough whitespace, without covering the material or stitching.";
+    case "selling_point":
+      return isZh
+        ? "使用主标题加卖点短句的层级结构，把文字放在安全留白区内，形成最强卖点聚焦但不遮挡主体。"
+        : "Use a headline plus support-copy hierarchy in a safe whitespace zone to create the strongest selling-point emphasis without covering the product.";
+    case "3d":
+      return isZh
+        ? "以短标题加辅助短句为主，文字层级弱于服装主体，布局需配合立体轮廓与背景纵深。"
+        : "Use a short headline with support text. Keep the text hierarchy weaker than the garment itself and align it with the volumetric silhouette and depth.";
+    case "mannequin":
+      return isZh
+        ? "允许短标题和辅助短句，文字应服务于版型和穿着感展示，不抢主体视觉重心。"
+        : "Allow a short headline and support copy, but keep the text subordinate to the fit and silhouette presentation.";
+    default:
+      return isZh
+        ? "优先使用短标题或小标签，文字放在安全留白区，不影响商品识别和展示效率。"
+        : "Prefer a short headline or badge-style label inside a safe whitespace zone without hurting product recognition or showcase efficiency.";
+  }
+}
+
+function fallbackSharedCopy(mode: BlueprintCopyMode, requirements: string, isZh: boolean): string {
+  if (mode === "visual-only") return "";
+  if (requirements.trim().length > 0) return requirements.trim();
+  return isZh
+    ? "高质感面料，清晰版型，细节经得起近看"
+    : "Premium texture, sharp silhouette, and details that hold up close";
+}
+
+function normalizeCopyAnalysis(
+  parsed: Record<string, unknown>,
+  images: BlueprintImagePlan[],
+  outputLanguage: string,
+  requirements: string,
+  uiLanguage: string,
+): BlueprintCopyAnalysis {
+  const isZh = uiLanguage.startsWith("zh");
+  const raw = parsed.copy_analysis && typeof parsed.copy_analysis === "object" && !Array.isArray(parsed.copy_analysis)
+    ? parsed.copy_analysis as Record<string, unknown>
+    : parsed.copyAnalysis && typeof parsed.copyAnalysis === "object" && !Array.isArray(parsed.copyAnalysis)
+    ? parsed.copyAnalysis as Record<string, unknown>
+    : {};
+
+  const fallbackMode: BlueprintCopyMode = outputLanguage === "none"
+    ? "visual-only"
+    : requirements.trim().length > 0
+    ? "user-brief"
+    : "product-inferred";
+  const rawMode = sanitizeString(raw.mode, fallbackMode);
+  const mode: BlueprintCopyMode = rawMode === "user-brief" || rawMode === "product-inferred" || rawMode === "visual-only"
+    ? rawMode
+    : fallbackMode;
+  const visualOnly = mode === "visual-only";
+  const rawPerPlanValue = raw.per_plan_adaptations ?? raw.perPlanAdaptations;
+  const rawPerPlan = Array.isArray(rawPerPlanValue)
+    ? rawPerPlanValue as unknown[]
+    : [];
+
+  return {
+    mode,
+    source_brief: sanitizeString(raw.source_brief ?? raw.sourceBrief, requirements.trim()),
+    brief_summary: sanitizeString(
+      raw.brief_summary ?? raw.briefSummary,
+      requirements.trim().length > 0
+        ? requirements.trim()
+        : isZh
+        ? "未输入组图文字，系统将根据产品图自动补全文案。"
+        : "No brief provided. The system will infer shared copy from the product images.",
+    ),
+    product_summary: sanitizeString(
+      raw.product_summary ?? raw.productSummary,
+      isZh
+        ? "已锁定同一件服装的颜色、材质、轮廓与关键结构，用于整批图片保持一致。"
+        : "The same garment identity is locked across the full set, including color, material, silhouette, and key construction details.",
+    ),
+    resolved_output_language: sanitizeOutputLanguage(raw.resolved_output_language ?? raw.resolvedOutputLanguage, visualOnly ? "none" : outputLanguage),
+    shared_copy: visualOnly ? "" : sanitizeString(raw.shared_copy ?? raw.sharedCopy, fallbackSharedCopy(mode, requirements, isZh)),
+    can_clear_to_visual_only: true,
+    per_plan_adaptations: images.map((image, index) => {
+      const record = rawPerPlan[index] && typeof rawPerPlan[index] === "object" && !Array.isArray(rawPerPlan[index])
+        ? rawPerPlan[index] as Record<string, unknown>
+        : {};
+      const planType = sanitizeString(record.plan_type ?? record.planType, image.type ?? detectBlueprintPlanType(image));
+      const rawCopyRole = sanitizeString(record.copy_role ?? record.copyRole, "");
+      const copyRole: BlueprintCopyRole =
+        rawCopyRole === "headline" || rawCopyRole === "headline+support" || rawCopyRole === "label" || rawCopyRole === "none"
+          ? rawCopyRole
+          : defaultCopyRole(planType, visualOnly);
+
+      return {
+        plan_index: Number.isFinite(Number(record.plan_index ?? record.planIndex))
+          ? Math.max(0, Math.round(Number(record.plan_index ?? record.planIndex)))
+          : index,
+        plan_type: planType,
+        copy_role: copyRole,
+        adaptation_summary: sanitizeString(
+          record.adaptation_summary ?? record.adaptationSummary,
+          defaultCopyAdaptationSummary(planType, isZh, visualOnly),
+        ),
+      };
+    }),
+  };
+}
+
 function normalizeBlueprint(
   parsed: Record<string, unknown>,
   imageCount: number,
   outputLanguage: string,
+  requirements: string,
   uiLanguage?: string,
 ): AnalysisBlueprint {
   const isZh = (uiLanguage ?? "en").startsWith("zh");
@@ -269,7 +446,7 @@ function normalizeBlueprint(
           title: sanitizeString(item.title, fallbackTitle(i)),
           description: sanitizeString(item.description, fallbackDesc),
           design_content: sanitizeString(item.design_content, fallbackDesignContent(i)),
-          type: sanitizeString(item.type, ""),
+          type: detectBlueprintPlanType(item),
         };
       })
     : [];
@@ -317,6 +494,7 @@ function normalizeBlueprint(
     images,
     design_specs: designSpecs,
     _ai_meta: {},
+    copy_analysis: normalizeCopyAnalysis(parsed, images, outputLanguage, requirements, uiLanguage ?? "en"),
     ...(subjectProfile ? { subject_profile: subjectProfile } : {}),
     ...(garmentProfile ? { garment_profile: garmentProfile } : {}),
     ...(tryOnStrategy ? { tryon_strategy: tryOnStrategy } : {}),
@@ -521,6 +699,7 @@ function isRefundableUpstreamRejection(status: number | null): boolean {
 
 function imageGenErrorCodeFromError(error: unknown): string {
   const message = String(error ?? "");
+  if (message.includes("WORKER_LIMIT") || message.includes("compute resources exhausted")) return "WORKER_LIMIT";
   if (message.includes("AbortError")) return "UPSTREAM_TIMEOUT";
   if (message.includes("IMAGE_INPUT_SOURCE_MISSING")) return "IMAGE_INPUT_SOURCE_MISSING";
   if (message.includes("SOURCE_IMAGE_FETCH_FAILED")) return "IMAGE_INPUT_SOURCE_MISSING";
@@ -953,6 +1132,9 @@ type StyleReplicateUnit = {
 
 function styleReplicateErrorMessage(cause: unknown): string {
   const text = String(cause ?? "");
+  if (text.includes("WORKER_LIMIT") || text.includes("compute resources exhausted")) {
+    return "Worker capacity is exhausted. Please retry shortly.";
+  }
   if (text.includes("BATCH_INPUT_INVALID")) {
     return "Batch input is invalid.";
   }
@@ -1002,6 +1184,7 @@ function styleReplicateErrorMessage(cause: unknown): string {
 
 function styleReplicateErrorCode(error: unknown): string {
   const message = String(error ?? "");
+  if (message.includes("WORKER_LIMIT") || message.includes("compute resources exhausted")) return "WORKER_LIMIT";
   if (message.includes("BATCH_INPUT_INVALID")) return "BATCH_INPUT_INVALID";
   if (message.includes("BATCH_PRODUCT_IMAGE_REQUIRED")) return "BATCH_PRODUCT_IMAGE_REQUIRED";
   if (message.includes("BATCH_REFERENCE_IMAGES_REQUIRED")) return "BATCH_REFERENCE_IMAGES_REQUIRED";
@@ -1033,12 +1216,29 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
+const TASK_MAX_ATTEMPTS = clampInt(
+  Deno.env.get("GENERATION_TASK_MAX_ATTEMPTS") ?? 5,
+  1,
+  10,
+  5,
+);
+const TASK_RETRY_DELAY_MS = clampInt(
+  Deno.env.get("GENERATION_TASK_RETRY_DELAY_MS") ?? 10_000,
+  1_000,
+  300_000,
+  10_000,
+);
 const TASK_HEARTBEAT_INTERVAL_MS = 30_000;
+
+type TaskLease = {
+  pulse: () => Promise<void>;
+  stop: () => Promise<void>;
+};
 
 function startTaskHeartbeat(
   supabase: ReturnType<typeof createServiceClient>,
   taskId: string,
-): { stop: () => Promise<void> } {
+): TaskLease {
   let stopped = false;
   let pending = Promise.resolve();
 
@@ -1054,24 +1254,58 @@ function startTaskHeartbeat(
     }
   };
 
-  const enqueueBeat = () => {
-    if (stopped) return;
+  const enqueueBeat = (): Promise<void> => {
+    if (stopped) return pending;
     pending = pending
       .then(() => beat())
       .catch((error) => {
         console.warn(`TASK_HEARTBEAT_CHAIN_FAILED task_id=${taskId} error=${String(error)}`);
       });
+    return pending;
   };
 
-  const interval = setInterval(enqueueBeat, TASK_HEARTBEAT_INTERVAL_MS);
+  const interval = setInterval(() => {
+    void enqueueBeat();
+  }, TASK_HEARTBEAT_INTERVAL_MS);
 
   return {
+    pulse: async () => {
+      await enqueueBeat();
+    },
     stop: async () => {
       stopped = true;
       clearInterval(interval);
       await pending;
     },
   };
+}
+
+function isWorkerPressureError(error: unknown): boolean {
+  const message = String(error ?? "");
+  return message.includes("WORKER_LIMIT") ||
+    message.includes("compute resources exhausted") ||
+    message.includes("worker limit");
+}
+
+function retryDelayMsForError(error: unknown): number {
+  return isWorkerPressureError(error) ? TASK_RETRY_DELAY_MS * 6 : TASK_RETRY_DELAY_MS;
+}
+
+function isFatalImageGenError(error: unknown): boolean {
+  const code = imageGenErrorCodeFromError(error);
+  return code === "MODEL_UNAVAILABLE" ||
+    code === "IMAGE_INPUT_SOURCE_MISSING" ||
+    code === "IMAGE_INPUT_PROMPT_MISSING" ||
+    code === "IMAGE_SIZE_UNSATISFIED" ||
+    code === "INSUFFICIENT_CREDITS" ||
+    code === "UPSTREAM_REJECTED";
+}
+
+function isTaskRetryable(taskType: TaskRow["task_type"], attempts: number, error: unknown): boolean {
+  if (attempts >= TASK_MAX_ATTEMPTS) return false;
+  if (taskType === "STYLE_REPLICATE") return !isFatalStyleReplicateError(error);
+  if (taskType === "IMAGE_GEN") return !isFatalImageGenError(error);
+  return true;
 }
 
 async function runWithConcurrency<T>(
@@ -1691,7 +1925,7 @@ ${requirements || "(No extra brief provided. Infer the plan from the references 
     const parsed = parseJsonFromContent(content);
     const parseFailed = parsed.__parse_failed === true;
     const parseRawPreview = typeof parsed.__raw_preview === "string" ? parsed.__raw_preview : null;
-    const blueprint = normalizeBlueprint(parsed, imageCount, outputLanguage, uiLanguage);
+    const blueprint = normalizeBlueprint(parsed, imageCount, outputLanguage, requirements, uiLanguage);
 
     blueprint._ai_meta = {
       model: String((detailChatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
@@ -1888,16 +2122,48 @@ User brief: ${requirements || "(no extra brief provided)"}
       ? `
 请对服装产品图进行深度视觉分析，然后按以下 JSON 结构输出蓝图（所有字段内容使用中文）：
 {
+  "copy_analysis": {
+    "mode": "user-brief | product-inferred | visual-only",
+    "source_brief": "用户原始组图要求，没有则空字符串",
+    "brief_summary": "一句话总结用户文案意图；若用户没输入文字，则说明系统将基于产品自动补全文案",
+    "product_summary": "一句话总结商品身份、材质、颜色、轮廓与关键结构",
+    "resolved_output_language": "${outputLanguage}",
+    "shared_copy": "整批图片共用的一份优化后主文案；纯视觉模式时必须为空字符串",
+    "can_clear_to_visual_only": true,
+    "per_plan_adaptations": [
+      {
+        "plan_index": 0,
+        "plan_type": "refined | 3d | mannequin | detail | selling_point",
+        "copy_role": "headline | headline+support | label | none",
+        "adaptation_summary": "说明该图如何适配共享主文案、文字位置、层级、留白和不遮挡主体的要求"
+      }
+    ]
+  },
   "images": [
     {
       "title": "4-12 字的标题（含图片类型，如：白底精修图、3D幽灵模特图、细节特写图）",
       "description": "1-2 句定位描述",
-      "design_content": "## 图片 [N]：...\\n\\n**图片类型**：（白底精修图 / 3D幽灵模特图 / 细节特写图 / 卖点展示图）\\n\\n**服装属性**：类型、面料材质（含视觉特征如哑光/光泽）\\n\\n**精确颜色**：主色 #XXXXXX，辅色 #XXXXXX（必须从产品图中提取十六进制色值）\\n\\n**关键设计细节**：图案、印花、logo、工艺细节、特殊结构\\n\\n**构图方案**：主体占比（如75%）、构图方式（居中/对角线等）\\n\\n**光影方案**：光源方向、光质（软光/硬光）、阴影处理\\n\\n**文案内容**（使用 ${outputLanguageLabel(outputLanguage)}）：...\\n\\n**氛围关键词**：..."
+      "type": "refined | 3d | mannequin | detail | selling_point",
+      "design_content": "## 图片 [N]：...\\n\\n**图片类型**：...\\n\\n**服装属性**：类型、面料材质（含视觉特征如哑光/光泽）\\n\\n**精确颜色**：主色 #XXXXXX，辅色 #XXXXXX（必须从产品图中提取十六进制色值）\\n\\n**关键设计细节**：图案、印花、logo、工艺细节、特殊结构\\n\\n**构图方案**：主体占比、布局方式、焦点安排\\n\\n**光影方案**：光源方向、光质、阴影处理\\n\\n**文字策略**：说明是否使用共享文案、使用何种层级、位于哪块留白区、不得遮挡商品主体；若纯视觉则明确写无新增文字\\n\\n**氛围关键词**：..."
     }
   ],
-  "design_specs": "# 整体设计规范\\n\\n## 色彩体系（含精确 hex 色值）\\n...\\n## 面料材质\\n...\\n## 摄影风格\\n...\\n## 品质要求\\n..."
+  "design_specs": "# 整体设计规范\\n\\n## 色彩体系（含精确 hex 色值）\\n...\\n## 面料材质\\n...\\n## 摄影风格\\n...\\n## 文字系统\\n...\\n## 品质要求\\n..."
 }
 约束条件：
+- 如果 outputLanguage 不是 none：
+  - 必须生成 copy_analysis.shared_copy，且它是适合电商出图的优化文案，不是机械复述用户原文。
+  - 如果用户输入了文字，mode 必须为 "user-brief"。
+  - 如果用户没有输入文字，mode 必须为 "product-inferred"，并基于产品图自动补全文案。
+- 如果 outputLanguage 是 none：
+  - mode 必须为 "visual-only"。
+  - copy_analysis.shared_copy 必须为空字符串。
+  - 所有 design_specs 和 images[].design_content 都不得要求新增文字叠加。
+- per_plan_adaptations 必须与 images 数组一一对应，数量完全一致。
+- 白底精修图：优先短标题或小标签，不能破坏商品识别。
+- 3D / 人台图：允许标题 + 辅助短句，但文字层级弱于商品主体。
+- 细节特写图：优先标签/注释式短文案。
+- 卖点展示图：允许标题 + 卖点短句，文案层级最强。
+- 只要不是纯视觉，任意类型都必须写明文字位置、留白和“不得遮挡商品主体”。
 - images 数组返回正好 ${imageCount} 个对象。
 - 每个 design_content 必须包含精确的十六进制颜色值（从产品图中提取）。
 - 每张图片方案必须不同（角度、布局、场景逻辑各不相同）。
@@ -1936,16 +2202,48 @@ ${requirements || "（未提供额外需求）"}
       ? `
 Perform a deep visual analysis of the clothing product image, then output a blueprint with this exact JSON shape:
 {
+  "copy_analysis": {
+    "mode": "user-brief | product-inferred | visual-only",
+    "source_brief": "The user's original brief, or empty string",
+    "brief_summary": "One concise summary of the copy intent. If no brief was typed, say the copy will be inferred from the product.",
+    "product_summary": "One concise summary of the locked garment identity, material, color, silhouette, and key structure",
+    "resolved_output_language": "${outputLanguage}",
+    "shared_copy": "One optimized master copy block shared across the whole image set. It must be empty in visual-only mode.",
+    "can_clear_to_visual_only": true,
+    "per_plan_adaptations": [
+      {
+        "plan_index": 0,
+        "plan_type": "refined | 3d | mannequin | detail | selling_point",
+        "copy_role": "headline | headline+support | label | none",
+        "adaptation_summary": "Explain how this image should adapt the shared master copy, including placement, hierarchy, whitespace, and non-occlusion."
+      }
+    ]
+  },
   "images": [
     {
       "title": "4-12 words title (include shot type: White Background Refined / 3D Ghost Mannequin / Detail Close-up / Selling Point)",
       "description": "1-2 sentence positioning",
-      "design_content": "## Image [N]: ...\\n\\n**Shot Type**: (White Background / 3D Ghost Mannequin / Detail Close-up / Selling Point)\\n\\n**Garment Attributes**: type, fabric/material (matte/glossy/textured)\\n\\n**Exact Colors**: Primary #XXXXXX, Secondary #XXXXXX (MUST extract hex values from product image)\\n\\n**Key Design Details**: pattern, print, logo, stitching, special structure\\n\\n**Composition**: subject framing % (e.g. 75%), layout style (centered/diagonal)\\n\\n**Lighting Plan**: light source direction, quality (soft/hard), shadow treatment\\n\\n**Text Content** (Using ${outputLanguageLabel(outputLanguage)}): ...\\n\\n**Atmosphere Keywords**: ..."
+      "type": "refined | 3d | mannequin | detail | selling_point",
+      "design_content": "## Image [N]: ...\\n\\n**Shot Type**: ...\\n\\n**Garment Attributes**: type, fabric/material (matte/glossy/textured)\\n\\n**Exact Colors**: Primary #XXXXXX, Secondary #XXXXXX (MUST extract hex values from product image)\\n\\n**Key Design Details**: pattern, print, logo, stitching, special structure\\n\\n**Composition**: framing %, layout style, focal hierarchy\\n\\n**Lighting Plan**: light source direction, quality, shadow treatment\\n\\n**Copy Strategy**: explain whether the shared master copy is used, what role it plays, where it sits, how much whitespace it gets, and that it must not cover the product; if visual-only, explicitly state no added text overlay\\n\\n**Atmosphere Keywords**: ..."
     }
   ],
-  "design_specs": "# Overall Design Specifications\\n\\n## Color System (with exact hex values)\\n...\\n## Fabric & Material\\n...\\n## Photography Style\\n...\\n## Quality Requirements\\n..."
+  "design_specs": "# Overall Design Specifications\\n\\n## Color System (with exact hex values)\\n...\\n## Fabric & Material\\n...\\n## Photography Style\\n...\\n## Typography / Copy System\\n...\\n## Quality Requirements\\n..."
 }
 Constraints:
+- If outputLanguage is not none:
+  - copy_analysis.shared_copy is required and must be optimized for e-commerce imagery rather than a mechanical restatement of the brief.
+  - If the user typed a brief, mode must be "user-brief".
+  - If the user did not type a brief, mode must be "product-inferred" and the copy must be inferred from the product.
+- If outputLanguage is none:
+  - mode must be "visual-only".
+  - copy_analysis.shared_copy must be an empty string.
+  - design_specs and images[].design_content must not ask for any added visible text.
+- per_plan_adaptations must align 1:1 with the images array.
+- White-background refined shots should prefer a short headline or small badge without hurting product recognition.
+- 3D / mannequin shots may use a headline plus support line, but text hierarchy must stay weaker than the garment.
+- Detail close-ups should prefer label-style or callout-style copy.
+- Selling-point shots should allow the strongest headline plus support-copy hierarchy.
+- Whenever the mode is not visual-only, every plan must explicitly define text placement, whitespace, and that the text cannot block the product.
 - Return exactly ${imageCount} objects in images.
 - Every design_content MUST include precise hex color values extracted from the product image.
 - Every image plan must be different (angle, layout, scene logic).
@@ -2070,7 +2368,7 @@ ${requirements || "(no extra brief provided)"}
     chatResponse = await callQnChatAPI({
       model: chatConfig.model,
       messages,
-      maxTokens: 2048,
+      maxTokens: 3072,
       timeoutMsOverride: analysisTimeoutMs,
     });
   } catch (primaryErr) {
@@ -2079,7 +2377,7 @@ ${requirements || "(no extra brief provided)"}
     chatResponse = await callQnChatAPI({
       model: fallbackModel,
       messages,
-      maxTokens: 2048,
+      maxTokens: 3072,
       timeoutMsOverride: analysisTimeoutMs,
     });
   }
@@ -2088,7 +2386,7 @@ ${requirements || "(no extra brief provided)"}
   const parsed = parseJsonFromContent(content);
   const parseFailed = parsed.__parse_failed === true;
   const parseRawPreview = typeof parsed.__raw_preview === "string" ? parsed.__raw_preview : null;
-  const blueprint = normalizeBlueprint(parsed, imageCount, outputLanguage, uiLanguage);
+  const blueprint = normalizeBlueprint(parsed, imageCount, outputLanguage, requirements, uiLanguage);
 
   blueprint._ai_meta = {
     model: String((chatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
@@ -2133,8 +2431,10 @@ ${requirements || "(no extra brief provided)"}
 async function processImageGenJob(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
+  taskLease?: TaskLease,
 ): Promise<void> {
   const startedAt = Date.now();
+  const pulseLease = taskLease?.pulse ?? (async () => {});
   const payload = job.payload ?? {};
   const model = normalizeRequestedModel(String(payload.model ?? "or-gemini-3.1-flash"));
   const promptProfile = sanitizePromptProfile(payload.promptProfile ?? payload.prompt_profile);
@@ -2224,7 +2524,9 @@ async function processImageGenJob(
       }
     }
 
+    await pulseLease();
     const allDataUrls = await Promise.all(allImagePaths.map(toDataUrl));
+    await pulseLease();
 
     // Build prompt
     const styleConstraintPrompt = normalizeStyleConstraintPrompt(payload.styleConstraint);
@@ -2287,6 +2589,7 @@ async function processImageGenJob(
     const imageGenTimeoutMs = (isQuickEdit || isTextEdit)
       ? Number(Deno.env.get("QUICK_EDIT_IMAGE_TIMEOUT_MS") ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "120000")
       : Number(Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS") ?? "60000");
+    await pulseLease();
     const apiResponse = await callQnImageAPI({
       imageDataUrl: allDataUrls[0],
       imageDataUrls: allDataUrls.length > 1 ? allDataUrls : undefined,
@@ -2300,6 +2603,7 @@ async function processImageGenJob(
       aspectRatio,
       timeoutMsOverride: imageGenTimeoutMs,
     });
+    await pulseLease();
 
     const providerEntry = Array.isArray(apiResponse.data) && apiResponse.data.length > 0
       ? apiResponse.data[0] as Record<string, unknown>
@@ -2321,6 +2625,7 @@ async function processImageGenJob(
       generatedUrl: generated.url ?? null,
       imageSize,
     });
+    await pulseLease();
 
     const requestedSize = scaledRequestSize(aspectRatio, imageSize);
 
@@ -2372,28 +2677,10 @@ async function processImageGenJob(
   }
 }
 
-const REFINEMENT_ANALYSIS_SYSTEM_PROMPT =
-  `你是一名专业的商业产品精修策略师。你的任务不是直接生成图片，而是先根据输入产品图生成一条可用于图像模型的中文精修提示词。
-
-最高优先级规则：
-1. 产品身份锁定：产品外观必须与原图完全一致，包括品类、造型、尺寸比例、轮廓、结构、开孔、Logo/文字位置、标签、印花、硬件、纹理、缝线与所有关键设计特征，不得改形、改色、改结构、改 Logo。
-2. 精修提示词必须具体，不能泛化，必须准确描述产品主体、材质特征、细节部位、干扰物、修复动作、质感增强方式和商业布光要求。
-3. 不要把背景统一写死为纯白。背景处理会在下游流程中追加，你这里专注于产品主体识别、干扰识别、材质修复、细节强化和商业级质感提升。
-
-提示词必须尽量覆盖以下信息：
-- 产品主体识别：品类、主色、材质、结构、关键部件、Logo/文字位置
-- 非主体干扰识别：手部、支架、背景杂物、污渍、指纹、反射污染、压痕、划痕、褶皱、脏污
-- 材质专项处理：皮革、金属、玻璃、布料、塑料、橡胶、木质、纸盒等真实质感还原与强化
-- 细节强化：边缘、接缝、标签、品牌字样、局部锐度、镜头框、扣件、螺丝、切边
-- 商业布光：高光层次、阴影过渡、立体感、悬浮感、空气感，但不能抢主体
-
-额外强规则：
-- 若图中存在遮挡物、手持、道具、支撑件、背景杂物或脏污，必须明确写出“去除”或“清理”动作。
-- 金属材质要区分镜面镀铬、拉丝、磨砂、哑光等，不可一概而论。
-- Logo、文字、标签、印花若可见，必须要求边缘锐利、位置不变、内容不变。
-- 输出必须是单行中文提示词，不要 JSON，不要 Markdown，不要解释，不要分点。`;
-
-async function generateRefinementPrompt(productDataUrl: string): Promise<string> {
+async function generateRefinementPrompt(
+  productDataUrl: string,
+  backgroundMode: "white" | "original",
+): Promise<string> {
   const refinementAnalysisTimeoutMs = clampInt(
     Deno.env.get("REFINEMENT_ANALYSIS_TIMEOUT_MS") ?? 20_000,
     5_000,
@@ -2402,15 +2689,14 @@ async function generateRefinementPrompt(productDataUrl: string): Promise<string>
   );
   const response = await callQnChatAPI({
     messages: [
-      { role: "system", content: REFINEMENT_ANALYSIS_SYSTEM_PROMPT },
+      { role: "system", content: buildRefinementAnalysisSystemPrompt(backgroundMode) },
       {
         role: "user",
         content: [
           { type: "image_url", image_url: { url: productDataUrl } },
           {
             type: "text",
-            text:
-              "请分析这张产品图，生成一段专业的商业级精修提示词。请务必识别产品主体、材质、颜色、结构、Logo/文字位置、可见瑕疵、遮挡物或道具，并明确写出对应的去除、修复、锐化、质感增强和商业布光要求。",
+            text: buildRefinementAnalysisUserPrompt(backgroundMode),
           },
         ],
       },
@@ -2430,8 +2716,10 @@ async function processStyleReplicateJob(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
   taskAttempts = 1,
+  taskLease?: TaskLease,
 ): Promise<void> {
   const startedAt = Date.now();
+  const pulseLease = taskLease?.pulse ?? (async () => {});
   const payload = job.payload ?? {};
   const modelName = normalizeRequestedModel(String(payload.model ?? "or-gemini-3.1-flash"));
   const promptProfile = sanitizePromptProfile(payload.promptProfile ?? payload.prompt_profile);
@@ -2527,11 +2815,6 @@ async function processStyleReplicateJob(
     locale: mode === "refinement" ? "zh" : "en",
     profile: promptProfile,
   });
-  const refinementBasePrompt =
-    "作为专业电商图片精修模型,在不改变产品本体的前提下，对单张产品图进行商业级精修。仅做精修优化,允许进行瑕疵清理、边缘优化、光影校正、色彩与清晰度增强。";
-  const refinementWhiteBackgroundPrompt = "除产品主体外的背景与非主体元素统一为纯白背景干净无杂物。";
-  const refinementOriginalBackgroundPrompt =
-    "保留原图背景结构与场景关系，仅清理杂物、污渍、手部、支架或其他非主体干扰，整体提升为商业级成片质感。";
   const requestSize = scaledRequestSize(aspectRatio, imageSize);
   const styleTimeoutMs = Number(
     mode === "refinement"
@@ -2544,11 +2827,11 @@ async function processStyleReplicateJob(
   const maxRatioRetries = 3;
   const batchConcurrency = clampInt(
     mode === "refinement"
-      ? Deno.env.get("REFINEMENT_BATCH_CONCURRENCY") ?? 8
+      ? Deno.env.get("REFINEMENT_BATCH_CONCURRENCY") ?? 4
       : Deno.env.get("STYLE_REPLICATE_BATCH_CONCURRENCY") ?? 2,
     1,
-    mode === "refinement" ? 8 : 4,
-    mode === "refinement" ? 8 : 2,
+    mode === "refinement" ? 6 : 4,
+    mode === "refinement" ? 4 : 2,
   );
   const progressBatchSize = mode === "refinement"
     ? clampInt(Deno.env.get("REFINEMENT_PROGRESS_BATCH_SIZE") ?? 8, 1, 8, 8)
@@ -2571,12 +2854,16 @@ async function processStyleReplicateJob(
     succeeded: 0,
     failed: 0,
   };
-  const getRefinementPrompt = (productUrl: string): Promise<{ prompt: string | null; source: "analysis" | "fallback" }> => {
-    if (!refinementPromptCache.has(productUrl)) {
-      refinementPromptCache.set(productUrl, (async () => {
+  const getRefinementPrompt = (
+    productUrl: string,
+    backgroundMode: "white" | "original",
+  ): Promise<{ prompt: string | null; source: "analysis" | "fallback" }> => {
+    const cacheKey = buildRefinementPromptCacheKey(productUrl, backgroundMode);
+    if (!refinementPromptCache.has(cacheKey)) {
+      refinementPromptCache.set(cacheKey, (async () => {
         refinementAnalysisStats.attempted += 1;
         try {
-          const prompt = await generateRefinementPrompt(productUrl);
+          const prompt = await generateRefinementPrompt(productUrl, backgroundMode);
           refinementAnalysisStats.succeeded += 1;
           return { prompt, source: "analysis" };
         } catch {
@@ -2585,7 +2872,7 @@ async function processStyleReplicateJob(
         }
       })());
     }
-    return refinementPromptCache.get(productUrl)!;
+    return refinementPromptCache.get(cacheKey)!;
   };
 
   const outputs: StyleOutputItem[] = new Array(units.length);
@@ -2691,23 +2978,14 @@ async function processStyleReplicateJob(
 
   const buildPrompt = (unit: StyleReplicateUnit, refinementAnalysisPrompt?: string): string => {
     if (unit.mode === "refinement") {
-      const promptParts: string[] = [];
-      if (refinementAnalysisPrompt) {
-        promptParts.push(refinementAnalysisPrompt);
-      } else {
-        promptParts.push(refinementBasePrompt);
-      }
-      promptParts.push(backgroundMode === "white"
-        ? refinementWhiteBackgroundPrompt
-        : refinementOriginalBackgroundPrompt);
-      promptParts.push(`输出比例为 ${aspectRatio}，参考尺寸为 ${requestSize}。`);
-      if (userPrompt) {
-        promptParts.push(userPrompt);
-      }
-      if (styleConstraintPrompt) {
-        promptParts.push(styleConstraintPrompt);
-      }
-      return applyPromptVariant(stylePromptRegistryKey, "prompt", promptParts.join("\n"));
+      return applyPromptVariant(stylePromptRegistryKey, "prompt", buildRefinementPrompt({
+        backgroundMode,
+        refinementAnalysisPrompt,
+        aspectRatio,
+        requestSize,
+        userPrompt,
+        styleConstraintPrompt,
+      }));
     }
 
     // Direct style transfer prompt — product image is Image 1 (primary), reference image is Image 2.
@@ -2730,6 +3008,7 @@ async function processStyleReplicateJob(
 
   await runWithConcurrency(units, batchConcurrency, async (unit, index) => {
     try {
+      await pulseLease();
       if (fatalError) {
         outputs[index] = {
           url: null,
@@ -2748,13 +3027,15 @@ async function processStyleReplicateJob(
 
       const productDataUrl = await getCachedDataUrl(unit.product_image);
       const referenceDataUrl = unit.reference_image ? await getCachedDataUrl(unit.reference_image) : null;
+      await pulseLease();
 
       let refinementPrompt: string | null = null;
       let promptSource: "analysis" | "fallback" | undefined = undefined;
       if (unit.mode === "refinement") {
-        const promptResult = await getRefinementPrompt(unit.product_image);
+        const promptResult = await getRefinementPrompt(unit.product_image, backgroundMode);
         refinementPrompt = promptResult.prompt;
         promptSource = promptResult.source;
+        await pulseLease();
       }
 
       const prompt = buildPrompt(unit, refinementPrompt ?? undefined);
@@ -2762,6 +3043,7 @@ async function processStyleReplicateJob(
       let lastProviderSize: string | null = null;
 
       for (let attempt = 0; attempt < maxRatioRetries; attempt++) {
+        await pulseLease();
         const apiResponse = await callQnImageAPI({
           imageDataUrl: productDataUrl,
           ...(referenceDataUrl ? { imageDataUrls: [productDataUrl, referenceDataUrl] } : {}),
@@ -2775,6 +3057,7 @@ async function processStyleReplicateJob(
           aspectRatio,
           timeoutMsOverride: styleTimeoutMs,
         });
+        await pulseLease();
 
         const providerEntry = Array.isArray(apiResponse.data) && apiResponse.data.length > 0
           ? apiResponse.data[0] as Record<string, unknown>
@@ -2795,6 +3078,7 @@ async function processStyleReplicateJob(
           generatedUrl: generated.url ?? null,
           imageSize,
         });
+        await pulseLease();
 
         chosen = {
           url: persisted.resultUrl,
@@ -2849,6 +3133,7 @@ async function processStyleReplicateJob(
       completedCount += 1;
       if (completedCount % progressBatchSize === 0 || completedCount === units.length) {
         enqueueProgressWrite(completedCount);
+        await pulseLease();
       }
     }
   });
@@ -2903,8 +3188,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
   if (req.method !== "POST") return err("BAD_REQUEST", "Method not allowed", 405);
 
-  const authResult = await requireUser(req);
-  if (!authResult.ok) return authResult.response;
+  const internalRequest = isInternalWorkerRequest(req);
+  const authResult = internalRequest ? null : await requireUser(req);
+  if (!internalRequest && authResult && !authResult.ok) return authResult.response;
 
   const body = await req.json().catch(() => null) as { job_id?: string } | null;
   if (!body?.job_id) return err("BAD_REQUEST", "job_id is required");
@@ -2917,7 +3203,7 @@ Deno.serve(async (req) => {
     .single();
 
   if (jobError || !job) return err("NOT_FOUND", "Job not found", 404);
-  if (job.user_id !== authResult.user.id) return err("FORBIDDEN", "Forbidden", 403);
+  if (!internalRequest && authResult && job.user_id !== authResult.user.id) return err("FORBIDDEN", "Forbidden", 403);
   if (job.status === "success" || job.status === "failed") {
     return ok({ ok: true, status: "already_terminal", job_id: job.id });
   }
@@ -2934,9 +3220,9 @@ Deno.serve(async (req) => {
     if (task.task_type === "ANALYSIS") {
       await processAnalysisJob(supabase, job as GenerationJobRow);
     } else if (task.task_type === "IMAGE_GEN") {
-      await processImageGenJob(supabase, job as GenerationJobRow);
+      await processImageGenJob(supabase, job as GenerationJobRow, heartbeat);
     } else if (task.task_type === "STYLE_REPLICATE") {
-      await processStyleReplicateJob(supabase, job as GenerationJobRow, Number(task.attempts ?? 1));
+      await processStyleReplicateJob(supabase, job as GenerationJobRow, Number(task.attempts ?? 1), heartbeat);
     } else {
       throw new Error(`UNSUPPORTED_TASK_TYPE ${task.task_type}`);
     }
@@ -2959,8 +3245,8 @@ Deno.serve(async (req) => {
   } catch (e) {
     await heartbeat.stop();
     const attempts = Number(task.attempts ?? 1);
-    const retryable = attempts < 5;
-    const runAfter = new Date(Date.now() + 10_000).toISOString();
+    const retryable = isTaskRetryable(task.task_type, attempts, e);
+    const runAfter = new Date(Date.now() + retryDelayMsForError(e)).toISOString();
 
     const { error: taskRetryUpdateError } = await supabase
       .from("generation_job_tasks")

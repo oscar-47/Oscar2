@@ -11,6 +11,9 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function friendlyError(raw: string, isZh: boolean): string {
   const lower = raw.toLowerCase()
+  if (lower.includes('too_many_active_jobs') || lower.includes('too many image generation jobs')) {
+    return isZh ? '当前生成队列繁忙，系统正在排队处理，请稍后重试。' : 'The image queue is busy right now. Please try again shortly.'
+  }
   if (lower.includes('aborterror') || lower.includes('signal has been aborted') || lower.includes('timed out')) {
     return isZh ? '服务响应超时，请稍后重试。' : 'Service timed out. Please try again.'
   }

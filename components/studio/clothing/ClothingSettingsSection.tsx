@@ -67,6 +67,11 @@ export function ClothingSettingsSection({
           rows={5}
           className="min-h-[132px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] leading-6 text-[#2b2f38]"
         />
+        <p className="mt-3 text-[12px] leading-5 text-[#7d818d]">
+          {isZh
+            ? '输入组图要求并选择输出语言后，系统会自动分析产品并生成适合所有图片的共享文案；若不输入文字但选择了输出语言，系统也会自动补全文案。选择纯视觉，或在分析后清空共享文案，则整批图片按纯视觉生成。'
+            : 'After you enter a brief and choose an output language, the system will analyze the product and generate shared copy for all images. If you choose an output language without typing a brief, it will infer the copy automatically. Choose visual-only, or clear the analyzed copy later, to generate the full batch without added text.'}
+        </p>
       </div>
 
       {/* Shared generation parameters card */}

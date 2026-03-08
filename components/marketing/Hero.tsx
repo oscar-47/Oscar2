@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, ImagePlus, Zap, Sparkles } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
 
 function parsePlatforms(value: string): string[] {
@@ -21,6 +21,33 @@ function repeatItems(items: string[], copies: number): string[] {
   return Array.from({ length: copies }, () => items).flat()
 }
 
+const FEATURE_CONFIG = [
+  {
+    icon: ImagePlus,
+    gradient: 'from-blue-500/[0.08] to-indigo-500/[0.08]',
+    iconBg: 'bg-blue-50',
+    iconColor: 'text-blue-600',
+    border: 'border-blue-100',
+    hoverBorder: 'hover:border-blue-200',
+  },
+  {
+    icon: Zap,
+    gradient: 'from-amber-500/[0.08] to-orange-500/[0.08]',
+    iconBg: 'bg-amber-50',
+    iconColor: 'text-amber-600',
+    border: 'border-amber-100',
+    hoverBorder: 'hover:border-amber-200',
+  },
+  {
+    icon: Sparkles,
+    gradient: 'from-violet-500/[0.08] to-purple-500/[0.08]',
+    iconBg: 'bg-violet-50',
+    iconColor: 'text-violet-600',
+    border: 'border-violet-100',
+    hoverBorder: 'hover:border-violet-200',
+  },
+] as const
+
 export function Hero() {
   const t = useTranslations('landing.hero')
   const locale = useLocale()
@@ -34,6 +61,12 @@ export function Hero() {
         initial: { opacity: 0, y: 20 },
         animate: { opacity: 1, y: 0 },
       }
+
+  const features = [
+    { title: t('feature1Title'), desc: t('feature1Desc') },
+    { title: t('feature2Title'), desc: t('feature2Desc') },
+    { title: t('feature3Title'), desc: t('feature3Desc') },
+  ]
 
   return (
     <section className="relative flex min-h-[calc(100vh-82px)] items-center overflow-hidden bg-white pb-16 pt-20 sm:pb-20 sm:pt-24">
@@ -57,6 +90,38 @@ export function Hero() {
             {t('subtitle')}
           </p>
 
+          {/* Three Feature Preview Cards */}
+          <div className="mt-12 grid w-full max-w-[960px] grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5">
+            {features.map((feature, index) => {
+              const config = FEATURE_CONFIG[index]
+              const Icon = config.icon
+              return (
+                <motion.div
+                  key={index}
+                  initial={reduceMotion ? undefined : { opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.2 + index * 0.1, ease: 'easeOut' }}
+                  className={`group relative overflow-hidden rounded-2xl border ${config.border} ${config.hoverBorder} bg-gradient-to-br ${config.gradient} p-6 text-left backdrop-blur transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_40px_rgba(15,23,42,0.08)]`}
+                >
+                  <div className={`mb-4 inline-flex rounded-xl ${config.iconBg} p-2.5 ${config.iconColor}`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-[#0f172a]">{feature.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-[#475569]">{feature.desc}</p>
+                </motion.div>
+              )
+            })}
+          </div>
+
+          <Link
+            href={`/${locale}/auth`}
+            className="mt-10 inline-flex h-12 items-center gap-2 rounded-full bg-[#0f172a] px-7 text-sm font-semibold text-white transition-all hover:bg-[#1e293b] hover:shadow-[0_12px_30px_rgba(15,23,42,0.2)] sm:h-[54px] sm:px-9 sm:text-base"
+          >
+            {t('cta')}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+
+          {/* Platform Carousel */}
           <div className="relative mt-10 w-full max-w-[1100px] overflow-hidden rounded-[30px] border border-[#d9e1ee] bg-white/55 px-4 py-4 shadow-[0_20px_56px_rgba(15,23,42,0.1)] backdrop-blur-2xl sm:px-6 sm:py-5">
             <motion.span
               aria-hidden
@@ -104,14 +169,6 @@ export function Hero() {
           </div>
 
           <p className="mt-5 text-sm font-medium text-[#475569] sm:text-base">{t('platformHint')}</p>
-
-          <Link
-            href={`/${locale}/auth`}
-            className="mt-10 inline-flex h-12 items-center gap-2 rounded-full bg-[#0f172a] px-7 text-sm font-semibold text-white transition-all hover:bg-[#1e293b] hover:shadow-[0_12px_30px_rgba(15,23,42,0.2)] sm:h-[54px] sm:px-9 sm:text-base"
-          >
-            {t('cta')}
-            <ArrowRight className="h-4 w-4" />
-          </Link>
         </motion.div>
       </div>
     </section>

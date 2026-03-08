@@ -80,6 +80,60 @@ function parseAnalysisRecord(value: unknown): Record<string, unknown> | null {
   }
 }
 
+function sanitizeString(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function detectPlanType(value: unknown): string {
+  const record = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const explicit = sanitizeString(record.type, "").toLowerCase();
+  if (["refined", "3d", "mannequin", "detail", "selling_point"].includes(explicit)) return explicit;
+
+  const text = `${sanitizeString(record.title)} ${sanitizeString(record.description)} ${sanitizeString(record.design_content)}`.toLowerCase();
+  if (/3d|ghost/.test(text)) return "3d";
+  if (/人台|mannequin/.test(text)) return "mannequin";
+  if (/细节|特写|macro|detail/.test(text)) return "detail";
+  if (/卖点|selling point/.test(text)) return "selling_point";
+  return "refined";
+}
+
+function parseClothingCopyAnalysis(value: unknown, fallbackLanguage: string): Record<string, unknown> | null {
+  const analysis = parseAnalysisRecord(value);
+  const raw = analysis?.copy_analysis && typeof analysis.copy_analysis === "object" && !Array.isArray(analysis.copy_analysis)
+    ? analysis.copy_analysis as Record<string, unknown>
+    : analysis?.copyAnalysis && typeof analysis.copyAnalysis === "object" && !Array.isArray(analysis.copyAnalysis)
+    ? analysis.copyAnalysis as Record<string, unknown>
+    : null;
+  if (!raw) return null;
+
+  const images = Array.isArray(analysis?.images) ? analysis?.images : [];
+  const rawPlansValue = raw.per_plan_adaptations ?? raw.perPlanAdaptations;
+  const rawPlans = Array.isArray(rawPlansValue)
+    ? rawPlansValue as unknown[]
+    : [];
+
+  return {
+    mode: sanitizeString(raw.mode, fallbackLanguage === "none" ? "visual-only" : "product-inferred"),
+    resolved_output_language: sanitizeLanguage(raw.resolved_output_language ?? raw.resolvedOutputLanguage ?? fallbackLanguage),
+    shared_copy: sanitizeString(raw.shared_copy ?? raw.sharedCopy, ""),
+    per_plan_adaptations: images.map((image, index) => {
+      const rawPlan = rawPlans[index] && typeof rawPlans[index] === "object" && !Array.isArray(rawPlans[index])
+        ? rawPlans[index] as Record<string, unknown>
+        : {};
+      return {
+        plan_index: Number.isFinite(Number(rawPlan.plan_index ?? rawPlan.planIndex))
+          ? Math.max(0, Math.round(Number(rawPlan.plan_index ?? rawPlan.planIndex)))
+          : index,
+        plan_type: sanitizeString(rawPlan.plan_type ?? rawPlan.planType, detectPlanType(image)),
+        copy_role: sanitizeString(rawPlan.copy_role ?? rawPlan.copyRole, "none"),
+        adaptation_summary: sanitizeString(rawPlan.adaptation_summary ?? rawPlan.adaptationSummary, ""),
+      };
+    }),
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
   if (req.method !== "POST") return err("BAD_REQUEST", "Method not allowed", 405);
@@ -115,9 +169,18 @@ Deno.serve(async (req) => {
   const isGenesisModule = module === "genesis";
   const isEcomDetailModule = module === "ecom-detail";
   const analysisRecord = parseAnalysisRecord(body.analysisJson);
+  const clothingCopyAnalysis = isClothing ? parseClothingCopyAnalysis(body.analysisJson, language) : null;
+  const sharedClothingCopy = sanitizeString(clothingCopyAnalysis?.shared_copy, "");
+  const clothingVisualOnly = isClothing && (language === "none" || sharedClothingCopy.length === 0);
   const isGenesisBlueprintMode = isGenesisModule && Array.isArray(analysisRecord?.images);
   const ecomDetailCopyRuleZh = buildVisibleCopyLanguageRule(language, true);
   const ecomDetailCopyRuleEn = buildVisibleCopyLanguageRule(language, false);
+  const clothingCopyRuleZh = clothingVisualOnly
+    ? "运行时共享主文案为空，所有图片必须保持纯视觉构图，禁止任何新增画面文字。"
+    : buildVisibleCopyLanguageRule(language, true);
+  const clothingCopyRuleEn = clothingVisualOnly
+    ? "The runtime shared master copy is empty, so every image must stay visual-only with no added visible text."
+    : buildVisibleCopyLanguageRule(language, false);
   const analysisJson = typeof body.analysisJson === "string"
     ? body.analysisJson
     : JSON.stringify(body.analysisJson, null, 2);
@@ -161,6 +224,8 @@ Deno.serve(async (req) => {
 - 必须从分析蓝图中提取精确色值（如 #FFDB58、#3C3C3C），在 prompt 中直接使用十六进制色值。
 - 声明面料类型（棉质/涤纶/牛仔布/丝绸等）与视觉特征（哑光/光泽/粗糙纹理等）。
 - 完整保留产品的形状、颜色、图案、logo、文字印花和所有关键设计细节。
+- 运行时以 analysisJson.copy_analysis.shared_copy 为最终文案裁决：若为空则所有图片必须纯视觉；若非空则整批共用同一份主文案，只允许按每张图的适配策略改变位置、层级和角色。
+- 文案语言硬约束：${clothingCopyRuleZh}
 - 每段 prompt 结尾统一追加：8K分辨率，超清画质，极致锐度，商业摄影级品质，无视觉噪点。
 - 严格输出 JSON 数组，每个元素包含 prompt, title, negative_prompt, marketing_hook, priority 字段，不含 Markdown，不含任何解释。`;
 
@@ -184,6 +249,8 @@ Universal requirements:
 - Extract exact hex color values from the blueprint (e.g. #FFDB58, #3C3C3C) and use them directly in the prompt.
 - State fabric type (cotton, polyester, denim, silk, etc.) and visual properties (matte, glossy, textured, etc.).
 - Preserve all product identity: shape, color, pattern, logo, print, and every key design detail.
+- Treat analysisJson.copy_analysis.shared_copy as the final runtime copy authority: if it is empty, every image must remain visual-only; if it is present, the whole batch shares that same master copy and only placement, hierarchy, and role may change per image adaptation.
+- Visible-copy language rule: ${clothingCopyRuleEn}
 - End every prompt with: 8K resolution, ultra-clear, maximum sharpness, commercial photography quality, zero visual artifacts.
 - Output a strict JSON array only; each element must contain prompt, title, negative_prompt, marketing_hook, priority fields; no Markdown; no explanations.`;
 
@@ -544,8 +611,13 @@ Rules:
 - One prompt object per image plan, in the same order as the blueprint.
 - Each prompt must be self-contained and immediately usable for image generation.
 - Extract and use exact hex color codes from the blueprint's color system and product description.
-- If output language is "none", no in-image text of any kind — pure visual composition only.
-- Otherwise, keep any in-image text language as: ${language === "none" ? "none (no text)" : language}.
+- Read analysisJson.copy_analysis first. It is the final runtime source of truth for copy mode, shared_copy, and per-plan adaptations.
+- If analysisJson.copy_analysis.shared_copy is empty, every prompt must explicitly require no added text overlay and pure visual composition only.
+- If analysisJson.copy_analysis.shared_copy is non-empty:
+  - Use that exact shared master copy across the full batch instead of inventing a new copy block.
+  - Use per_plan_adaptations[i] to decide the copy role, placement, hierarchy, whitespace, and non-occlusion requirement for image i.
+  - Do not paraphrase the shared copy into a different marketing message; only adapt how it is presented in each image.
+- Runtime visible-copy language rule: ${clothingCopyRuleEn}
 - If style constraints are provided, treat them as highest priority visual requirements.
 - Return JSON array only. No markdown fences. No explanation text.
 

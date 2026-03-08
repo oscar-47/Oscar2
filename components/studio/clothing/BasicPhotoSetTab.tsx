@@ -4,8 +4,9 @@ import { useState, useRef, useCallback } from 'react'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { useLocale } from 'next-intl'
-import { Image as ImageIcon } from 'lucide-react'
+import { Image as ImageIcon, Languages, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { MultiImageUploader, type UploadedImage } from '@/components/upload/MultiImageUploader'
 import type { ProgressStep } from '@/components/generation/GenerationProgress'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
@@ -17,6 +18,7 @@ import { GenerationTypeSelector, countSelectedTypes } from './GenerationTypeSele
 import type { BasicPhotoTypeState, ClothingPhase } from './types'
 import { uploadFile } from '@/lib/api/upload'
 import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/api/edge-functions'
+import { refreshCredits } from '@/lib/hooks/useCredits'
 import { createClient } from '@/lib/supabase/client'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import type {
@@ -26,9 +28,14 @@ import type {
   GenerationJob,
   AnalysisBlueprint,
   BlueprintImagePlan,
+  BlueprintCopyAnalysis,
+  BlueprintCopyMode,
+  BlueprintCopyPlanAdaptation,
+  BlueprintCopyRole,
   GeneratedPrompt,
+  OutputLanguage,
 } from '@/types'
-import { DEFAULT_MODEL, isValidModel, normalizeGenerationModel, sanitizeImageSizeForModel } from '@/types'
+import { DEFAULT_MODEL } from '@/types'
 import { friendlyError } from '@/lib/utils'
 
 function uid() {
@@ -146,6 +153,191 @@ function isAnalysisBlueprint(value: unknown): value is AnalysisBlueprint {
   return Array.isArray(obj.images) && obj.images.every(isBlueprintImagePlan) && typeof obj.design_specs === 'string'
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function asTrimmedString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback
+}
+
+function normalizeOutputLanguage(value: unknown, fallback: OutputLanguage): OutputLanguage {
+  const candidate = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if ([
+    'none', 'en', 'zh', 'ja', 'ko', 'es', 'fr', 'de', 'pt', 'ar', 'ru',
+  ].includes(candidate)) {
+    return candidate as OutputLanguage
+  }
+  return fallback
+}
+
+function outputLanguageLabel(value: OutputLanguage, isZh: boolean): string {
+  switch (value) {
+    case 'none':
+      return isZh ? '纯视觉' : 'Visual Only'
+    case 'zh':
+      return isZh ? '简体中文' : 'Simplified Chinese'
+    case 'ja':
+      return isZh ? '日语' : 'Japanese'
+    case 'ko':
+      return isZh ? '韩语' : 'Korean'
+    case 'es':
+      return isZh ? '西班牙语' : 'Spanish'
+    case 'fr':
+      return isZh ? '法语' : 'French'
+    case 'de':
+      return isZh ? '德语' : 'German'
+    case 'pt':
+      return isZh ? '葡萄牙语' : 'Portuguese'
+    case 'ar':
+      return isZh ? '阿拉伯语' : 'Arabic'
+    case 'ru':
+      return isZh ? '俄语' : 'Russian'
+    default:
+      return isZh ? '英文' : 'English'
+  }
+}
+
+function inferPlanType(plan: BlueprintImagePlan): NonNullable<BlueprintImagePlan['type']> {
+  const text = `${plan.type ?? ''} ${plan.title} ${plan.description} ${plan.design_content}`.toLowerCase()
+  if (/3d|ghost/.test(text)) return '3d'
+  if (/人台|mannequin/.test(text)) return 'mannequin'
+  if (/细节|特写|macro|detail/.test(text)) return 'detail'
+  if (/卖点|selling point/.test(text)) return 'selling_point'
+  return 'refined'
+}
+
+function normalizePlan(plan: BlueprintImagePlan): BlueprintImagePlan {
+  return {
+    ...plan,
+    type: inferPlanType(plan),
+  }
+}
+
+function defaultCopyRole(planType: string, visualOnly: boolean): BlueprintCopyRole {
+  if (visualOnly) return 'none'
+  if (planType === 'detail') return 'label'
+  if (planType === 'selling_point') return 'headline+support'
+  if (planType === '3d' || planType === 'mannequin') return 'headline+support'
+  return 'headline'
+}
+
+function defaultAdaptationSummary(planType: string, isZh: boolean, visualOnly: boolean): string {
+  if (visualOnly) {
+    return isZh
+      ? '纯视觉优先，不添加任何新增画面文字，只保留商品主体、材质、结构和光影表达。'
+      : 'Visual-only priority. Do not add any new in-image text; keep the focus on the product, material, structure, and lighting.'
+  }
+
+  switch (planType) {
+    case 'detail':
+      return isZh
+        ? '使用短标签或工艺注释型文案，靠近细节焦点并保留充足留白，文字不能遮挡材质与车线。'
+        : 'Use short labels or craft-callout copy near the detail focal point with enough whitespace, without covering the material or stitching.'
+    case 'selling_point':
+      return isZh
+        ? '使用主标题加卖点短句的层级结构，把文字放在安全留白区内，形成最强卖点聚焦但不遮挡主体。'
+        : 'Use a headline plus support-copy hierarchy in a safe whitespace zone to create the strongest selling-point emphasis without covering the product.'
+    case '3d':
+      return isZh
+        ? '以短标题加辅助短句为主，文字层级弱于服装主体，布局需配合立体轮廓与背景纵深。'
+        : 'Use a short headline with support text. Keep the text hierarchy weaker than the garment itself and align it with the volumetric silhouette and depth.'
+    case 'mannequin':
+      return isZh
+        ? '允许短标题和辅助短句，文字应服务于版型和穿着感展示，不抢主体视觉重心。'
+        : 'Allow a short headline and support copy, but keep the text subordinate to the fit and silhouette presentation.'
+    default:
+      return isZh
+        ? '优先使用短标题或小标签，文字放在安全留白区，不影响商品识别和白底展示效率。'
+        : 'Prefer a short headline or badge-style label inside a safe whitespace zone without hurting product recognition or clean showcase efficiency.'
+  }
+}
+
+function fallbackSharedCopy(mode: BlueprintCopyMode, requirements: string, isZh: boolean): string {
+  if (mode === 'visual-only') return ''
+  if (requirements.trim()) return requirements.trim()
+  return isZh
+    ? '高质感面料，清晰版型，细节经得起近看'
+    : 'Premium texture, sharp silhouette, and details that hold up close'
+}
+
+function normalizeCopyAnalysis(
+  rawValue: unknown,
+  plans: BlueprintImagePlan[],
+  requirements: string,
+  outputLanguage: OutputLanguage,
+  isZh: boolean,
+): BlueprintCopyAnalysis {
+  const raw = asRecord(rawValue)
+  const fallbackMode: BlueprintCopyMode = outputLanguage === 'none'
+    ? 'visual-only'
+    : requirements.trim().length > 0
+      ? 'user-brief'
+      : 'product-inferred'
+  const rawMode = asTrimmedString(raw?.mode)
+  const mode: BlueprintCopyMode = rawMode === 'user-brief' || rawMode === 'product-inferred' || rawMode === 'visual-only'
+    ? rawMode
+    : fallbackMode
+  const visualOnly = mode === 'visual-only'
+  const fallbackResolvedLanguage = visualOnly ? 'none' : outputLanguage
+  const resolvedOutputLanguage = normalizeOutputLanguage(
+    raw?.resolved_output_language ?? raw?.resolvedOutputLanguage,
+    fallbackResolvedLanguage,
+  )
+  const rawAdaptations = Array.isArray(raw?.per_plan_adaptations ?? raw?.perPlanAdaptations)
+    ? (raw?.per_plan_adaptations ?? raw?.perPlanAdaptations) as unknown[]
+    : []
+
+  const perPlanAdaptations: BlueprintCopyPlanAdaptation[] = plans.map((plan, index) => {
+    const record = asRecord(rawAdaptations[index])
+    const planType = asTrimmedString(record?.plan_type ?? record?.planType, plan.type ?? inferPlanType(plan))
+    const rawCopyRole = asTrimmedString(record?.copy_role ?? record?.copyRole)
+    const copyRole: BlueprintCopyRole = rawCopyRole === 'headline'
+      || rawCopyRole === 'headline+support'
+      || rawCopyRole === 'label'
+      || rawCopyRole === 'none'
+      ? rawCopyRole
+      : defaultCopyRole(planType, visualOnly)
+
+    return {
+      plan_index: Number.isFinite(Number(record?.plan_index ?? record?.planIndex))
+        ? Math.max(0, Math.round(Number(record?.plan_index ?? record?.planIndex)))
+        : index,
+      plan_type: planType,
+      copy_role: copyRole,
+      adaptation_summary: asTrimmedString(
+        record?.adaptation_summary ?? record?.adaptationSummary,
+        defaultAdaptationSummary(planType, isZh, visualOnly),
+      ),
+    }
+  })
+
+  return {
+    mode,
+    source_brief: asTrimmedString(raw?.source_brief ?? raw?.sourceBrief, requirements.trim()),
+    brief_summary: asTrimmedString(
+      raw?.brief_summary ?? raw?.briefSummary,
+      requirements.trim()
+        ? requirements.trim()
+        : (isZh ? '未输入组图文字，系统将根据产品图自动补全文案。' : 'No brief provided. The system will infer shared copy from the product images.'),
+    ),
+    product_summary: asTrimmedString(
+      raw?.product_summary ?? raw?.productSummary,
+      isZh
+        ? '已锁定同一件服装的颜色、材质、轮廓与关键结构，用于整批图片保持一致。'
+        : 'The same garment identity is locked across the full set, including color, material, silhouette, and key construction details.',
+    ),
+    resolved_output_language: resolvedOutputLanguage,
+    shared_copy: visualOnly
+      ? ''
+      : asTrimmedString(raw?.shared_copy ?? raw?.sharedCopy, fallbackSharedCopy(mode, requirements, isZh)),
+    can_clear_to_visual_only: true,
+    per_plan_adaptations: perPlanAdaptations,
+  }
+}
+
 function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[] {
   const plans: BlueprintImagePlan[] = []
   if (typeState.whiteBgRetouched.front) {
@@ -153,6 +345,7 @@ function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[]
       title: '白底精修图（正面）',
       description: '展示服装正面版型与颜色细节',
       design_content: '白底平铺或模特正面展示，重点表现服装轮廓、主色和做工细节。',
+      type: 'refined',
     })
   }
   if (typeState.whiteBgRetouched.back) {
@@ -160,6 +353,7 @@ function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[]
       title: '白底精修图（背面）',
       description: '展示服装背面版型与工艺细节',
       design_content: '白底背面展示，清晰呈现后背剪裁与结构。',
+      type: 'refined',
     })
   }
   if (typeState.threeDEffect.enabled) {
@@ -168,16 +362,19 @@ function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[]
         title: '3D立体效果图（正面）',
         description: '模特正面穿着展示，突出服装正面版型与立体感',
         design_content: '模特正面站姿穿着展示，通过光影表现服装正面体积感与版型轮廓，保留材质纹理，统一背景与风格。',
+        type: '3d',
       },
       {
         title: '3D立体效果图（背面）',
         description: '模特背面穿着展示，呈现背部剪裁与结构',
         design_content: '模特背面站姿穿着展示，清晰呈现后背剪裁、缝线与结构细节，保留材质纹理，与正面图保持统一模特、风格与背景。',
+        type: '3d',
       },
       {
         title: '3D立体效果图（侧面）',
         description: '模特侧面穿着展示，展现服装侧面层次',
         design_content: '模特侧面站姿穿着展示，通过侧面角度表现服装层次感与廓形，保留材质纹理，与正面图保持统一模特、风格与背景。',
+        type: '3d',
       }
     )
   }
@@ -186,6 +383,7 @@ function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[]
       title: '人台展示图',
       description: '人台/模特架展示，严格保留衣服原始材质与外观',
       design_content: '人台或模特架展示服装，严格保留衣服的原始材质和外观：颜色、款式、剪裁、纹理、面料质感不做任何改变。模拟摄影棚或自然光下的真实光影效果，包括高光、阴影和面料反光。本质是换场景/换人台展示，不是重新设计衣服。',
+      type: 'mannequin',
     })
   }
   for (let i = 0; i < typeState.detailCloseup.count; i += 1) {
@@ -193,6 +391,7 @@ function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[]
       title: `细节特写图 ${i + 1}`,
       description: '放大展示面料与工艺细节',
       design_content: '聚焦领口、袖口、印花或走线，保证细节清晰度和质感。',
+      type: 'detail',
     })
   }
   for (let i = 0; i < typeState.sellingPoint.count; i += 1) {
@@ -200,6 +399,7 @@ function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[]
       title: `卖点展示图 ${i + 1}`,
       description: '突出产品核心卖点',
       design_content: '围绕核心卖点构图，强化视觉层级与记忆点。',
+      type: 'selling_point',
     })
   }
   if (plans.length === 0) {
@@ -207,6 +407,7 @@ function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[]
       title: '图片方案 1',
       description: '请编辑该图片方案的标题和描述',
       design_content: '请基于产品特征补充该图片方案内容。',
+      type: 'refined',
     })
   }
   return plans
@@ -238,6 +439,7 @@ function enforceWhiteBgPlans(plans: BlueprintImagePlan[], typeState: BasicPhotoT
       title: '白底精修图（正面）',
       description: '展示服装正面版型与颜色细节',
       design_content: '白底平铺或模特正面展示，重点表现服装轮廓、主色和做工细节。',
+      type: 'refined',
     })
   }
   if (!hasBack) {
@@ -247,6 +449,7 @@ function enforceWhiteBgPlans(plans: BlueprintImagePlan[], typeState: BasicPhotoT
       title: '白底精修图（背面）',
       description: '展示服装背面版型与工艺细节',
       design_content: '白底背面展示，清晰呈现后背剪裁与结构。',
+      type: 'refined',
     })
   }
   return result
@@ -254,12 +457,26 @@ function enforceWhiteBgPlans(plans: BlueprintImagePlan[], typeState: BasicPhotoT
 
 function normalizeBlueprint(
   resultData: unknown,
-  typeState: BasicPhotoTypeState
+  typeState: BasicPhotoTypeState,
+  requirements: string,
+  outputLanguage: OutputLanguage,
+  isZh: boolean,
 ): AnalysisBlueprint {
   if (isAnalysisBlueprint(resultData)) {
-    let plans = resultData.images.length > 0 ? resultData.images : buildDefaultPlans(typeState)
+    let plans = resultData.images.length > 0 ? resultData.images.map(normalizePlan) : buildDefaultPlans(typeState)
     plans = enforceWhiteBgPlans(plans, typeState)
-    return { ...resultData, images: plans }
+    const resultRecord = resultData as unknown as Record<string, unknown>
+    return {
+      ...resultData,
+      images: plans,
+      copy_analysis: normalizeCopyAnalysis(
+        resultRecord.copy_analysis ?? resultRecord.copyAnalysis,
+        plans,
+        requirements,
+        outputLanguage,
+        isZh,
+      ),
+    }
   }
 
   const fallbackPlans = buildDefaultPlans(typeState)
@@ -273,7 +490,230 @@ function normalizeBlueprint(
       image_count: fallbackPlans.length,
       target_language: 'zh-CN',
     },
+    copy_analysis: normalizeCopyAnalysis(null, fallbackPlans, requirements, outputLanguage, isZh),
   }
+}
+
+function stripCopyInstructions(text: string, isZh: boolean): string {
+  const filteredLines = text
+    .split('\n')
+    .filter((line) => {
+      const normalized = line.trim()
+      if (!normalized) return true
+      return !/文案内容|主标题|副标题|描述文案|文字区域|字体体系|文案语言|Typography|Text Content|Main Title|Subtitle|Description Text|Text Area|Copy Language|Heading Font|Body Font/i.test(normalized)
+    })
+    .join('\n')
+    .trim()
+
+  const visualRule = isZh
+    ? '纯视觉规则：禁止新增文字叠加，保持纯视觉构图，商品主体、材质和光影优先。'
+    : 'Visual-only rule: no added text overlay. Keep the composition purely visual, with product, material, and lighting as the priority.'
+
+  return filteredLines.length > 0 ? `${filteredLines}\n\n${visualRule}` : visualRule
+}
+
+function applySharedCopyInstructions(
+  text: string,
+  adaptation: BlueprintCopyPlanAdaptation,
+  sharedCopy: string,
+  outputLanguage: OutputLanguage,
+  isZh: boolean,
+): string {
+  const stripped = stripCopyInstructions(text, isZh)
+  const label = isZh ? '共享文案策略' : 'Shared Copy Strategy'
+  const copyRoleLabel = adaptation.copy_role === 'headline+support'
+    ? (isZh ? '标题 + 辅助短句' : 'Headline + Support')
+    : adaptation.copy_role === 'headline'
+      ? (isZh ? '短标题' : 'Headline')
+      : adaptation.copy_role === 'label'
+        ? (isZh ? '标签 / 注释' : 'Label / Callout')
+        : (isZh ? '纯视觉' : 'Visual Only')
+  const languageLabel = outputLanguageLabel(outputLanguage, isZh)
+
+  return `${stripped}\n\n${label}：\n- ${isZh ? '共享主文案' : 'Shared copy'}：${sharedCopy}\n- ${isZh ? '文案角色' : 'Copy role'}：${copyRoleLabel}\n- ${isZh ? '输出语言' : 'Output language'}：${languageLabel}\n- ${isZh ? '适配说明' : 'Adaptation'}：${adaptation.adaptation_summary}`
+}
+
+function deriveCopyAnalysisForGeneration(
+  copyAnalysis: BlueprintCopyAnalysis | undefined,
+  imagePlans: BlueprintImagePlan[],
+  sharedCopy: string,
+  language: OutputLanguage,
+  isZh: boolean,
+): BlueprintCopyAnalysis | undefined {
+  if (!copyAnalysis) return undefined
+
+  const visualOnly = language === 'none' || sharedCopy.trim().length === 0
+  return {
+    ...copyAnalysis,
+    mode: visualOnly
+      ? 'visual-only'
+      : copyAnalysis.mode === 'visual-only'
+        ? (copyAnalysis.source_brief.trim().length > 0 ? 'user-brief' : 'product-inferred')
+        : copyAnalysis.mode,
+    resolved_output_language: visualOnly ? 'none' : language,
+    shared_copy: visualOnly ? '' : sharedCopy.trim(),
+    per_plan_adaptations: imagePlans.map((plan, index) => {
+      const existing = copyAnalysis.per_plan_adaptations[index]
+      const planType = plan.type ?? inferPlanType(plan)
+      return {
+        plan_index: index,
+        plan_type: existing?.plan_type ?? planType,
+        copy_role: visualOnly ? 'none' : (existing?.copy_role ?? defaultCopyRole(planType, false)),
+        adaptation_summary: visualOnly
+          ? defaultAdaptationSummary(planType, isZh, true)
+          : (existing?.adaptation_summary ?? defaultAdaptationSummary(planType, isZh, false)),
+      }
+    }),
+  }
+}
+
+function buildBlueprintForGeneration(params: {
+  blueprint: AnalysisBlueprint
+  imagePlans: BlueprintImagePlan[]
+  designSpecs: string
+  sharedCopy: string
+  language: OutputLanguage
+  isZh: boolean
+}): { blueprint: AnalysisBlueprint; designSpecs: string; outputLanguage: OutputLanguage; visualOnly: boolean } {
+  const { blueprint, imagePlans, designSpecs, sharedCopy, language, isZh } = params
+  const visualOnly = language === 'none' || sharedCopy.trim().length === 0
+  const derivedCopyAnalysis = deriveCopyAnalysisForGeneration(
+    blueprint.copy_analysis,
+    imagePlans,
+    sharedCopy,
+    language,
+    isZh,
+  )
+
+  const derivedPlans = imagePlans.map((plan, index) => {
+    const normalizedPlan = normalizePlan(plan)
+    const adaptation = derivedCopyAnalysis?.per_plan_adaptations[index]
+    const designContent = visualOnly || !adaptation
+      ? stripCopyInstructions(normalizedPlan.design_content, isZh)
+      : applySharedCopyInstructions(
+          normalizedPlan.design_content,
+          adaptation,
+          sharedCopy.trim(),
+          language,
+          isZh,
+        )
+
+    return {
+      ...normalizedPlan,
+      design_content: designContent,
+    }
+  })
+
+  const derivedDesignSpecs = visualOnly
+    ? stripCopyInstructions(designSpecs, isZh)
+    : applySharedCopyInstructions(
+        designSpecs,
+        {
+          plan_index: -1,
+          plan_type: 'set',
+          copy_role: 'headline+support',
+          adaptation_summary: isZh
+            ? '整批图片共用同一份主文案，每张图仅按构图和图型调整文字层级、位置与留白。'
+            : 'The full image set shares one master copy block, while each image only adapts hierarchy, placement, and whitespace by shot type.',
+        },
+        sharedCopy.trim(),
+        language,
+        isZh,
+      )
+
+  return {
+    visualOnly,
+    outputLanguage: visualOnly ? 'none' : language,
+    designSpecs: derivedDesignSpecs,
+    blueprint: {
+      ...blueprint,
+      images: derivedPlans,
+      design_specs: derivedDesignSpecs,
+      ...(derivedCopyAnalysis ? { copy_analysis: derivedCopyAnalysis } : {}),
+    },
+  }
+}
+
+function CopyAnalysisCard({
+  copyAnalysis,
+  sharedCopy,
+  onSharedCopyChange,
+  isZh,
+  isVisualOnly,
+}: {
+  copyAnalysis: BlueprintCopyAnalysis
+  sharedCopy: string
+  onSharedCopyChange: (value: string) => void
+  isZh: boolean
+  isVisualOnly: boolean
+}) {
+  return (
+    <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+          <Sparkles className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? '分析与文案' : 'Analysis & Copy'}</h3>
+          <p className="text-[13px] text-[#7d818d]">
+            {isZh
+              ? '可直接编辑或清空共享主文案；清空后本批图片将按纯视觉生成。'
+              : 'Edit or clear the shared master copy directly. Clearing it makes the full batch generate as visual-only.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl bg-[#f5f6f8] p-4">
+          <p className="mb-1 text-[12px] font-medium text-[#7d818d]">{isZh ? '产品分析' : 'Product Summary'}</p>
+          <p className="text-[13px] leading-6 text-[#262a32]">{copyAnalysis.product_summary}</p>
+        </div>
+        <div className="rounded-2xl bg-[#f5f6f8] p-4">
+          <p className="mb-1 text-[12px] font-medium text-[#7d818d]">{isZh ? '文案意图' : 'Copy Intent'}</p>
+          <p className="text-[13px] leading-6 text-[#262a32]">{copyAnalysis.brief_summary}</p>
+        </div>
+        <div className="rounded-2xl bg-[#f5f6f8] p-4">
+          <p className="mb-1 text-[12px] font-medium text-[#7d818d]">{isZh ? '当前模式' : 'Current Mode'}</p>
+          <div className="flex items-center gap-2 text-[13px] leading-6 text-[#262a32]">
+            <Languages className="h-4 w-4 text-[#6a6f7c]" />
+            <span>{outputLanguageLabel(copyAnalysis.resolved_output_language, isZh)}</span>
+            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#606572]">
+              {isVisualOnly ? (isZh ? '纯视觉生成' : 'Visual Only') : (isZh ? '带文案生成' : 'Copy Enabled')}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-[24px] border border-[#e0e3e8] bg-[#fbfbfc] p-4">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-[13px] font-medium text-[#3b3f49]">{isZh ? '共享主文案' : 'Shared Master Copy'}</p>
+          <span className="text-[12px] text-[#7d818d]">
+            {isZh ? '清空后将按纯视觉生成' : 'Clear this to generate visual-only images'}
+          </span>
+        </div>
+        <Textarea
+          value={sharedCopy}
+          onChange={(e) => onSharedCopyChange(e.target.value)}
+          rows={5}
+          className="min-h-[152px] resize-none rounded-2xl border-[#d0d4dc] bg-white text-[14px] leading-6"
+          placeholder={isZh ? '输入或编辑共享主文案；清空后将按纯视觉生成。' : 'Enter or edit the shared master copy. Clear it to generate visual-only images.'}
+        />
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {copyAnalysis.per_plan_adaptations.map((adaptation, index) => (
+          <div key={`${adaptation.plan_index}-${adaptation.plan_type}-${index}`} className="rounded-2xl border border-[#edf0f4] bg-[#fafbfc] p-4">
+            <p className="mb-1 text-[13px] font-medium text-[#1f2228]">
+              {isZh ? `图片 ${adaptation.plan_index + 1}` : `Image ${adaptation.plan_index + 1}`}
+              {' · '}
+              {adaptation.plan_type}
+            </p>
+            <p className="text-[13px] leading-6 text-[#616673]">{adaptation.adaptation_summary}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 interface BasicPhotoSetTabProps {
@@ -311,6 +751,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const [analysisBlueprint, setAnalysisBlueprint] = useState<AnalysisBlueprint | null>(null)
   const [editableDesignSpecs, setEditableDesignSpecs] = useState('')
   const [editableImagePlans, setEditableImagePlans] = useState<BlueprintImagePlan[]>([])
+  const [editableSharedCopy, setEditableSharedCopy] = useState('')
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([])
 
   // Session persistence removed: text persisted but images didn't on refresh.
@@ -320,6 +761,8 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const isProcessing = phase === 'analyzing' || phase === 'generating'
   const canStart = productImages.length > 0 && countSelectedTypes(typeState) > 0
   const backendLocale = language === 'zh' ? 'zh-CN' : language === 'en' ? 'en' : (isZh ? 'zh-CN' : 'en')
+  const currentCopyAnalysis = analysisBlueprint?.copy_analysis
+  const isVisualOnlyGeneration = language === 'none' || editableSharedCopy.trim().length === 0
 
   const set = useCallback((id: string, patch: Partial<ProgressStep>) => {
     setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)))
@@ -380,10 +823,17 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       set('analyze', { status: 'done' })
       setProgress(70)
 
-      const blueprint = normalizeBlueprint(analysisJob.result_data, typeState)
+      const blueprint = normalizeBlueprint(
+        analysisJob.result_data,
+        typeState,
+        requirements,
+        language as OutputLanguage,
+        isZh,
+      )
       setAnalysisBlueprint(blueprint)
       setEditableDesignSpecs(blueprint.design_specs)
       setEditableImagePlans(blueprint.images)
+      setEditableSharedCopy(blueprint.copy_analysis?.shared_copy ?? '')
 
       set('preview', { status: 'done' })
       setProgress(100)
@@ -394,7 +844,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase('input')
     }
-  }, [canStart, productImages, typeState, requirements, backendLocale, language, traceId, set, promptProfile])
+  }, [canStart, productImages, typeState, requirements, backendLocale, language, traceId, set, promptProfile, isZh])
 
   const handleGenerate = useCallback(async () => {
     if (!analysisBlueprint || editableImagePlans.length === 0) return
@@ -424,22 +874,25 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
         setUploadedUrls(uploadedProductUrls)
       }
 
-      const modifiedBlueprint: AnalysisBlueprint = {
-        images: editableImagePlans,
-        design_specs: editableDesignSpecs,
-        _ai_meta: analysisBlueprint._ai_meta,
-      }
+      const generationBlueprint = buildBlueprintForGeneration({
+        blueprint: analysisBlueprint,
+        imagePlans: editableImagePlans,
+        designSpecs: editableDesignSpecs,
+        sharedCopy: editableSharedCopy,
+        language: language as OutputLanguage,
+        isZh,
+      })
 
       set('prompts', { status: 'active' })
       let promptText = ''
       const stream = await generatePromptsV2Stream(
         {
-          analysisJson: modifiedBlueprint,
-          design_specs: editableDesignSpecs,
+          analysisJson: generationBlueprint.blueprint,
+          design_specs: generationBlueprint.designSpecs,
           promptProfile,
           imageCount: editableImagePlans.length,
           targetLanguage: backendLocale,
-          outputLanguage: language,
+          outputLanguage: generationBlueprint.outputLanguage,
           stream: true,
           trace_id: traceId,
           clothingMode: 'prompt_generation',
@@ -521,12 +974,15 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       setErrorMessage(friendlyError((err as Error).message ?? '生成失败', true))
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase('preview')
+    } finally {
+      refreshCredits()
     }
   }, [
     analysisBlueprint,
     appendResults,
     editableImagePlans,
     editableDesignSpecs,
+    editableSharedCopy,
     uploadedUrls,
     productImages,
     model,
@@ -534,6 +990,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     resolution,
     backendLocale,
     language,
+    isZh,
     promptProfile,
     traceId,
     set,
@@ -549,6 +1006,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     setAnalysisBlueprint(null)
     setEditableDesignSpecs('')
     setEditableImagePlans([])
+    setEditableSharedCopy('')
     setUploadedUrls([])
   }, [clearResults])
 
@@ -696,6 +1154,21 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     if (phase === 'preview') {
       return (
         <div className="space-y-4">
+          {currentCopyAnalysis && (
+            <CopyAnalysisCard
+              copyAnalysis={deriveCopyAnalysisForGeneration(
+                currentCopyAnalysis,
+                editableImagePlans,
+                editableSharedCopy,
+                language as OutputLanguage,
+                isZh,
+              ) ?? currentCopyAnalysis}
+              sharedCopy={editableSharedCopy}
+              onSharedCopyChange={setEditableSharedCopy}
+              isZh={isZh}
+              isVisualOnly={isVisualOnlyGeneration}
+            />
+          )}
           <DesignBlueprint
             designSpecs={editableDesignSpecs}
             onDesignSpecsChange={setEditableDesignSpecs}

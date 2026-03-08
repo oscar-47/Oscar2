@@ -1,6 +1,7 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
+import { assertUserCanQueueJob } from "../_shared/generation-queue.ts";
 
 // Simple in-memory rate limiter (per worker instance)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -38,6 +39,14 @@ Deno.serve(async (req) => {
   const image = body.image as string;
 
   const supabase = createServiceClient();
+  const queueGate = await assertUserCanQueueJob(authResult.user.id, "ANALYSIS");
+  if (!queueGate.ok) {
+    return err("TOO_MANY_ACTIVE_JOBS", "Too many analysis jobs are already processing. Please wait for one to finish.", 429, {
+      active: queueGate.activeCount,
+      limit: queueGate.limit,
+      type: "ANALYSIS",
+    });
+  }
 
   // Create ANALYSIS job with task: "ocr"
   const { data, error } = await supabase

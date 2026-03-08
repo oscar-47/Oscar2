@@ -106,6 +106,20 @@ async function invokeFunction<T>(
   return payload as T
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isImageQueueBusyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+  return message.includes('too_many_active_jobs')
+    || message.includes('too many image generation jobs')
+    || message.includes('too many image jobs')
+}
+
+const IMAGE_QUEUE_RETRY_ATTEMPTS = 30
+const IMAGE_QUEUE_RETRY_DELAY_MS = 4000
+
 // ── Upload ────────────────────────────────────────────────────────────────────
 
 export interface GetOssStsParams {
@@ -274,9 +288,19 @@ export interface GenerateImageParams {
 export async function generateImage(
   params: GenerateImageParams
 ): Promise<JobResponse> {
-  const res = await invokeFunction<JobResponse>('generate-image', params)
-  void processGenerationJob(res.job_id)
-  return res
+  for (let attempt = 0; attempt < IMAGE_QUEUE_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      const res = await invokeFunction<JobResponse>('generate-image', params)
+      void processGenerationJob(res.job_id)
+      return res
+    } catch (error) {
+      const shouldRetry = isImageQueueBusyError(error) && attempt < IMAGE_QUEUE_RETRY_ATTEMPTS - 1
+      if (!shouldRetry) throw error
+      await sleep(IMAGE_QUEUE_RETRY_DELAY_MS)
+    }
+  }
+
+  throw new Error('Image generation queue remained busy after retries')
 }
 
 export interface GenerateModelImageParams {

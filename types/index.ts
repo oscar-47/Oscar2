@@ -18,6 +18,10 @@ export interface GenerationJob {
   result_url: string | null
   cost_amount: number
   is_refunded: boolean
+  charged_subscription_credits: number
+  charged_purchased_credits: number
+  refund_reason: string | null
+  refunded_at: string | null
   trace_id: string | null
   client_job_id: string | null
   fe_attempt: number
@@ -423,6 +427,28 @@ export interface TryOnStrategy {
   [key: string]: unknown
 }
 
+export type BlueprintCopyMode = 'user-brief' | 'product-inferred' | 'visual-only'
+
+export type BlueprintCopyRole = 'headline' | 'headline+support' | 'label' | 'none'
+
+export interface BlueprintCopyPlanAdaptation {
+  plan_index: number
+  plan_type: string
+  copy_role: BlueprintCopyRole
+  adaptation_summary: string
+}
+
+export interface BlueprintCopyAnalysis {
+  mode: BlueprintCopyMode
+  source_brief: string
+  brief_summary: string
+  product_summary: string
+  resolved_output_language: OutputLanguage
+  shared_copy: string
+  can_clear_to_visual_only: true
+  per_plan_adaptations: BlueprintCopyPlanAdaptation[]
+}
+
 export interface AnalysisBlueprint {
   images: BlueprintImagePlan[]
   design_specs: string
@@ -430,6 +456,7 @@ export interface AnalysisBlueprint {
   subject_profile?: SubjectProfile
   garment_profile?: GarmentProfile
   tryon_strategy?: TryOnStrategy
+  copy_analysis?: BlueprintCopyAnalysis
 }
 
 export type EcomDetailModuleId =

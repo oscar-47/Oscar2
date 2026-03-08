@@ -42,29 +42,57 @@
     },
     "hero": {
       "badge": "AI Business Visual Engine",
-      "title": "Professional AI Visual Solutions",
-      "subtitle": "Hero Image Generation · Style Replication · Detail-Page Production · Commercial Retouching, all in one workflow for faster e-commerce output.",
+      "title": "AI-Powered E-Commerce Visual Productivity",
+      "subtitle": "From product photography to commercial retouching — three core engines covering the entire e-commerce imaging workflow.",
       "cta": "Enter Workspace",
       "platformHint": "Compatible with 30+ mainstream domestic and global e-commerce style and size standards.",
-      "platforms": "Taobao|Tmall|JD.com|Pinduoduo|Douyin E-Commerce|Kuaishou E-Commerce|Xiaohongshu|WeChat Shop|Amazon|Shopee|Lazada|AliExpress|SHEIN|TikTok Shop"
+      "platforms": "Taobao|Tmall|JD.com|Pinduoduo|Douyin E-Commerce|Kuaishou E-Commerce|Xiaohongshu|WeChat Shop|Amazon|Shopee|Lazada|AliExpress|SHEIN|TikTok Shop",
+      "feature1Title": "Hero Image Generator",
+      "feature1Desc": "AI analyzes product features and selling points to generate high-conversion hero images",
+      "feature2Title": "One-Click Generate",
+      "feature2Desc": "Upload references, AI plans detail page modules and generates a full asset set in one click",
+      "feature3Title": "Image Refinement",
+      "feature3Desc": "Smart material analysis with batch commercial-grade refinement output"
     },
-    "modules": {
-      "before": "Before",
-      "after": "After",
-      "compareArrow": "Before → After",
-      "smallBefore": "Raw Input (Flatlay / Basic Photo)",
-      "smallAfter": "AI Output (Multi-Angle / Detail Set)",
-      "smart": {
-        "title": "Smart / Replicated Generation",
-        "desc": "Upload one flatlay image and let AI generate multi-angle outputs with precise style replication. Produce listing covers and detail visuals in batch for Tmall, JD, and Amazon formats."
+    "features": {
+      "section1": {
+        "title": "Hero Image Generator",
+        "subtitle": "Upload product images and let AI analyze product traits and selling points to generate high-conversion e-commerce hero images.",
+        "cap1": "Smart Product Analysis",
+        "cap1Desc": "AI auto-detects material, lighting, and texture features for accurate product reproduction",
+        "cap2": "30+ Platform Compatibility",
+        "cap2Desc": "One-click switching between Taobao, Tmall, JD, Amazon and more platform sizes and styles",
+        "cap3": "Flexible Style Customization",
+        "cap3Desc": "Freely adjust scene style, lighting, composition, color tone, and surface material",
+        "step1": "Upload Product Images",
+        "step2": "AI Smart Analysis",
+        "step3": "Generate Hero Images"
       },
-      "batch": {
-        "title": "Batch Generation",
-        "desc": "Support bulk uploads and one-click generation for multi-angle, multi-background clothing detail visuals. Accelerate large-scale output while matching mainstream marketplace requirements."
+      "section2": {
+        "title": "One-Click Generate",
+        "subtitle": "Upload multi-angle references and let AI plan detail page modules, then generate a complete e-commerce asset set in one click.",
+        "cap1": "Smart Module Planning",
+        "cap1Desc": "AI analyzes selling points and auto-plans content layout for each detail page module",
+        "cap2": "Multi-Platform Sizing",
+        "cap2Desc": "One-click switching between Pinduoduo, Douyin, Xiaohongshu, and Taobao detail page ratios",
+        "cap3": "Batch High-Speed Output",
+        "cap3Desc": "Single analysis with concurrent multi-image generation for maximum efficiency",
+        "step1": "Upload Multi-Angle References",
+        "step2": "AI Plans Detail Modules",
+        "step3": "One-Click Full Asset Set"
       },
-      "detail": {
-        "title": "Clothing Detail Suite",
-        "desc": "Auto-produce complete fashion detail sets including flatlay, model shots, zoomed texture close-ups, and lifestyle scenes. Export ready-to-use layouts for Pinduoduo, Douyin, Xiaohongshu, and Taobao ratios."
+      "section3": {
+        "title": "Image Refinement",
+        "subtitle": "One-click smart refinement — AI analyzes product material details and produces commercial-grade retouched results.",
+        "cap1": "Smart Material Analysis",
+        "cap1Desc": "Auto-identifies product materials and detail features for a tailored refinement plan",
+        "cap2": "Batch Processing",
+        "cap2Desc": "Refine up to 50 images at once with one-click output for all results",
+        "cap3": "Commercial-Grade Quality",
+        "cap3Desc": "Remove blemishes, enhance details, and optimize lighting for professional output",
+        "step1": "Batch Upload Originals",
+        "step2": "AI Smart Analysis",
+        "step3": "Commercial-Grade Output"
       }
     },
     "bottomCta": {

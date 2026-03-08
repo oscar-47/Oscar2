@@ -1,6 +1,7 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser, isAdminEmail, isToApisModel } from "../_shared/auth.ts";
+import { assertUserCanQueueJob } from "../_shared/generation-queue.ts";
 import {
   getCreditCostForModel,
   getDefaultImageSizeForModel,
@@ -133,6 +134,14 @@ Deno.serve(async (req) => {
   };
 
   const supabase = createServiceClient();
+  const queueGate = await assertUserCanQueueJob(authResult.user.id, "STYLE_REPLICATE");
+  if (!queueGate.ok) {
+    return err("TOO_MANY_ACTIVE_JOBS", "Too many refinement/style jobs are already processing. Please wait for one to finish.", 429, {
+      active: queueGate.activeCount,
+      limit: queueGate.limit,
+      type: "STYLE_REPLICATE",
+    });
+  }
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("subscription_credits,purchased_credits")

@@ -21,6 +21,7 @@ All function errors follow:
 - `CONFLICT`: Duplicate webhook event or idempotency conflict.
 - `INSUFFICIENT_CREDITS`: User credits not enough.
 - `UPSTREAM_ERROR`: OpenRouter/Gemini/Stripe failure.
+- `UPSTREAM_REJECTED`: Upstream rejected the request before generation started.
 - `INTERNAL_ERROR`: Unexpected server error.
 
 ## Stripe-specific

@@ -1,6 +1,7 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser, isAdminEmail, isToApisModel } from "../_shared/auth.ts";
+import { assertUserCanQueueJob } from "../_shared/generation-queue.ts";
 import {
   getCreditCostForModel,
   getDefaultImageSizeForModel,
@@ -86,6 +87,14 @@ Deno.serve(async (req) => {
   };
 
   const supabase = createServiceClient();
+  const queueGate = await assertUserCanQueueJob(authResult.user.id, "IMAGE_GEN");
+  if (!queueGate.ok) {
+    return err("TOO_MANY_ACTIVE_JOBS", "Too many image generation jobs are already processing. Please wait for one to finish.", 429, {
+      active: queueGate.activeCount,
+      limit: queueGate.limit,
+      type: "IMAGE_GEN",
+    });
+  }
   const { data, error } = await supabase
     .from("generation_jobs")
     .insert({

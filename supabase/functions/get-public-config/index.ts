@@ -3,6 +3,14 @@ import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
 
 type ConfigMap = Record<string, unknown>;
+const PUBLIC_CONFIG_KEYS = new Set([
+  "credit_costs",
+  "signup_bonus_credits",
+  "batch_concurrency",
+  "ta_pro_prompt_profile_enabled",
+  "release_notes",
+  "platform_rules",
+]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
@@ -22,6 +30,7 @@ Deno.serve(async (req) => {
 
   const out: ConfigMap = {};
   for (const row of data ?? []) {
+    if (!PUBLIC_CONFIG_KEYS.has(row.config_key)) continue;
     out[row.config_key] = row.config_value;
   }
 

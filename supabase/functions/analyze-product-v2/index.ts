@@ -1,6 +1,7 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
+import { assertUserCanQueueJob } from "../_shared/generation-queue.ts";
 import {
   resolvePromptProfile,
   TA_PRO_PROMPT_PROFILE_FLAG,
@@ -40,6 +41,14 @@ Deno.serve(async (req) => {
   const promptConfigKey = withPromptProfileConfigKeySuffix(basePromptConfigKey, promptProfile);
 
   const supabase = createServiceClient();
+  const queueGate = await assertUserCanQueueJob(authResult.user.id, "ANALYSIS");
+  if (!queueGate.ok) {
+    return err("TOO_MANY_ACTIVE_JOBS", "Too many analysis jobs are already processing. Please wait for one to finish.", 429, {
+      active: queueGate.activeCount,
+      limit: queueGate.limit,
+      type: "ANALYSIS",
+    });
+  }
   const payload = {
     ...body,
     promptProfile,

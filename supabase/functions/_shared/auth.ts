@@ -1,5 +1,6 @@
 import { err } from "./http.ts";
 import { createServiceClient } from "./supabase.ts";
+import { getEnv } from "./env.ts";
 
 export type AuthedUser = {
   id: string;
@@ -34,6 +35,23 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 
 export function isToApisModel(model: string): boolean {
   return model.startsWith("ta-");
+}
+
+export function getInternalWorkerSecret(): string {
+  const configured = Deno.env.get("GENERATION_INTERNAL_WORKER_SECRET")?.trim();
+  return configured && configured.length > 0 ? configured : getEnv("SUPABASE_SERVICE_ROLE_KEY");
+}
+
+export function isInternalWorkerRequest(req: Request): boolean {
+  const provided = req.headers.get("x-worker-secret")?.trim();
+  if (!provided) return false;
+  return provided === getInternalWorkerSecret();
+}
+
+export function requireInternalWorker(req: Request): Response | null {
+  return isInternalWorkerRequest(req)
+    ? null
+    : err("UNAUTHORIZED", "Invalid worker secret", 401);
 }
 
 export async function requireUser(req: Request): Promise<AuthResult> {

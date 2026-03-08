@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { generateModelImage, processGenerationJob } from '@/lib/api/edge-functions'
+import { refreshCredits } from '@/lib/hooks/useCredits'
 import { uploadFile } from '@/lib/api/upload'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationJob } from '@/types'
@@ -308,6 +309,8 @@ export function AIModelGeneratorDialog({
       if ((err as Error).name === 'AbortError') return
       setDialogState('error')
       setError(friendlyError((err as Error).message ?? '生成失败', true))
+    } finally {
+      refreshCredits()
     }
   }
 
