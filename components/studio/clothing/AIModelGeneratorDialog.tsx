@@ -15,6 +15,7 @@ import { getGenerationCreditCost } from '@/types'
 import type { UploadedImage } from '@/components/upload/MultiImageUploader'
 import type { AIModelHistoryItem } from './types'
 import { friendlyError } from '@/lib/utils'
+import { useTranslations } from 'next-intl'
 import { Loader2, Clock3, UserCircle2, Sparkles } from 'lucide-react'
 
 type Gender = 'female' | 'male'
@@ -49,20 +50,23 @@ function uid() {
   return crypto.randomUUID()
 }
 
-function genderLabel(value: Gender): string {
-  return value === 'male' ? '男性' : '女性'
+function genderLabel(value: Gender, t: (key: string) => string): string {
+  return value === 'male' ? t('genderMale') : t('genderFemale')
 }
 
-function ageLabel(value: AgeRange): string {
-  if (value === '60+') return '60岁以上'
-  return `${value}岁`
+function ageLabel(value: AgeRange, t: (key: string) => string): string {
+  if (value === '18-25') return t('age18_25')
+  if (value === '26-35') return t('age26_35')
+  if (value === '36-45') return t('age36_45')
+  if (value === '46-60') return t('age46_60')
+  return t('age60plus')
 }
 
-function ethnicityLabel(value: Ethnicity): string {
-  if (value === 'asian') return '亚洲人'
-  if (value === 'white') return '白人'
-  if (value === 'black') return '黑人'
-  return '拉丁裔'
+function ethnicityLabel(value: Ethnicity, t: (key: string) => string): string {
+  if (value === 'asian') return t('ethnicityAsian')
+  if (value === 'white') return t('ethnicityWhite')
+  if (value === 'black') return t('ethnicityBlack')
+  return t('ethnicityLatino')
 }
 
 function normalizeGender(value: string): Gender {
@@ -90,14 +94,14 @@ function normalizeEthnicity(value: string): Ethnicity {
   return 'asian'
 }
 
-function formatRelativeTime(iso: string): string {
-  const t = new Date(iso).getTime()
-  if (!Number.isFinite(t)) return '刚刚'
-  const sec = Math.max(0, Math.floor((Date.now() - t) / 1000))
-  if (sec < 60) return '刚刚'
-  if (sec < 3600) return `${Math.floor(sec / 60)}分钟前`
-  if (sec < 86400) return `${Math.floor(sec / 3600)}小时前`
-  return `${Math.floor(sec / 86400)}天前`
+function formatRelativeTime(iso: string, t: (key: string, values?: Record<string, string | number>) => string): string {
+  const ts = new Date(iso).getTime()
+  if (!Number.isFinite(ts)) return t('timeJustNow')
+  const sec = Math.max(0, Math.floor((Date.now() - ts) / 1000))
+  if (sec < 60) return t('timeJustNow')
+  if (sec < 3600) return t('timeMinutesAgo', { minutes: Math.floor(sec / 60) })
+  if (sec < 86400) return t('timeHoursAgo', { hours: Math.floor(sec / 3600) })
+  return t('timeDaysAgo', { days: Math.floor(sec / 86400) })
 }
 
 function mapHistoryRow(row: ModelHistoryRow): AIModelHistoryItem {
@@ -193,6 +197,7 @@ export function AIModelGeneratorDialog({
   onGenerate,
   productImages,
 }: AIModelGeneratorDialogProps) {
+  const t = useTranslations('studio.clothingStudio')
   const [gender, setGender] = useState<Gender>('female')
   const [ageRange, setAgeRange] = useState<AgeRange>('26-35')
   const [ethnicity, setEthnicity] = useState<Ethnicity>('asian')
@@ -220,7 +225,7 @@ export function AIModelGeneratorDialog({
     setIsHistoryLoading(false)
 
     if (queryError) {
-      if (!silent) setError(queryError.message ?? '加载生成历史失败')
+      if (!silent) setError(queryError.message ?? t('loadHistoryFailed'))
       return
     }
 
@@ -244,7 +249,7 @@ export function AIModelGeneratorDialog({
 
   const handleGenerate = async () => {
     if (productImages.length < 1) {
-      setError('请先上传至少1张产品图片')
+      setError(t('uploadProductFirst'))
       return
     }
 
@@ -290,7 +295,7 @@ export function AIModelGeneratorDialog({
           jobId: uid(),
           resultUrl: null,
           status: 'failed',
-          errorMessage: item.reason instanceof Error ? item.reason.message : '生成失败',
+          errorMessage: item.reason instanceof Error ? item.reason.message : t('modelGenerationFailed'),
         }
       })
 
@@ -301,14 +306,14 @@ export function AIModelGeneratorDialog({
         setDialogState('ready')
       } else {
         setDialogState('error')
-        setError('本次生成失败，请重试')
+        setError(t('allModelGenerationFailed'))
       }
 
       void loadHistory(true)
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       setDialogState('error')
-      setError(friendlyError((err as Error).message ?? '生成失败', true))
+      setError(friendlyError((err as Error).message ?? t('modelGenerationFailed'), true))
     } finally {
       refreshCredits()
     }
@@ -321,13 +326,13 @@ export function AIModelGeneratorDialog({
 
     try {
       const response = await fetch(selectedImageUrl)
-      if (!response.ok) throw new Error('无法读取选中的模特图')
+      if (!response.ok) throw new Error(t('cannotReadModelImage'))
       const blob = await response.blob()
       const file = new File([blob], `ai-model-${Date.now()}.png`, { type: blob.type || 'image/png' })
       onGenerate([{ file, previewUrl: selectedImageUrl }])
       onOpenChange(false)
     } catch (err) {
-      setError(friendlyError((err as Error).message ?? '使用模特失败', true))
+      setError(friendlyError((err as Error).message ?? t('useModelFailed'), true))
     } finally {
       setIsApplying(false)
     }
@@ -344,7 +349,7 @@ export function AIModelGeneratorDialog({
         <div className="border-b px-6 py-4">
           <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
             <Sparkles className="h-5 w-5" />
-            AI 生成模特图
+            {t('aiModelDialogTitle')}
           </h2>
         </div>
 
@@ -353,64 +358,64 @@ export function AIModelGeneratorDialog({
             <div className="flex-1 space-y-5 overflow-y-auto pr-1">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label>性别</Label>
+                  <Label>{t('labelGender')}</Label>
                   <Select value={gender} onValueChange={(v) => setGender(v as Gender)} disabled={isGenerating}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="female">女性</SelectItem>
-                      <SelectItem value="male">男性</SelectItem>
+                      <SelectItem value="female">{t('genderFemale')}</SelectItem>
+                      <SelectItem value="male">{t('genderMale')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>年龄</Label>
+                  <Label>{t('labelAge')}</Label>
                   <Select value={ageRange} onValueChange={(v) => setAgeRange(v as AgeRange)} disabled={isGenerating}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="18-25">18-25岁</SelectItem>
-                      <SelectItem value="26-35">26-35岁</SelectItem>
-                      <SelectItem value="36-45">36-45岁</SelectItem>
-                      <SelectItem value="46-60">46-60岁</SelectItem>
-                      <SelectItem value="60+">60岁以上</SelectItem>
+                      <SelectItem value="18-25">{t('age18_25')}</SelectItem>
+                      <SelectItem value="26-35">{t('age26_35')}</SelectItem>
+                      <SelectItem value="36-45">{t('age36_45')}</SelectItem>
+                      <SelectItem value="46-60">{t('age46_60')}</SelectItem>
+                      <SelectItem value="60+">{t('age60plus')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>人群</Label>
+                  <Label>{t('labelEthnicity')}</Label>
                   <Select value={ethnicity} onValueChange={(v) => setEthnicity(v as Ethnicity)} disabled={isGenerating}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="asian">亚洲人</SelectItem>
-                      <SelectItem value="white">白人</SelectItem>
-                      <SelectItem value="black">黑人</SelectItem>
-                      <SelectItem value="latino">拉丁裔</SelectItem>
+                      <SelectItem value="asian">{t('ethnicityAsian')}</SelectItem>
+                      <SelectItem value="white">{t('ethnicityWhite')}</SelectItem>
+                      <SelectItem value="black">{t('ethnicityBlack')}</SelectItem>
+                      <SelectItem value="latino">{t('ethnicityLatino')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>模特的其他需求</Label>
+                <Label>{t('labelOtherRequirements')}</Label>
                 <Textarea
                   value={otherRequirements}
                   onChange={(e) => setOtherRequirements(e.target.value)}
-                  placeholder="可选：添加具体要求如姿势、表情、发型等..."
+                  placeholder={t('otherRequirementsPlaceholder')}
                   rows={3}
                   disabled={isGenerating}
                 />
               </div>
 
               <div className="flex items-center gap-3">
-                <Label className="min-w-16">生成张数</Label>
+                <Label className="min-w-16">{t('labelGenerateCount')}</Label>
                 <Select value={String(count)} onValueChange={(v) => setCount(Number(v) as 1 | 2 | 3 | 4)} disabled={isGenerating}>
                   <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">1张</SelectItem>
-                    <SelectItem value="2">2张</SelectItem>
-                    <SelectItem value="3">3张</SelectItem>
-                    <SelectItem value="4">4张</SelectItem>
+                    <SelectItem value="1">{t('countImage', { count: 1 })}</SelectItem>
+                    <SelectItem value="2">{t('countImage', { count: 2 })}</SelectItem>
+                    <SelectItem value="3">{t('countImage', { count: 3 })}</SelectItem>
+                    <SelectItem value="4">{t('countImage', { count: 4 })}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -422,10 +427,10 @@ export function AIModelGeneratorDialog({
                   disabled={isGenerating}
                 >
                   {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                  {isGenerating ? '生成中...' : '立即生成'}
+                  {isGenerating ? t('generatingModel') : t('generateNow')}
                 </Button>
                 <p className="mt-2 text-center text-xs text-muted-foreground">
-                  使用 TA 3 Pro，消耗 {count * AI_MODEL_GENERATION_COST} 积分
+                  {t('creditInfo', { cost: count * AI_MODEL_GENERATION_COST })}
                 </p>
               </div>
 
@@ -436,12 +441,12 @@ export function AIModelGeneratorDialog({
               )}
 
               <div className="space-y-2 pt-2">
-                <Label>预览</Label>
+                <Label>{t('labelPreview')}</Label>
                 {dialogState === 'idle' && (
                   <div className="flex min-h-[220px] items-center justify-center rounded-xl border border-dashed bg-muted/10">
                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
                       <UserCircle2 className="h-12 w-12" />
-                      <p className="text-sm">暂无预览</p>
+                      <p className="text-sm">{t('noPreview')}</p>
                     </div>
                   </div>
                 )}
@@ -475,7 +480,7 @@ export function AIModelGeneratorDialog({
                           <img src={item.resultUrl} alt="model-preview" className="aspect-[4/5] w-full object-cover" />
                         ) : (
                           <div className="flex aspect-[4/5] items-center justify-center bg-destructive/5 px-3 text-xs text-destructive">
-                            {item.errorMessage ?? '生成失败'}
+                            {item.errorMessage ?? t('modelGenerationFailed')}
                           </div>
                         )}
                       </button>
@@ -489,18 +494,18 @@ export function AIModelGeneratorDialog({
           <div className="flex w-full flex-col p-6 lg:w-2/5">
             <div className="mb-4 flex items-center gap-2 text-lg font-semibold">
               <Clock3 className="h-4 w-4" />
-              生成历史
+              {t('generationHistoryTitle')}
             </div>
             <div className="flex-1 overflow-y-auto pr-1">
               {isHistoryLoading && (
-                <p className="text-sm text-muted-foreground">加载中...</p>
+                <p className="text-sm text-muted-foreground">{t('loadingHistory')}</p>
               )}
 
               {!isHistoryLoading && historyItems.length === 0 && (
                 <div className="flex h-full min-h-[220px] items-center justify-center text-muted-foreground">
                   <div className="flex flex-col items-center gap-2">
                     <Clock3 className="h-8 w-8 opacity-40" />
-                    <p className="text-sm">暂无生成记录</p>
+                    <p className="text-sm">{t('noHistoryRecords')}</p>
                   </div>
                 </div>
               )}
@@ -524,17 +529,17 @@ export function AIModelGeneratorDialog({
                         <img src={item.resultUrl} alt="history-model" className="h-full w-full object-cover" />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                          {item.status === 'failed' ? '失败' : '处理中'}
+                          {item.status === 'failed' ? t('statusFailed') : t('statusProcessing')}
                         </div>
                       )}
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm">
-                        {genderLabel(item.gender)}, {ageLabel(item.ageRange)}, {ethnicityLabel(item.ethnicity)}
+                        {genderLabel(item.gender, t)}, {ageLabel(item.ageRange, t)}, {ethnicityLabel(item.ethnicity, t)}
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">{formatRelativeTime(item.createdAt)}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{formatRelativeTime(item.createdAt, t)}</p>
                       {item.status === 'failed' && (
-                        <p className="mt-1 truncate text-xs text-destructive">{item.errorMessage ?? '生成失败'}</p>
+                        <p className="mt-1 truncate text-xs text-destructive">{item.errorMessage ?? t('modelGenerationFailed')}</p>
                       )}
                     </div>
                   </button>
@@ -550,7 +555,7 @@ export function AIModelGeneratorDialog({
             onClick={() => handleDialogOpenChange(false)}
             disabled={isGenerating || isApplying}
           >
-            取消
+            {t('cancel')}
           </Button>
           <Button
             className="h-10 min-w-44 bg-zinc-900 text-white hover:bg-zinc-800"
@@ -558,7 +563,7 @@ export function AIModelGeneratorDialog({
             disabled={!selectedImageUrl || isGenerating || isApplying}
           >
             {isApplying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            使用选中的模特
+            {t('useSelectedModel')}
           </Button>
         </div>
       </DialogContent>

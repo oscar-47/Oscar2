@@ -3,8 +3,8 @@
 import { useState, useRef, useCallback } from 'react'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
-import { useLocale } from 'next-intl'
-import { Image as ImageIcon, Languages, Sparkles } from 'lucide-react'
+import { useLocale, useTranslations } from 'next-intl'
+import { Image as ImageIcon, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { MultiImageUploader, type UploadedImage } from '@/components/upload/MultiImageUploader'
@@ -197,6 +197,19 @@ function outputLanguageLabel(value: OutputLanguage, isZh: boolean): string {
       return isZh ? '俄语' : 'Russian'
     default:
       return isZh ? '英文' : 'English'
+  }
+}
+
+function sharedCopyRoleLabel(value: BlueprintCopyRole, isZh: boolean): string {
+  switch (value) {
+    case 'headline+support':
+      return isZh ? '标题 + 辅助短句' : 'Headline + Support'
+    case 'headline':
+      return isZh ? '短标题' : 'Headline'
+    case 'label':
+      return isZh ? '标签 / 注释' : 'Label / Callout'
+    default:
+      return isZh ? '纯视觉' : 'Visual Only'
   }
 }
 
@@ -634,18 +647,55 @@ function buildBlueprintForGeneration(params: {
   }
 }
 
+function appendSharedCopyGuardrail(params: {
+  prompt: string
+  sharedCopy: string
+  adaptation: BlueprintCopyPlanAdaptation | undefined
+  outputLanguage: OutputLanguage
+  isZh: boolean
+}): string {
+  const { prompt, sharedCopy, adaptation, outputLanguage, isZh } = params
+  const normalizedCopy = sharedCopy.trim()
+  if (!normalizedCopy) return prompt
+
+  const copyRole = sharedCopyRoleLabel(adaptation?.copy_role ?? 'headline', isZh)
+  const adaptationSummary = adaptation?.adaptation_summary?.trim() || defaultAdaptationSummary(
+    adaptation?.plan_type ?? 'refined',
+    isZh,
+    false,
+  )
+  const languageRule = isZh
+    ? `所有新增可见文案必须使用${outputLanguageLabel(outputLanguage, true)}，共享主文案必须逐字渲染，不得改写、删减或替换。`
+    : `All added visible copy must use ${outputLanguageLabel(outputLanguage, false)} only, and the shared master copy must be rendered verbatim without paraphrase, omission, or substitution.`
+  const lines = isZh
+    ? [
+        '共享主文案硬约束：',
+        `- 必须逐字渲染这段共享主文案：${normalizedCopy}`,
+        `- 文案角色：${copyRole}`,
+        `- 本图适配要求：${adaptationSummary}`,
+        `- 文字必须放在安全留白区，不能遮挡商品主体，不能影响商品识别。`,
+        `- ${languageRule}`,
+      ]
+    : [
+        'Shared Master Copy Guardrail:',
+        `- Render this exact shared master copy verbatim: ${normalizedCopy}`,
+        `- Copy role: ${copyRole}`,
+        `- Per-image adaptation: ${adaptationSummary}`,
+        '- Place the text in safe whitespace only, and do not block or distort the product.',
+        `- ${languageRule}`,
+      ]
+
+  return `${prompt.trim()}\n\n${lines.join('\n')}`
+}
+
 function CopyAnalysisCard({
-  copyAnalysis,
   sharedCopy,
   onSharedCopyChange,
-  isZh,
-  isVisualOnly,
+  t,
 }: {
-  copyAnalysis: BlueprintCopyAnalysis
   sharedCopy: string
   onSharedCopyChange: (value: string) => void
-  isZh: boolean
-  isVisualOnly: boolean
+  t: (key: string, values?: Record<string, string | number>) => string
 }) {
   return (
     <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
@@ -654,41 +704,18 @@ function CopyAnalysisCard({
           <Sparkles className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[15px] font-semibold text-[#1a1d24]">{isZh ? '分析与文案' : 'Analysis & Copy'}</h3>
+          <h3 className="text-[15px] font-semibold text-[#1a1d24]">{t('analysisAndCopy')}</h3>
           <p className="text-[13px] text-[#7d818d]">
-            {isZh
-              ? '可直接编辑或清空共享主文案；清空后本批图片将按纯视觉生成。'
-              : 'Edit or clear the shared master copy directly. Clearing it makes the full batch generate as visual-only.'}
+            {t('analysisAndCopyDesc')}
           </p>
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl bg-[#f5f6f8] p-4">
-          <p className="mb-1 text-[12px] font-medium text-[#7d818d]">{isZh ? '产品分析' : 'Product Summary'}</p>
-          <p className="text-[13px] leading-6 text-[#262a32]">{copyAnalysis.product_summary}</p>
-        </div>
-        <div className="rounded-2xl bg-[#f5f6f8] p-4">
-          <p className="mb-1 text-[12px] font-medium text-[#7d818d]">{isZh ? '文案意图' : 'Copy Intent'}</p>
-          <p className="text-[13px] leading-6 text-[#262a32]">{copyAnalysis.brief_summary}</p>
-        </div>
-        <div className="rounded-2xl bg-[#f5f6f8] p-4">
-          <p className="mb-1 text-[12px] font-medium text-[#7d818d]">{isZh ? '当前模式' : 'Current Mode'}</p>
-          <div className="flex items-center gap-2 text-[13px] leading-6 text-[#262a32]">
-            <Languages className="h-4 w-4 text-[#6a6f7c]" />
-            <span>{outputLanguageLabel(copyAnalysis.resolved_output_language, isZh)}</span>
-            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-[#606572]">
-              {isVisualOnly ? (isZh ? '纯视觉生成' : 'Visual Only') : (isZh ? '带文案生成' : 'Copy Enabled')}
-            </span>
-          </div>
         </div>
       </div>
 
       <div className="mt-4 rounded-[24px] border border-[#e0e3e8] bg-[#fbfbfc] p-4">
         <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="text-[13px] font-medium text-[#3b3f49]">{isZh ? '共享主文案' : 'Shared Master Copy'}</p>
+          <p className="text-[13px] font-medium text-[#3b3f49]">{t('sharedMasterCopy')}</p>
           <span className="text-[12px] text-[#7d818d]">
-            {isZh ? '清空后将按纯视觉生成' : 'Clear this to generate visual-only images'}
+            {t('clearForVisualOnly')}
           </span>
         </div>
         <Textarea
@@ -696,21 +723,8 @@ function CopyAnalysisCard({
           onChange={(e) => onSharedCopyChange(e.target.value)}
           rows={5}
           className="min-h-[152px] resize-none rounded-2xl border-[#d0d4dc] bg-white text-[14px] leading-6"
-          placeholder={isZh ? '输入或编辑共享主文案；清空后将按纯视觉生成。' : 'Enter or edit the shared master copy. Clear it to generate visual-only images.'}
+          placeholder={t('sharedCopyPlaceholder')}
         />
-      </div>
-
-      <div className="mt-4 space-y-2">
-        {copyAnalysis.per_plan_adaptations.map((adaptation, index) => (
-          <div key={`${adaptation.plan_index}-${adaptation.plan_type}-${index}`} className="rounded-2xl border border-[#edf0f4] bg-[#fafbfc] p-4">
-            <p className="mb-1 text-[13px] font-medium text-[#1f2228]">
-              {isZh ? `图片 ${adaptation.plan_index + 1}` : `Image ${adaptation.plan_index + 1}`}
-              {' · '}
-              {adaptation.plan_type}
-            </p>
-            <p className="text-[13px] leading-6 text-[#616673]">{adaptation.adaptation_summary}</p>
-          </div>
-        ))}
       </div>
     </div>
   )
@@ -723,6 +737,7 @@ interface BasicPhotoSetTabProps {
 export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const locale = useLocale()
   const isZh = locale.startsWith('zh')
+  const t = useTranslations('studio.clothingStudio')
   const [phase, setPhase] = useState<ClothingPhase>('input')
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
   const [typeState, setTypeState] = useState<BasicPhotoTypeState>({
@@ -762,7 +777,6 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const canStart = productImages.length > 0 && countSelectedTypes(typeState) > 0
   const backendLocale = language === 'zh' ? 'zh-CN' : language === 'en' ? 'en' : (isZh ? 'zh-CN' : 'en')
   const currentCopyAnalysis = analysisBlueprint?.copy_analysis
-  const isVisualOnlyGeneration = language === 'none' || editableSharedCopy.trim().length === 0
 
   const set = useCallback((id: string, patch: Partial<ProgressStep>) => {
     setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)))
@@ -776,9 +790,9 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     const batchTimestamp = Date.now()
 
     const initialSteps: ProgressStep[] = [
-      { id: 'upload', label: '上传图片', status: 'pending' },
-      { id: 'analyze', label: '分析产品', status: 'pending' },
-      { id: 'preview', label: '生成设计方案', status: 'pending' },
+      { id: 'upload', label: t('stepLabelUpload'), status: 'pending' },
+      { id: 'analyze', label: t('stepLabelAnalyzeProduct'), status: 'pending' },
+      { id: 'preview', label: t('stepLabelDesignPlan'), status: 'pending' },
     ]
     setSteps(initialSteps)
     setProgress(0)
@@ -840,11 +854,11 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       setPhase('preview')
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      setErrorMessage(friendlyError((err as Error).message ?? '分析失败', true))
+      setErrorMessage(friendlyError((err as Error).message ?? t('analysisFailed'), true))
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase('input')
     }
-  }, [canStart, productImages, typeState, requirements, backendLocale, language, traceId, set, promptProfile, isZh])
+  }, [canStart, productImages, typeState, requirements, backendLocale, language, traceId, set, promptProfile, isZh, t])
 
   const handleGenerate = useCallback(async () => {
     if (!analysisBlueprint || editableImagePlans.length === 0) return
@@ -854,12 +868,12 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     const batchTimestamp = Date.now()
 
     const initialSteps: ProgressStep[] = [
-      { id: 'upload', label: '上传图片', status: 'done' },
-      { id: 'analyze', label: '分析产品', status: 'done' },
-      { id: 'preview', label: '生成设计方案', status: 'done' },
-      { id: 'prompts', label: '生成提示词', status: 'pending' },
-      { id: 'generate', label: '生成图片', status: 'pending' },
-      { id: 'done', label: '完成', status: 'pending' },
+      { id: 'upload', label: t('stepLabelUpload'), status: 'done' },
+      { id: 'analyze', label: t('stepLabelAnalyzeProduct'), status: 'done' },
+      { id: 'preview', label: t('stepLabelDesignPlan'), status: 'done' },
+      { id: 'prompts', label: t('stepLabelGeneratePrompts'), status: 'pending' },
+      { id: 'generate', label: t('stepLabelGenerateImages'), status: 'pending' },
+      { id: 'done', label: t('stepLabelDone'), status: 'pending' },
     ]
     setSteps(initialSteps)
     setProgress(55)
@@ -918,11 +932,18 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       }
 
       const parsedPrompts = parsePromptArray(promptText, editableImagePlans.length)
+      const generationCopyAnalysis = generationBlueprint.blueprint.copy_analysis
       const prompts = Array.from({ length: editableImagePlans.length }, (_, i) => {
         const gp = parsedPrompts[i] ?? parsedPrompts[i % Math.max(parsedPrompts.length, 1)]
         // Use || so empty prompt strings also fall back to design_content
         const basePrompt = gp?.prompt || editableImagePlans[i].design_content
-        return basePrompt
+        return appendSharedCopyGuardrail({
+          prompt: basePrompt,
+          sharedCopy: editableSharedCopy,
+          adaptation: generationCopyAnalysis?.per_plan_adaptations[i],
+          outputLanguage: generationBlueprint.outputLanguage,
+          isZh,
+        })
       })
 
       set('prompts', { status: 'done' })
@@ -957,7 +978,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
         .map((j, i) => ({
           ...createResultAsset({
             url: j.result_url!,
-            label: editableImagePlans[i]?.title ?? `图片 ${i + 1}`,
+            label: editableImagePlans[i]?.title ?? t('imageIndexLabel', { index: i + 1 }),
             batchId,
             batchTimestamp,
             ...extractResultAssetMetadata(j.result_data),
@@ -971,7 +992,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       setPhase('complete')
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      setErrorMessage(friendlyError((err as Error).message ?? '生成失败', true))
+      setErrorMessage(friendlyError((err as Error).message ?? t('generationFailed'), true))
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase('preview')
     } finally {
@@ -994,6 +1015,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     promptProfile,
     traceId,
     set,
+    t,
   ])
 
   const handleReset = useCallback(() => {
@@ -1021,8 +1043,8 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
           <div className="mb-4 flex items-center gap-3">
             <SectionIcon icon={ImageIcon} />
             <div className="flex-1">
-              <h3 className="text-[15px] font-semibold text-[#1a1d24]">产品图</h3>
-              <p className="text-[13px] text-[#7d818d]">上传多角度产品图或细节图</p>
+              <h3 className="text-[15px] font-semibold text-[#1a1d24]">{t('productImageTitle')}</h3>
+              <p className="text-[13px] text-[#7d818d]">{t('productImageDesc')}</p>
             </div>
             <span className="text-[13px] text-[#6f7380]">{productImages.length}/6</span>
           </div>
@@ -1043,7 +1065,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
             compactAfterUpload
             thumbnailGridCols={3}
             showIndexBadge
-            label="拖拽或点击上传"
+            label={t('dragOrClickUpload')}
             hideDefaultFooter
             dropzoneClassName="min-h-[190px] rounded-[20px] border-[#d0d4dc] bg-[#f1f3f6] px-6 py-8 hover:border-[#bcc2ce] hover:bg-[#eceff4]"
             labelClassName="text-base font-medium text-[#5f6471]"
@@ -1080,33 +1102,33 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
             className="h-14 w-full rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#111318] disabled:bg-[#9a9ca3] disabled:text-white"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
-            分析产品
+            {t('analyzeProduct')}
           </Button>
         )}
         {phase === 'analyzing' && (
           <Button variant="outline" onClick={handleCancel} className="h-14 w-full rounded-2xl border-[#cbced6] bg-white text-[#202227]">
-            取消分析
+            {t('cancelAnalysis')}
           </Button>
         )}
         {phase === 'preview' && (
           <div className="flex gap-3">
             <Button variant="outline" onClick={handleReset} className="h-14 flex-1 rounded-2xl border-[#cbced6] bg-white text-[#202227]">
-              重新开始
+              {t('restart')}
             </Button>
             <Button onClick={handleGenerate} className="h-14 flex-1 rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#111318]">
               <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
-              生成图片
+              {t('generateImages')}
             </Button>
           </div>
         )}
         {phase === 'generating' && (
           <Button variant="outline" onClick={handleCancel} className="h-14 w-full rounded-2xl border-[#cbced6] bg-white text-[#202227]">
-            取消生成
+            {t('cancelGeneration')}
           </Button>
         )}
         {phase === 'complete' && (
           <Button variant="outline" onClick={handleReset} className="h-14 w-full rounded-2xl border-[#cbced6] bg-white text-[#202227]">
-            重新生成
+            {t('regenerate')}
           </Button>
         )}
       </div>
@@ -1118,6 +1140,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       images={results}
       activeBatchId={activeBatchId}
       aspectRatio={aspectRatio}
+      historyInitiallyExpanded={false}
       onClear={clearResults}
       editorSessionKey="clothing-basic-photo"
       originModule="clothing-basic-photo"
@@ -1143,9 +1166,9 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
             </svg>
           </div>
           <p className="text-sm leading-relaxed">
-            上传产品图片并填写要求后
+            {t('emptyStateBasicLine1')}
             <br />
-            点击“分析产品”开始
+            {t('emptyStateBasicLine2')}
           </p>
         </div>
       )
@@ -1156,17 +1179,9 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
         <div className="space-y-4">
           {currentCopyAnalysis && (
             <CopyAnalysisCard
-              copyAnalysis={deriveCopyAnalysisForGeneration(
-                currentCopyAnalysis,
-                editableImagePlans,
-                editableSharedCopy,
-                language as OutputLanguage,
-                isZh,
-              ) ?? currentCopyAnalysis}
               sharedCopy={editableSharedCopy}
               onSharedCopyChange={setEditableSharedCopy}
-              isZh={isZh}
-              isVisualOnly={isVisualOnlyGeneration}
+              t={t}
             />
           )}
           <DesignBlueprint
@@ -1174,6 +1189,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
             onDesignSpecsChange={setEditableDesignSpecs}
             imagePlans={editableImagePlans}
             aspectRatio={aspectRatio}
+            showDesignSpecs={false}
             onImagePlanChange={(i, plan) => {
               setEditableImagePlans((prev) => prev.map((p, idx) => (idx === i ? plan : p)))
             }}
@@ -1186,12 +1202,12 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     if (phase === 'analyzing' || phase === 'generating') {
       const activeStep =
         [...steps].reverse().find((step) => step.status === 'active')?.label
-        ?? (phase === 'generating' ? '生成中' : '分析中')
-      const title = phase === 'generating' ? '生成中...' : '分析中...'
+        ?? (phase === 'generating' ? t('activeStepGenerating') : t('activeStepAnalyzing'))
+      const title = phase === 'generating' ? t('generatingTitle') : t('analyzingTitle')
       const subtitle =
         phase === 'generating'
-          ? '正在根据规划生成图片'
-          : '正在分析产品并生成设计规范'
+          ? t('generatingSubtitleBasic')
+          : t('analyzingSubtitleBasic')
 
       return (
         <div className="space-y-4">

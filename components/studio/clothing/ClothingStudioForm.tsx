@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { TabsList, TabsTrigger, Tabs } from '@/components/ui/tabs'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { ModelTryOnTab } from './ModelTryOnTab'
@@ -8,21 +9,23 @@ import { BasicPhotoSetTab } from './BasicPhotoSetTab'
 import type { ClothingTab, ClothingPhase } from './types'
 import { Loader2, Shirt, GalleryVerticalEnd } from 'lucide-react'
 
-const PHASE_STEPS: { phase: ClothingPhase; label: string; num: number }[] = [
-  { phase: 'input', label: '上传图片', num: 1 },
-  { phase: 'analyzing', label: 'AI 分析', num: 2 },
-  { phase: 'preview', label: '预览方案', num: 3 },
-  { phase: 'generating', label: '生成中', num: 4 },
-  { phase: 'complete', label: '完成', num: 5 },
-]
+function getPhaseSteps(t: (key: string) => string): { phase: ClothingPhase; label: string; num: number }[] {
+  return [
+    { phase: 'input', label: t('stepUpload'), num: 1 },
+    { phase: 'analyzing', label: t('stepAnalyze'), num: 2 },
+    { phase: 'preview', label: t('stepPreview'), num: 3 },
+    { phase: 'generating', label: t('stepGenerating'), num: 4 },
+    { phase: 'complete', label: t('stepComplete'), num: 5 },
+  ]
+}
 
-function StepIndicator({ currentPhase }: { currentPhase: ClothingPhase }) {
+function StepIndicator({ currentPhase, steps }: { currentPhase: ClothingPhase; steps: { phase: ClothingPhase; label: string; num: number }[] }) {
   const phaseOrder: ClothingPhase[] = ['input', 'analyzing', 'preview', 'generating', 'complete']
   const currentIdx = phaseOrder.indexOf(currentPhase)
 
   return (
     <div className="flex w-full items-center justify-center overflow-x-auto pb-1">
-      {PHASE_STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const isDone = i < currentIdx
         const isCurrent = i === currentIdx
         const isPastOrCurrent = isDone || isCurrent
@@ -44,7 +47,7 @@ function StepIndicator({ currentPhase }: { currentPhase: ClothingPhase }) {
                 {step.label}
               </span>
             </div>
-            {i < PHASE_STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <div className="mx-3 h-px w-8 bg-[#d8dbe1] sm:mx-5 sm:w-12" />
             )}
           </div>
@@ -59,6 +62,7 @@ function uid() {
 }
 
 export function ClothingStudioForm() {
+  const t = useTranslations('studio.clothingStudio')
   const [activeTab, setActiveTab] = useState<ClothingTab>('basic-photo-set')
   const [traceId] = useState(() => uid())
 
@@ -70,19 +74,21 @@ export function ClothingStudioForm() {
   const isModelTryOnTab = activeTab === 'model-tryon'
   const tabLocked = current.phase === 'analyzing' || current.phase === 'generating'
   const rightPanelTitle = current.phase === 'analyzing'
-    ? '分析中...'
+    ? t('analyzingTitle')
     : current.phase === 'generating'
-      ? '生成中...'
+      ? t('generatingTitle')
       : current.phase === 'preview'
-        ? (isModelTryOnTab ? '方案预览' : '生成结果')
-        : '生成结果'
+        ? (isModelTryOnTab ? t('previewTitleTryOn') : t('previewTitleBasic'))
+        : t('resultTitle')
   const rightPanelSubtitle = current.phase === 'analyzing'
-    ? (isModelTryOnTab ? '正在分析产品与主体并生成文字方案' : '正在分析产品并生成设计规范')
+    ? (isModelTryOnTab ? t('analyzingSubtitleTryOn') : t('analyzingSubtitleBasic'))
     : current.phase === 'generating'
-      ? (isModelTryOnTab ? '正在根据方案逐项生成图片' : '正在根据规划生成图片')
+      ? (isModelTryOnTab ? t('generatingSubtitleTryOn') : t('generatingSubtitleBasic'))
       : current.phase === 'preview'
-        ? (isModelTryOnTab ? `${previewCount} 条试穿方案` : `${previewCount} 张图片规划`)
-        : '上传产品图片点击分析开始'
+        ? (isModelTryOnTab ? t('previewSubtitleTryOn', { count: previewCount }) : t('previewSubtitleBasic', { count: previewCount }))
+        : t('inputSubtitle')
+
+  const phaseSteps = getPhaseSteps(t)
 
   return (
     <CorePageShell maxWidthClass="max-w-[1360px]">
@@ -101,23 +107,23 @@ export function ClothingStudioForm() {
               <path d="M12 3v18M3 12h18M5 5l14 14M5 19L19 5" className="origin-center scale-[0.6] opacity-0" />
               <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
             </svg>
-            <span className="text-xs font-medium text-[#202227]">AI 服饰</span>
+            <span className="text-xs font-medium text-[#202227]">{t('badge')}</span>
             <span className="rounded-full bg-[#3f424a] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
               BETA
             </span>
           </div>
 
           <h1 className="mb-4 text-center text-3xl font-semibold tracking-tight text-[#17181d] sm:text-4xl">
-            智能生成服装详情图组
+            {t('pageTitle')}
           </h1>
           <p className="text-center text-sm leading-relaxed text-[#70727a] sm:text-base">
-            上传服装产品图，AI 智能分析款式、面料与细节，自动生成白底精修、3D 立体展示
+            {t('pageDescriptionLine1')}
             <br />
-            及细节特写等电商级图组
+            {t('pageDescriptionLine2')}
           </p>
 
           <div className="mt-12 w-full">
-            <StepIndicator currentPhase={current.phase} />
+            <StepIndicator currentPhase={current.phase} steps={phaseSteps} />
           </div>
         </div>
 
@@ -131,7 +137,7 @@ export function ClothingStudioForm() {
                   className="h-11 rounded-full border border-transparent bg-transparent text-sm font-medium text-[#5a5f6b] shadow-none transition-none data-[state=active]:border-[#0f1118] data-[state=active]:bg-[#11131a] data-[state=active]:text-white"
                 >
                   <Shirt className="mr-1.5 h-4 w-4" />
-                  模特试穿
+                  {t('tabModelTryOn')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="basic-photo-set"
@@ -139,7 +145,7 @@ export function ClothingStudioForm() {
                   className="h-11 rounded-full border border-transparent bg-transparent text-sm font-medium text-[#5a5f6b] shadow-none transition-none data-[state=active]:border-[#0f1118] data-[state=active]:bg-[#11131a] data-[state=active]:text-white"
                 >
                   <GalleryVerticalEnd className="mr-1.5 h-4 w-4" />
-                  基础图集
+                  {t('tabBasicPhotoSet')}
                 </TabsTrigger>
               </TabsList>
             </Tabs>

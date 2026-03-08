@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Image as ImageIcon, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SectionIcon } from '@/components/shared/SectionIcon'
@@ -368,6 +368,7 @@ interface ModelTryOnTabProps {
 export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
   const locale = useLocale()
   const isZhLocale = locale.startsWith('zh')
+  const t = useTranslations('studio.clothingStudio')
   const [phase, setPhase] = useState<ClothingPhase>('input')
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
   const [modelImage, setModelImage] = useState<UploadedImage | null>(null)
@@ -420,9 +421,9 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     const batchTimestamp = Date.now()
 
     const initialSteps: ProgressStep[] = [
-      { id: 'upload', label: '上传图片', status: 'pending' },
-      { id: 'analyze', label: '分析产品与主体', status: 'pending' },
-      { id: 'preview', label: '生成设计方案', status: 'pending' },
+      { id: 'upload', label: t('stepLabelUpload'), status: 'pending' },
+      { id: 'analyze', label: t('stepLabelAnalyzeSubject'), status: 'pending' },
+      { id: 'preview', label: t('stepLabelDesignPlan'), status: 'pending' },
     ]
     setSteps(initialSteps)
     setProgress(0)
@@ -514,11 +515,11 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       setPhase('preview')
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      setErrorMessage(friendlyError((err as Error).message ?? '分析失败', true))
+      setErrorMessage(friendlyError((err as Error).message ?? t('analysisFailed'), true))
       setSteps((prev) => prev.map((step) => (step.status === 'active' ? { ...step, status: 'error' } : step)))
       setPhase('input')
     }
-  }, [backendLocale, canStart, isZhLocale, language, modelImage, productImages, requirements, set, traceId, typeState, promptProfile])
+  }, [backendLocale, canStart, isZhLocale, language, modelImage, productImages, requirements, set, traceId, typeState, promptProfile, t])
 
   const handleGenerate = useCallback(async () => {
     if (!analysisBlueprint || editableImagePlans.length === 0) return
@@ -528,11 +529,11 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     const batchTimestamp = Date.now()
 
     const initialSteps: ProgressStep[] = [
-      { id: 'upload', label: '上传图片', status: 'done' },
-      { id: 'analyze', label: '分析产品与主体', status: 'done' },
-      { id: 'preview', label: '生成设计方案', status: 'done' },
-      { id: 'generate', label: '生成图片', status: 'pending' },
-      { id: 'done', label: '完成', status: 'pending' },
+      { id: 'upload', label: t('stepLabelUpload'), status: 'done' },
+      { id: 'analyze', label: t('stepLabelAnalyzeSubject'), status: 'done' },
+      { id: 'preview', label: t('stepLabelDesignPlan'), status: 'done' },
+      { id: 'generate', label: t('stepLabelGenerateImages'), status: 'pending' },
+      { id: 'done', label: t('stepLabelDone'), status: 'pending' },
     ]
     setSteps(initialSteps)
     setProgress(72)
@@ -628,7 +629,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       })
 
       if (successfulResults.length === 0) {
-        throw new Error('本次生成全部失败，请检查 prompt 或重新分析')
+        throw new Error(t('allGenerationsFailed'))
       }
 
       appendResults(successfulResults, {
@@ -638,11 +639,11 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       set('generate', { status: 'done' })
       set('done', { status: failureCount > 0 ? 'error' : 'done' })
       setProgress(100)
-      setErrorMessage(failureCount > 0 ? `有 ${failureCount} 张图片生成失败，已保留成功结果。` : null)
+      setErrorMessage(failureCount > 0 ? t('partialGenerationFailed', { count: failureCount }) : null)
       setPhase('complete')
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      setErrorMessage(friendlyError((err as Error).message ?? '生成失败', true))
+      setErrorMessage(friendlyError((err as Error).message ?? t('generationFailed'), true))
       setSteps((prev) => prev.map((step) => (step.status === 'active' ? { ...step, status: 'error' } : step)))
       setPhase('preview')
     } finally {
@@ -661,6 +662,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     productImages,
     resolution,
     set,
+    t,
     traceId,
     uploadedProductUrls,
     uploadedSubjectUrl,
@@ -692,8 +694,8 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
           <div className="flex items-center gap-3">
             <SectionIcon icon={ImageIcon} />
             <div className="flex-1">
-              <h3 className="text-[15px] font-semibold text-[#1a1d24]">产品图</h3>
-              <p className="text-[13px] text-[#7d818d]">上传多角度产品图或细节图</p>
+              <h3 className="text-[15px] font-semibold text-[#1a1d24]">{t('productImageTitle')}</h3>
+              <p className="text-[13px] text-[#7d818d]">{t('productImageDesc')}</p>
             </div>
             <span className="text-[13px] text-[#6f7380]">{productImages.length}/5</span>
           </div>
@@ -710,7 +712,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
               setProductImages((prev) => prev.filter((_, imageIndex) => imageIndex !== index))
             }}
             maxImages={5}
-            label="拖拽或点击上传"
+            label={t('dragOrClickUpload')}
           />
         </div>
 
@@ -718,8 +720,8 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
           <div className="flex items-center gap-3">
             <SectionIcon icon={User} />
             <div>
-              <h3 className="text-[15px] font-semibold text-[#1a1d24]">主体图片</h3>
-              <p className="text-[13px] text-[#7d818d]">上传参考主体图，AI 生成功能仅支持真人模特</p>
+              <h3 className="text-[15px] font-semibold text-[#1a1d24]">{t('subjectImageTitle')}</h3>
+              <p className="text-[13px] text-[#7d818d]">{t('subjectImageDesc')}</p>
             </div>
           </div>
           <ModelImageSection
@@ -759,36 +761,36 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
             className="h-12 w-full rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#111318] disabled:bg-[#9a9ca3] disabled:text-white"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
-            分析产品
+            {t('analyzeProduct')}
           </Button>
         )}
         {phase === 'analyzing' && (
           <Button variant="outline" onClick={handleCancel} className="w-full h-12 rounded-2xl">
-            取消分析
+            {t('cancelAnalysis')}
           </Button>
         )}
         {phase === 'preview' && (
           <div className="flex gap-3">
             <Button variant="outline" onClick={handleReset} className="flex-1 h-12 rounded-2xl">
-              重新开始
+              {t('restart')}
             </Button>
             <Button
               onClick={handleGenerate}
               className="h-12 flex-1 rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#111318]"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
-              生成图片
+              {t('generateImages')}
             </Button>
           </div>
         )}
         {phase === 'generating' && (
           <Button variant="outline" onClick={handleCancel} className="w-full h-12 rounded-2xl">
-            取消生成
+            {t('cancelGeneration')}
           </Button>
         )}
         {phase === 'complete' && (
           <Button variant="outline" onClick={handleReset} className="w-full h-12 rounded-2xl">
-            重新生成
+            {t('regenerate')}
           </Button>
         )}
       </div>
@@ -811,6 +813,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       images={results}
       activeBatchId={activeBatchId}
       aspectRatio={aspectRatio}
+      historyInitiallyExpanded={false}
       onClear={clearResults}
       editorSessionKey="clothing-model-tryon"
       originModule="clothing-model-tryon"
@@ -836,9 +839,9 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
             </svg>
           </div>
           <p className="text-sm leading-relaxed">
-            上传产品图、主体图并选择生成类型后
+            {t('emptyStateTryOnLine1')}
             <br />
-            点击“分析产品”开始
+            {t('emptyStateTryOnLine2')}
           </p>
         </div>
       )
@@ -869,9 +872,9 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     if (phase === 'analyzing' || phase === 'generating') {
       const activeStep =
         [...steps].reverse().find((step) => step.status === 'active')?.label
-        ?? (phase === 'generating' ? '生成中' : '分析中')
-      const title = phase === 'generating' ? '生成中...' : '分析中...'
-      const subtitle = phase === 'generating' ? '正在根据方案逐项生成图片' : '正在分析产品与主体并生成文字方案'
+        ?? (phase === 'generating' ? t('activeStepGenerating') : t('activeStepAnalyzing'))
+      const title = phase === 'generating' ? t('generatingTitle') : t('analyzingTitle')
+      const subtitle = phase === 'generating' ? t('generatingSubtitleTryOn') : t('analyzingSubtitleTryOn')
 
       return (
         <div className="space-y-4">

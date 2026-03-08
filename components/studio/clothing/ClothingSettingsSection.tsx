@@ -1,6 +1,6 @@
 'use client'
 
-import { useLocale } from 'next-intl'
+import { useTranslations } from 'next-intl'
 import { Textarea } from '@/components/ui/textarea'
 import { SlidersHorizontal } from 'lucide-react'
 import { SectionIcon } from '@/components/shared/SectionIcon'
@@ -34,8 +34,7 @@ export function ClothingSettingsSection({
   onResolutionChange,
   disabled = false,
 }: ClothingSettingsSectionProps) {
-  const locale = useLocale()
-  const isZh = locale === 'zh'
+  const t = useTranslations('studio.clothingStudio')
 
   return (
     <div className="space-y-4">
@@ -45,12 +44,10 @@ export function ClothingSettingsSection({
           <SectionIcon icon={SlidersHorizontal} />
           <div>
             <h3 className="text-[15px] font-semibold text-[#1a1d24]">
-              {isZh ? '组图要求' : 'Requirements'}
+              {t('requirementsTitle')}
             </h3>
             <p className="text-[13px] text-[#7d818d]">
-              {isZh
-                ? '描述您的产品信息和期望的图片风格'
-                : 'Describe your product info and desired image style'}
+              {t('requirementsDesc')}
             </p>
           </div>
         </div>
@@ -58,19 +55,13 @@ export function ClothingSettingsSection({
         <Textarea
           value={requirements}
           onChange={(e) => onRequirementsChange(e.target.value)}
-          placeholder={
-            isZh
-              ? '建议输入：款式名称、面料材质、设计亮点、适合人群、风格调性等\n\n例如：这是一款法式复古连衣裙，采用重磅真丝面料，特色是精致的蕾丝拼接和珍珠扣设计，适合25-35岁都市女性通勤或约会穿'
-              : 'Suggested: style name, fabric material, design highlights, target audience, style tone...'
-          }
+          placeholder={t('requirementsPlaceholder')}
           disabled={disabled}
           rows={5}
           className="min-h-[132px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] leading-6 text-[#2b2f38]"
         />
         <p className="mt-3 text-[12px] leading-5 text-[#7d818d]">
-          {isZh
-            ? '输入组图要求并选择输出语言后，系统会自动分析产品并生成适合所有图片的共享文案；若不输入文字但选择了输出语言，系统也会自动补全文案。选择纯视觉，或在分析后清空共享文案，则整批图片按纯视觉生成。'
-            : 'After you enter a brief and choose an output language, the system will analyze the product and generate shared copy for all images. If you choose an output language without typing a brief, it will infer the copy automatically. Choose visual-only, or clear the analyzed copy later, to generate the full batch without added text.'}
+          {t('requirementsHint')}
         </p>
       </div>
 
