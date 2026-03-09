@@ -44,14 +44,14 @@ export function DashboardNavbar({ userId, email }: DashboardNavbarProps) {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-5 sm:px-6">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5 sm:px-6">
         {/* Logo */}
         <Link
           href={`/${locale}`}
           prefetch
           className="flex shrink-0 items-center gap-2"
         >
-          <span className="font-[var(--font-display)] text-lg font-extrabold tracking-tight text-foreground">
+          <span className="font-[var(--font-display)] text-xl font-extrabold tracking-tight text-foreground">
             Shopix
           </span>
           <span className="text-xs font-medium text-text-tertiary">AI</span>
@@ -69,7 +69,7 @@ export function DashboardNavbar({ userId, email }: DashboardNavbarProps) {
                 prefetch
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'rounded-lg px-3 py-1.5 text-[13px] whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                  'rounded-lg px-3.5 py-2 text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                   isActive
                     ? 'bg-foreground text-background font-semibold'
                     : 'text-muted-foreground hover:text-foreground'
