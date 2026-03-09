@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
+import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
 import { ResultGallery } from '@/components/generation/ResultGallery'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { useTranslations, useLocale } from 'next-intl'
@@ -25,6 +26,7 @@ import { uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
 import { createClient } from '@/lib/supabase/client'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
+import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
 import type { AspectRatio, BackgroundMode, GenerationJob, GenerationModel, ImageSize } from '@/types'
 import {
   DEFAULT_MODEL,
@@ -459,8 +461,8 @@ export function RefinementStudioForm() {
     }
   }
 
-  const panelClass = 'rounded-[28px] border border-[#d0d4dc] bg-white'
-  const selectTriggerClass = 'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] text-[#1b1f26] shadow-none'
+  const panelClass = 'rounded-[28px] border border-border bg-white'
+  const selectTriggerClass = 'h-11 rounded-2xl border-border bg-secondary text-[14px] text-foreground shadow-none'
   const resultPanelTitle = phase === 'running' ? t('runningTitle') : t('resultTitle')
   const resultPanelSubtitle = phase === 'running' ? t('runningSubtitle') : t('resultSubtitle')
   const persistedHistoryGallery = resultAssets.length > 0 ? (
@@ -477,13 +479,17 @@ export function RefinementStudioForm() {
   return (
     <>
     <CorePageShell maxWidthClass="max-w-[1360px]" contentClassName="space-y-8">
-      <div className="pt-4 text-center">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-4 py-1.5 text-xs font-medium text-[#1e2127]">
-          <Sparkles className="h-4 w-4" />
-          <span>{t('heroBadge')}</span>
+      <div className="mb-7 flex items-start gap-3">
+        <SectionIcon icon={ImageIcon} className="mt-1" />
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-foreground">{t('title')}</h1>
+            <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[11px] font-semibold text-rose-600 dark:bg-rose-500/15 dark:text-rose-400">
+              {t('heroBadge')}
+            </span>
+          </div>
+          <p className="mt-1 text-[13px] text-muted-foreground">{t('description')}</p>
         </div>
-        <h1 className="mt-5 text-3xl font-semibold tracking-tight text-[#17181d] sm:text-4xl">{t('title')}</h1>
-        <p className="mx-auto mt-3 max-w-[900px] text-sm leading-relaxed text-[#5f6672] sm:text-base">{t('description')}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
@@ -493,11 +499,11 @@ export function RefinementStudioForm() {
               <div className="flex items-start gap-3">
                 <SectionIcon icon={ImageIcon} className="mt-0.5" />
                 <div>
-                  <p className="text-[15px] font-semibold text-[#1a1d24]">{tc('productImage')}</p>
-                  <p className="text-[13px] text-[#666d79]">{t('productUploadSubtitle')}</p>
+                  <p className="text-[15px] font-semibold text-foreground">{tc('productImage')}</p>
+                  <p className="text-[13px] text-muted-foreground">{t('productUploadSubtitle')}</p>
                 </div>
               </div>
-              <span className="text-[13px] text-[#616875]">{productImages.length}/{MAX_IMAGES}</span>
+              <span className="text-[13px] text-muted-foreground">{productImages.length}/{MAX_IMAGES}</span>
             </div>
 
             <div className="mt-4">
@@ -505,22 +511,22 @@ export function RefinementStudioForm() {
                 <div
                   {...getRootProps()}
                   className={`cursor-pointer rounded-[24px] border-2 border-dashed p-8 text-center transition-colors ${
-                    isDragActive ? 'border-[#8d94a2] bg-[#e9edf2]' : 'border-[#d0d4dc] bg-[#f1f3f6] hover:border-[#8e96a4]'
+                    isDragActive ? 'border-muted-foreground bg-muted' : 'border-border bg-secondary hover:border-muted-foreground'
                   }`}
                   onClick={open}
                 >
                   <input {...getInputProps()} />
-                  <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[#ebedf0]">
-                    <Upload className="h-6 w-6 text-[#70747d]" />
+                  <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                    <Upload className="h-6 w-6 text-muted-foreground" />
                   </div>
-                  <p className="text-[15px] font-medium text-[#2f333b]">{t('uploadDropLabel')}</p>
-                  <p className="mt-1 text-[13px] text-[#686f7c]">{t('uploadDropMeta')}</p>
+                  <p className="text-[15px] font-medium text-foreground">{t('uploadDropLabel')}</p>
+                  <p className="mt-1 text-[13px] text-muted-foreground">{t('uploadDropMeta')}</p>
                 </div>
               ) : (
                 <div
                   {...getRootProps()}
                   className={`rounded-[24px] border p-3 ${
-                    isDragActive ? 'border-[#8d94a2] bg-[#e9edf2]' : 'border-[#d0d4dc] bg-[#f1f3f6]'
+                    isDragActive ? 'border-muted-foreground bg-muted' : 'border-border bg-secondary'
                   }`}
                 >
                   <input {...getInputProps()} />
@@ -540,7 +546,7 @@ export function RefinementStudioForm() {
                         type="button"
                         onClick={open}
                         disabled={isRunning}
-                        className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-[#c8ccd4] text-[#6f737c] transition-colors hover:bg-[#eceef2] disabled:opacity-50"
+                        className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-border text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
                       >
                         <Plus className="h-4 w-4" />
                       </button>
@@ -548,7 +554,7 @@ export function RefinementStudioForm() {
                   </div>
                 </div>
               )}
-              <p className="mt-3 text-[13px] text-[#5f6672]">{t('uploadSupportHint')}</p>
+              <p className="mt-3 text-[13px] text-muted-foreground">{t('uploadSupportHint')}</p>
               {uploadError && <p className="mt-1 text-xs text-destructive">{uploadError}</p>}
             </div>
           </section>
@@ -557,19 +563,23 @@ export function RefinementStudioForm() {
             <div className="flex items-start gap-3">
               <SectionIcon icon={FileText} className="mt-0.5" />
               <div>
-                <p className="text-[15px] font-semibold text-[#1a1d24]">{t('requirementsTitle')}</p>
-                <p className="text-[13px] text-[#666d79]">{t('requirementsSubtitle')}</p>
+                <p className="text-[15px] font-semibold text-foreground">{t('requirementsTitle')}</p>
+                <p className="text-[13px] text-muted-foreground">{t('requirementsSubtitle')}</p>
               </div>
             </div>
 
             <Textarea
               value={userPrompt}
-              onChange={(e) => setUserPrompt(e.target.value)}
+              onChange={(e) => setUserPrompt(clampText(e.target.value, TEXT_LIMITS.brief))}
               rows={4}
+              maxLength={TEXT_LIMITS.brief}
               placeholder={t('requirementsExample')}
               disabled={isRunning}
-              className="mt-4 resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] px-4 py-3 text-[14px] text-[#20242c] placeholder:text-[#7c8390] focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="mt-4 resize-none rounded-2xl border-border bg-secondary px-4 py-3 text-[14px] text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
             />
+            <p className="mt-2 text-xs text-muted-foreground">
+              {formatTextCounter(userPrompt, TEXT_LIMITS.brief, isZh)}
+            </p>
 
           </section>
 
@@ -584,7 +594,7 @@ export function RefinementStudioForm() {
           aspectRatioOptions={['1:1', '3:4', '4:3', '16:9', '9:16', '3:2', '2:3', '21:9']}
           extraFields={
               <div className="mt-4 space-y-1.5">
-                <Label className="text-[13px] font-medium text-[#5a5e6b]">{t('backgroundMode')}</Label>
+                <Label className="text-[13px] font-medium text-muted-foreground">{t('backgroundMode')}</Label>
                 <Select value={backgroundMode} onValueChange={(v) => setBackgroundMode(v as BackgroundMode)} disabled={isRunning}>
                   <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -600,13 +610,13 @@ export function RefinementStudioForm() {
             <div className="mt-0">
               {isRunning ? (
                 <div className="grid grid-cols-2 gap-2">
-                  <Button className="h-12 w-full rounded-2xl bg-[#8e9096] text-white hover:bg-[#84868d]" disabled>
+                  <Button className="h-12 w-full rounded-2xl bg-primary text-white hover:opacity-90" disabled>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {t('generating')}
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-12 rounded-2xl border-[#d0d3da] bg-[#f4f5f6] text-[#242830]"
+                    className="h-12 rounded-2xl border-border bg-secondary text-foreground"
                     onClick={() => {
                       abortRef.current?.abort()
                       setPhase('idle')
@@ -618,7 +628,7 @@ export function RefinementStudioForm() {
                 </div>
               ) : (
                 <Button
-                  className="h-12 w-full rounded-2xl bg-[#191b22] text-white hover:bg-[#13151a] disabled:bg-[#9a9ca3] disabled:text-white"
+                  className="h-12 w-full rounded-2xl bg-primary text-white hover:opacity-90 disabled:bg-muted disabled:text-white"
                   disabled={!canGenerate}
                   onClick={handleSubmit}
                 >
@@ -639,8 +649,8 @@ export function RefinementStudioForm() {
           <div className="mb-4 flex items-start gap-3">
             <SectionIcon icon={Sparkles} className="mt-0.5" />
             <div>
-              <h2 className="text-[15px] font-semibold text-[#1a1d24]">{resultPanelTitle}</h2>
-              <p className="text-[13px] text-[#666d79]">{resultPanelSubtitle}</p>
+              <h2 className="text-[15px] font-semibold text-foreground">{resultPanelTitle}</h2>
+              <p className="text-[13px] text-muted-foreground">{resultPanelSubtitle}</p>
             </div>
           </div>
 
@@ -664,11 +674,11 @@ export function RefinementStudioForm() {
           {phase === 'idle' && resultAssets.length === 0 && cards.length === 0 ? (
             <div className="flex min-h-[620px] items-center justify-center">
               <div className="text-center">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#e8eaef] text-[#767b86]">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
                   <Sparkles className="h-8 w-8" />
                 </div>
-                <p className="text-[15px] text-[#5f6672]">{t('waiting')}</p>
-                <p className="mt-1 text-[15px] text-[#5f6672]">{t('waitingActionHint')}</p>
+                <p className="text-[15px] text-muted-foreground">{t('waiting')}</p>
+                <p className="mt-1 text-[15px] text-muted-foreground">{t('waitingActionHint')}</p>
               </div>
             </div>
           ) : phase === 'running' ? (
@@ -676,13 +686,7 @@ export function RefinementStudioForm() {
               <div className="flex flex-wrap content-start items-start gap-3">
                 {cards.map((card, i) =>
                   card.status === 'loading' ? (
-                    <div
-                      key={i}
-                      className="flex w-[220px] max-w-full items-center justify-center rounded-2xl border border-[#d0d4db] bg-[#eff1f4]"
-                      style={{ aspectRatio: previewAspectRatio }}
-                    >
-                      <Loader2 className="h-5 w-5 animate-spin text-[#6f737c]" />
-                    </div>
+                    <FluidPendingCard key={i} aspectRatio={previewAspectRatio} className="w-[220px] max-w-full rounded-2xl" />
                   ) : card.status === 'failed' ? (
                     <div key={i} className="w-[220px] max-w-full rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
                       {card.error ?? tc('error')}
@@ -690,7 +694,7 @@ export function RefinementStudioForm() {
                   ) : (
                     <div
                       key={i}
-                      className="w-[220px] max-w-full overflow-hidden rounded-2xl border border-[#d2d6de] bg-[#eef0f4] opacity-60"
+                      className="w-[220px] max-w-full overflow-hidden rounded-2xl border border-border bg-secondary opacity-60"
                       style={{ aspectRatio: previewAspectRatio }}
                     >
                       <img src={card.url!} alt={`result-${i + 1}`} className="w-full object-cover" />
@@ -719,7 +723,7 @@ export function RefinementStudioForm() {
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
               <Button
                 variant="outline"
-                className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
+                className="rounded-2xl border-border bg-surface text-foreground"
                 onClick={downloadAll}
                 disabled={activeResultAssets.length === 0 || downloadingAll}
               >
@@ -728,7 +732,7 @@ export function RefinementStudioForm() {
               </Button>
               <Button
                 variant="outline"
-                className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
+                className="rounded-2xl border-border bg-surface text-foreground"
                 onClick={retryFailed}
                 disabled={!cards.some((x) => x.status === 'failed') || downloadingAll}
               >
@@ -736,7 +740,7 @@ export function RefinementStudioForm() {
               </Button>
               <Button
                 variant="outline"
-                className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
+                className="rounded-2xl border-border bg-surface text-foreground"
                 onClick={handleSubmit}
                 disabled={!canGenerate || downloadingAll}
               >
@@ -745,7 +749,7 @@ export function RefinementStudioForm() {
               </Button>
               <Button
                 variant="outline"
-                className="rounded-2xl border-[#cfd3db] bg-[#f4f5f7] text-[#2b2f38]"
+                className="rounded-2xl border-border bg-surface text-foreground"
                 onClick={clearResultAssets}
                 disabled={resultAssets.length === 0 || downloadingAll}
               >

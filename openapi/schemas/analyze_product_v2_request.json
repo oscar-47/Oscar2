@@ -6,7 +6,7 @@
     "productImage": { "type": "string" },
     "productImages": { "type": "array", "items": { "type": "string" } },
     "promptProfile": { "type": "string", "enum": ["default", "ta-pro"], "default": "default" },
-    "requirements": { "type": "string", "default": "" },
+    "requirements": { "type": "string", "default": "", "maxLength": 300 },
     "imageCount": { "type": "integer", "minimum": 1, "default": 1 },
     "targetLanguage": { "type": "string", "default": "en" },
     "studioType": { "type": "string" },
@@ -19,6 +19,15 @@
     "clothingMode": { "type": "string" },
     "whiteBackground": { "type": "boolean" },
     "promptConfigKey": { "type": "string" },
+    "styleConstraint": {
+      "type": "object",
+      "properties": {
+        "selections": { "type": "object", "additionalProperties": { "type": "string" } },
+        "prompt": { "type": "string", "maxLength": 600 },
+        "source": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
     "ecomDetailModules": {
       "type": "array",
       "items": {

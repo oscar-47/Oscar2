@@ -94,7 +94,7 @@ create table if not exists public.system_config (
 
 insert into public.system_config(config_key, config_value)
 values
-  ('signup_bonus_credits', '20'::jsonb),
+  ('signup_bonus_credits', '30'::jsonb),
   ('daily_check_in_credits', '0'::jsonb),
   ('batch_concurrency', '8'::jsonb),
   ('credit_costs', '{"nano-banana":3,"nano-banana-pro":5,"turbo-1k":8,"turbo-2k":12,"turbo-4k":17}'::jsonb)
@@ -256,7 +256,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_signup_bonus integer := public.config_int('signup_bonus_credits', 20);
+  v_signup_bonus integer := public.config_int('signup_bonus_credits', 30);
 begin
   insert into public.profiles (id, email, purchased_credits)
   values (new.id, new.email, v_signup_bonus)

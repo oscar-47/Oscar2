@@ -19,7 +19,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f4f5f7]">
+    <div className="flex min-h-screen flex-col bg-surface">
       <DashboardNavbar userId={user.id} email={user.email ?? ''} />
       <main className="flex-1">
         {children}

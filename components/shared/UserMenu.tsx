@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useCredits } from '@/lib/hooks/useCredits'
-import { User, Coins, Clock, LogOut } from 'lucide-react'
+import { isAdminUser } from '@/types'
+import { User, Coins, Clock, LogOut, Users } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -24,6 +25,7 @@ export function UserMenu({ userId, email }: UserMenuProps) {
   const locale = useLocale()
   const router = useRouter()
   const { total, isLoading } = useCredits(userId)
+  const isAdmin = isAdminUser(email)
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -35,15 +37,17 @@ export function UserMenu({ userId, email }: UserMenuProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex h-10 w-10 items-center justify-center rounded-full border border-[#d8dbe1] bg-[#f2f3f5] text-[#6e7380] hover:bg-[#eceef2] hover:text-[#252b34] transition-colors outline-none">
+        <button
+          aria-label="User menu"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-secondary text-muted-foreground hover:bg-muted hover:text-foreground transition-colors outline-none"
+        >
           <User className="h-5 w-5" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56 rounded-2xl border-[#d6d9e0] bg-[#f7f7f8]">
+      <DropdownMenuContent align="end" className="w-56 rounded-2xl border-border bg-popover">
         {/* Email header */}
         <div className="px-3 py-3">
           <p className="text-sm font-medium truncate">{email}</p>
-          <p className="text-xs text-muted-foreground truncate">{email}</p>
         </div>
         <DropdownMenuSeparator />
 
@@ -59,7 +63,7 @@ export function UserMenu({ userId, email }: UserMenuProps) {
         <DropdownMenuItem asChild>
           <Link href={`/${locale}/pricing`} className="cursor-pointer">
             <Coins className="h-4 w-4 text-amber-500" />
-            <span>{isLoading ? '—' : `${total}`} {locale === 'zh' ? '积分' : 'Credits'}</span>
+            <span>{isLoading ? '—' : `${total}`} {t('credits' as Parameters<typeof t>[0])}</span>
           </Link>
         </DropdownMenuItem>
 
@@ -70,6 +74,15 @@ export function UserMenu({ userId, email }: UserMenuProps) {
             <span>{t('history' as Parameters<typeof t>[0])}</span>
           </Link>
         </DropdownMenuItem>
+
+        {isAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href={`/${locale}/users`} className="cursor-pointer">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <span>{t('users' as Parameters<typeof t>[0])}</span>
+            </Link>
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuSeparator />
 

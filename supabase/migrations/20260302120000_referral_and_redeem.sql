@@ -36,7 +36,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_signup_bonus integer := public.config_int('signup_bonus_credits', 20);
+  v_signup_bonus integer := public.config_int('signup_bonus_credits', 30);
   v_invite_code text;
   v_attempt integer := 0;
 begin

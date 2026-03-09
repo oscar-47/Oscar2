@@ -12,10 +12,12 @@ function coerceBoolean(value: unknown, fallback: boolean): boolean {
 }
 
 function coerceInteger(value: unknown, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.floor(value);
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
   if (typeof value === "string") {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) return Math.floor(parsed);
+    const normalized = value.trim();
+    if (!normalized) return fallback;
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) return Math.trunc(parsed);
   }
   return fallback;
 }
@@ -43,7 +45,7 @@ export async function getBooleanSystemConfig(
 
 export async function getIntegerSystemConfig(
   key: string,
-  fallback: number,
+  fallback = 0,
 ): Promise<number> {
   const value = await getSystemConfigValue(key);
   return coerceInteger(value, fallback);

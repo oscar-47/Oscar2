@@ -7,6 +7,7 @@ import { useEditorStore } from '@/lib/stores/editor-store'
 import { generateImage } from '@/lib/api/edge-functions'
 import { uploadFile } from '@/lib/api/upload'
 import { useWaitForJob } from '@/lib/hooks/useWaitForJob'
+import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
 import {
   getAvailableModels,
   getGenerationCreditCost,
@@ -107,14 +108,14 @@ export function QuickEditPanel() {
   const cost = computeCost()
 
   return (
-    <div className="absolute right-4 top-16 z-[10000] w-[340px] rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl">
+    <div className="absolute right-4 top-16 z-[10000] w-[340px] rounded-2xl border border-border bg-white shadow-2xl">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#f3f4f6] px-4 py-3">
-        <h3 className="text-sm font-semibold text-[#111827]">{t('quickEdit')}</h3>
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <h3 className="text-sm font-semibold text-foreground">{t('quickEdit')}</h3>
         <button
           type="button"
           onClick={closeQuickEdit}
-          className="rounded-md p-1 text-[#9ca3af] hover:text-[#6b7280] transition-colors"
+          className="rounded-md p-1 text-text-tertiary hover:text-muted-foreground transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
@@ -127,7 +128,7 @@ export function QuickEditPanel() {
           onChange={(e) => setQuickEditField('prompt', e.target.value)}
           placeholder={t('quickEditPrompt')}
           rows={3}
-          className="w-full resize-none rounded-lg border border-[#d1d5db] bg-[#f9fafb] px-3 py-2 text-sm text-[#111827] placeholder:text-[#9ca3af] focus:border-[#6366f1] focus:outline-none focus:ring-1 focus:ring-[#6366f1]"
+          className="w-full resize-none rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-text-tertiary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         />
 
         {/* Reference image upload */}
@@ -135,7 +136,7 @@ export function QuickEditPanel() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-[#d1d5db] text-[#9ca3af] hover:border-[#6366f1] hover:text-[#6366f1] transition-colors overflow-hidden"
+            className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-border text-text-tertiary hover:border-primary hover:text-primary transition-colors overflow-hidden"
           >
             {quickEdit.referencePreview ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -159,7 +160,7 @@ export function QuickEditPanel() {
 
         {/* Model */}
         <div>
-          <label className="mb-1 block text-xs font-medium text-[#6b7280]">
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
             {t('quickEditModel')}
           </label>
           <select
@@ -169,7 +170,7 @@ export function QuickEditPanel() {
               setQuickEditField('model', nextModel)
               setQuickEditField('imageSize', sanitizeImageSizeForModel(nextModel, quickEdit.imageSize))
             }}
-            className="w-full rounded-lg border border-[#d1d5db] bg-white px-2.5 py-1.5 text-sm text-[#111827] focus:border-[#6366f1] focus:outline-none"
+            className="w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-sm text-foreground focus:border-primary focus:outline-none"
           >
             {getAvailableModels(userEmail).map((opt) => (
               <option key={opt.value} value={opt.value}>{locale.startsWith('zh') ? opt.tierLabel.zh : opt.tierLabel.en}</option>
@@ -180,13 +181,13 @@ export function QuickEditPanel() {
         {/* Aspect Ratio */}
         <div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-[#6b7280]">
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
               {t('quickEditRatio')}
             </label>
             <select
               value={quickEdit.aspectRatio}
               onChange={(e) => setQuickEditField('aspectRatio', e.target.value as AspectRatio)}
-              className="w-full rounded-lg border border-[#d1d5db] bg-white px-2.5 py-1.5 text-sm text-[#111827] focus:border-[#6366f1] focus:outline-none"
+              className="w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-sm text-foreground focus:border-primary focus:outline-none"
             >
               {RATIO_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -200,7 +201,7 @@ export function QuickEditPanel() {
           <button
             type="button"
             onClick={closeQuickEdit}
-            className="flex-1 rounded-lg border border-[#d1d5db] py-2 text-sm font-medium text-[#6b7280] hover:bg-[#f9fafb] transition-colors"
+            className="flex-1 rounded-lg border border-border py-2 text-sm font-medium text-muted-foreground hover:bg-secondary transition-colors"
           >
             {t('quickEditCancel')}
           </button>
@@ -208,7 +209,7 @@ export function QuickEditPanel() {
             type="button"
             onClick={() => void handleRun()}
             disabled={!quickEdit.prompt.trim() || quickEdit.isProcessing}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] py-2 text-sm font-medium text-white hover:shadow-md disabled:opacity-50 transition-all"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-accent py-2 text-sm font-medium text-accent-foreground hover:shadow-md disabled:opacity-50 transition-all"
           >
             {quickEdit.isProcessing ? (
               <Loader2 className="h-4 w-4 animate-spin" />

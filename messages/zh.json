@@ -1,16 +1,19 @@
 {
   "nav": {
-    "studioGenesis": "主图生成",
+    "studioGenesis": "主图",
+    "studioGenesis2": "主图",
     "aestheticMirror": "风格复刻",
-    "clothingStudio": "服装详情组图",
-    "ecomStudio": "一键生图",
-    "refinementStudio": "图片精修",
-    "pricing": "立即购买",
+    "clothingStudio": "服装",
+    "ecomStudio": "详情图",
+    "refinementStudio": "精修",
+    "pricing": "套餐",
     "history": "历史记录",
     "profile": "个人中心",
+    "users": "用户看板",
     "signIn": "登录",
     "signUp": "注册",
-    "signOut": "退出登录"
+    "signOut": "退出登录",
+    "credits": "积分"
   },
   "credits": {
     "label": "积分",
@@ -33,71 +36,94 @@
     "checkEmail": "请查收邮件中的验证码",
     "otpPlaceholder": "输入邮件里的验证码",
     "welcome": "欢迎回来",
-    "createAccount": "创建你的账户"
+    "createAccount": "创建你的账户",
+    "back": "← 返回"
   },
   "landing": {
     "nav": {
-      "tagline": "服装电商AI图片工具",
-      "cta": "进入我的工作台"
+      "tagline": "Shopix 电商生图工具",
+      "cta": "开始使用"
     },
     "hero": {
-      "badge": "AI 商务视觉引擎",
-      "title": "AI 驱动的电商视觉生产力",
-      "subtitle": "从产品拍摄到商业精修，三大核心引擎覆盖电商出图全链路",
-      "cta": "进入我的工作台",
-      "platformHint": "已适配国内外30+主流电商风格与尺寸规范",
+      "badge": "电商生图与 Shopix 商品图生成",
+      "title": "秒出图 张张能卖货",
+      "subtitle": "上传商品图，自动生成主图、详情页素材和精修图片。覆盖淘宝、天猫、京东、Amazon 等全平台。",
+      "cta": "立即体验",
+      "platformHint": "适配全球主流电商平台",
       "platforms": "淘宝|天猫|京东|拼多多|抖音电商|快手电商|小红书|微信小店|亚马逊|Shopee|Lazada|速卖通|SHEIN|TikTok Shop",
-      "feature1Title": "主图生成",
-      "feature1Desc": "AI 分析产品特征与卖点，智能生成高转化电商主图",
-      "feature2Title": "一键生图",
-      "feature2Desc": "上传参考图，AI 规划详情页模块，一键生成全套素材",
-      "feature3Title": "图片精修",
-      "feature3Desc": "智能分析材质细节，批量输出商业级精修效果"
+      "feature1Title": "Shopix 电商主图生成",
+      "feature1Desc": "从原始商品图快速生成高转化电商主图",
+      "feature2Title": "详情页素材生成",
+      "feature2Desc": "自动规划模块并输出整套电商详情页素材",
+      "feature3Title": "商品图片精修",
+      "feature3Desc": "批量完成光影、材质、细节优化与杂物清理"
     },
     "features": {
       "section1": {
-        "title": "主图生成",
-        "subtitle": "上传产品图，AI 智能分析产品特征与核心卖点，快速生成高转化电商主图",
-        "cap1": "智能产品分析",
-        "cap1Desc": "AI 自动识别材质、光影、纹理等产品特征，精准还原商品质感",
-        "cap2": "30+ 平台适配",
-        "cap2Desc": "淘宝、天猫、京东、亚马逊等主流平台尺寸与风格一键切换",
-        "cap3": "风格自由定制",
-        "cap3Desc": "场景风格、灯光、构图、色调、材质等参数自由调节",
+        "title": "Shopix 电商主图生成",
+        "subtitle": "上传商品图后，Shopix 会分析产品特征与卖点，生成适配平台要求的电商主图。",
+        "cap1": "商品特征分析",
+        "cap1Desc": "自动识别材质、颜色、纹理与卖点，减少人工整理需求",
+        "cap2": "平台化出图",
+        "cap2Desc": "覆盖 Amazon、TikTok Shop、淘宝、天猫、京东等主流电商平台",
+        "cap3": "品牌安全控制",
+        "cap3Desc": "可控场景、灯光、构图与调性，保证商品识别度和品牌一致性",
         "step1": "上传产品图",
-        "step2": "AI 智能分析",
-        "step3": "生成高转化主图"
+        "step2": "分析商品卖点",
+        "step3": "生成电商主图"
       },
       "section2": {
-        "title": "一键生图",
-        "subtitle": "上传多角度参考图，AI 自动规划详情页模块，一键生成全套电商素材",
-        "cap1": "智能模块规划",
-        "cap1Desc": "AI 分析产品卖点，自动规划详情页各模块内容与排版",
-        "cap2": "多平台尺寸适配",
-        "cap2Desc": "拼多多、抖音、小红书、淘宝详情页比例一键切换",
-        "cap3": "批量高效出图",
-        "cap3Desc": "一次分析多图并发生成，大幅提升出图效率",
+        "title": "详情页素材生成",
+        "subtitle": "从多角度参考图出发，自动规划详情页模块，并批量生成完整的电商详情页素材。",
+        "cap1": "Shopix 模块规划",
+        "cap1Desc": "围绕核心卖点自动组织详情页内容与信息层级",
+        "cap2": "海内外平台适配",
+        "cap2Desc": "不同平台版式与尺寸要求一键切换，不必重复返工",
+        "cap3": "批量高效生图",
+        "cap3Desc": "一次分析后并发生成多张素材，加快新品上架和活动投放",
         "step1": "上传多角度参考图",
-        "step2": "AI 规划详情模块",
-        "step3": "一键生成全套素材"
+        "step2": "规划详情页模块",
+        "step3": "生成整套素材"
       },
       "section3": {
-        "title": "图片精修",
-        "subtitle": "一键智能精修，AI 分析产品材质细节，生成商业级精修效果",
-        "cap1": "智能材质分析",
-        "cap1Desc": "自动识别产品材质与细节特征，定制专属精修方案",
-        "cap2": "批量处理",
-        "cap2Desc": "最多 50 张图片同时精修，一键输出所有结果",
-        "cap3": "商业级品质",
-        "cap3Desc": "去除瑕疵、增强细节、优化光影，输出商业级品质效果",
+        "title": "商品图片精修",
+        "subtitle": "用 Shopix 完成商品图片精修，去杂物、提细节、修光影，快速输出可直接投放的商业图。",
+        "cap1": "材质感知精修",
+        "cap1Desc": "识别布料、金属、塑料等材质特征，尽量保留真实商品质感",
+        "cap2": "批量处理工作流",
+        "cap2Desc": "单次最多精修 50 张商品图片，适合目录与活动图批量处理",
+        "cap3": "商业级视觉输出",
+        "cap3Desc": "提升清晰度、质感与光影表现，满足电商商品图片精修需求",
         "step1": "批量上传原图",
-        "step2": "AI 智能分析",
-        "step3": "商业级精修输出"
+        "step2": "分析表面与材质",
+        "step3": "导出精修结果"
+      }
+    },
+    "showcase": {
+      "title": "原图 vs Shopix 效果",
+      "subtitle": "无需专业摄影，上传商品图即可生成高品质电商素材",
+      "beforeLabel": "原图",
+      "afterLabel": "Shopix 效果",
+      "beforeAlt": "商品原图 {index}",
+      "afterAlt": "Shopix 生成效果 {index}",
+      "videoTitle": "看看实际操作",
+      "video": {
+        "spec": "16:9 · 1920×1080",
+        "demo": {
+          "label": "产品演示",
+          "title": "30 秒生成电商主图",
+          "desc": "上传商品照片到生成高转化主图的完整流程演示"
+        },
+        "workflow": {
+          "label": "工作流程",
+          "title": "批量生图工作流",
+          "desc": "展示如何一次性生成多张素材，提升上新效率"
+        }
       }
     },
     "bottomCta": {
-      "title": "助力品牌商家10倍提升拍摄&修图效率",
-      "button": "你的AI商拍神器",
+      "title": "准备好让 Shopix 帮你出图了吗？",
+      "button": "立即体验",
       "platforms": "淘宝|天猫|京东|拼多多|抖音电商|快手电商|小红书|微信小店|亚马逊|Shopee|Lazada|速卖通|SHEIN|TikTok Shop"
     },
     "footer": {
@@ -153,6 +179,7 @@
       "platformTiktok": "TikTok Shop",
       "platformHint": "该平台最少需要 {min} 张图片",
       "platformMinWarning": "请至少选择 {min} 张图片以满足该平台要求",
+      "analysisTimeout": "分析耗时异常偏长，请重试。如果持续出现，可能是队列 worker 没有正常处理任务。",
       "reanalyzeWarning": "关键参数已变更，请重新分析以更新设计方案。",
       "reanalyze": "重新分析",
       "templateStructured": "使用模板",
@@ -210,6 +237,65 @@
         }
       }
     },
+    "genesis2": {
+      "badge": "商业主图工作流",
+      "title": "主图生成",
+      "description": "上传产品素材与主图要求，自动生成商业摄影蓝图并完成整套主图输出。",
+      "productSource": "产品素材",
+      "productSourceDesc": "上传清晰、干净、光线稳定的产品图。",
+      "uploadHint": "多图上传建议仅保留必要角度或 SKU 图，图片不是越多越好。",
+      "briefTitle": "Design Brief",
+      "briefDesc": "描述产品 USP、视觉方向和希望强调的卖点。",
+      "briefPlaceholder": "描述你产品的核心卖点和想要的主图风格",
+      "outputLanguage": "输出语言",
+      "analyzeButton": "Analyze & Blueprint",
+      "analyzingButton": "分析蓝图中...",
+      "generateButton": "确认生成 {count} 张主图",
+      "generatingButton": "生成中...",
+      "newGeneration": "新建生成",
+      "backToEdit": "返回重新编辑",
+      "livePreviewTitle": "Live Preview",
+      "livePreviewSubtitle": "先上传产品图并填写简报，再开始分析。",
+      "emptyStateLine1": "上传产品图并填写 Design Brief。",
+      "emptyStateLine2": "点击 Analyze & Blueprint 开始生成主图蓝图。",
+      "analyzingTitle": "Analyzing",
+      "analyzingSubtitle": "正在上传素材并分析主图蓝图。",
+      "previewTitle": "Blueprint Preview",
+      "previewSubtitle": "确认整体设计规范与逐图蓝图内容后开始生成。",
+      "generatingTitle": "Generating",
+      "generatingSubtitle": "正在根据确认后的蓝图生成主图。",
+      "resultsTitle": "生成结果",
+      "resultsSubtitle": "结果会保存在当前主图生成会话历史中。",
+      "analysisTimeout": "分析耗时异常偏长，请重试。如果持续出现，可能是队列 worker 没有正常处理任务。",
+      "promptsMissing": "提示词返回为空，请重新分析或稍后重试。",
+      "allImagesFailed": "所有图片生成失败，请检查设置后重试。",
+      "partialFailed": "{count} 张图片生成失败",
+      "quantityValue": "{count} 张图片",
+      "imagePlan": "图片规划",
+      "imagePlanCount": "共 {count} 张图片，点击可编辑标题、描述与设计内容",
+      "designSpecs": "整体设计规范",
+      "designSpecsDesc": "所有图片遵循的统一视觉标准",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "addPlan": "新增图片方案",
+      "selectedCount": "已选 {selected} / 共 {total} 张",
+      "generatedPrompt": "生成提示词",
+      "analyzingStep1": "上传产品素材中...",
+      "analyzingStep2": "分析产品特征中...",
+      "analyzingStep3": "整理设计蓝图中...",
+      "analyzingStep4": "准备出图规划中...",
+      "generatingStatus": "正在根据商业蓝图生成图片...",
+      "stepInput": "输入",
+      "stepAnalyzing": "分析中",
+      "stepPreview": "蓝图预览",
+      "stepGenerating": "生成中",
+      "stepComplete": "完成",
+      "stepUpload": "上传图片中",
+      "stepAnalyze": "分析产品中",
+      "stepPrompts": "生成提示词中",
+      "stepGenerate": "生成图片中",
+      "stepDone": "完成"
+    },
     "aestheticMirrorSteps": {
       "upload": "上传图片中",
       "generate": "克隆风格中",
@@ -231,9 +317,9 @@
     "aestheticMirror": {
       "title": "风格复刻",
       "description": "上传参考图和产品素材图，一键复刻参考图的视觉风格。",
-      "heroBadge": "AI 驱动",
-      "heroTitle": "一键复刻爆款详情页风格",
-      "heroDescription": "上传您喜欢的设计参考图和产品素材，AI 将智能融合风格与产品特性，生成专属于您的高转化详情图",
+      "heroBadge": "风格规划",
+      "heroTitle": "风格复刻工作室",
+      "heroDescription": "上传参考图和产品素材图，AI 先提炼风格特征与画面语言，再生成对应商品图。",
       "singleMode": "单图复刻",
       "batchMode": "批量复刻",
       "batchComingSoon": "批量复刻即将支持",
@@ -312,10 +398,10 @@
       "variant3": "微距细节图",
       "threeDEnabled": "3D幽灵模特",
       "creditCost": "消耗：{cost} 积分",
-      "badge": "AI 服饰",
-      "pageTitle": "智能生成服装详情图组",
-      "pageDescriptionLine1": "上传服装产品图，AI 智能分析款式、面料与细节，自动生成白底精修、3D 立体展示",
-      "pageDescriptionLine2": "及细节特写等电商级图组",
+      "badge": "图组规划",
+      "pageTitle": "服装图组工作室",
+      "pageDescriptionLine1": "上传服装产品图或主体图，选择生成类型，AI 先分析版型、细节与图组方案，",
+      "pageDescriptionLine2": "再按规划输出白底图、立体展示图和细节特写图。",
       "tabModelTryOn": "模特试穿",
       "tabBasicPhotoSet": "基础图集",
       "stepUpload": "上传图片",
@@ -418,12 +504,157 @@
       "sharedMasterCopy": "共享主文案",
       "clearForVisualOnly": "清空后将按纯视觉生成",
       "sharedCopyPlaceholder": "输入或编辑共享主文案；清空后将按纯视觉生成。",
-      "imageIndexLabel": "图片 {index}"
+      "imageIndexLabel": "图片 {index}",
+      "generationTypeSelector": {
+        "title": "选择生成类型",
+        "subtitle": "选择需要生成的图片类型",
+        "selectedCount": "已选 {count} 项",
+        "whiteBg": {
+          "title": "白底精修图",
+          "description": "纯白背景的产品精修展示图",
+          "front": "正面",
+          "back": "背面"
+        },
+        "threeD": {
+          "title": "3D立体效果图",
+          "description": "具有立体感和层次感的产品展示",
+          "whiteBackground": "白底图"
+        },
+        "mannequin": {
+          "title": "人台图",
+          "description": "使用人台展示服装的专业效果图",
+          "whiteBackground": "白底图"
+        },
+        "detail": {
+          "title": "细节特写图",
+          "description": "展示产品细节和材质的特写图"
+        },
+        "sellingPoint": {
+          "title": "卖点图",
+          "description": "突出产品核心卖点的专属展示图"
+        }
+      },
+      "modelImageSection": {
+        "label": "主体图片",
+        "generateButton": "AI生成模特",
+        "uploadLabel": "上传主体图片或使用AI生成真人模特"
+      },
+      "defaultPlans": {
+        "designSpecs": "所有图片须保持统一的服装电商视觉规范，强调材质、版型与细节展示。",
+        "whiteBg": {
+          "front": {
+            "title": "白底精修图（正面）",
+            "description": "展示服装正面版型与颜色细节",
+            "designContent": "白底平铺或模特正面展示，重点表现服装轮廓、主色和做工细节。"
+          },
+          "back": {
+            "title": "白底精修图（背面）",
+            "description": "展示服装背面版型与工艺细节",
+            "designContent": "白底背面展示，清晰呈现后背剪裁与结构。"
+          }
+        },
+        "threeD": {
+          "front": {
+            "title": "3D立体效果图（正面）",
+            "description": "模特正面穿着展示，突出服装正面版型与立体感",
+            "designContent": "模特正面站姿穿着展示，通过光影表现服装正面体积感与版型轮廓，保留材质纹理，统一背景与风格。"
+          },
+          "back": {
+            "title": "3D立体效果图（背面）",
+            "description": "模特背面穿着展示，呈现背部剪裁与结构",
+            "designContent": "模特背面站姿穿着展示，清晰呈现后背剪裁、缝线与结构细节，保留材质纹理，与正面图保持统一模特、风格与背景。"
+          },
+          "side": {
+            "title": "3D立体效果图（侧面）",
+            "description": "模特侧面穿着展示，展现服装侧面层次",
+            "designContent": "模特侧面站姿穿着展示，通过侧面角度表现服装层次感与廓形，保留材质纹理，与正面图保持统一模特、风格与背景。"
+          }
+        },
+        "mannequin": {
+          "title": "人台展示图",
+          "description": "人台/模特架展示，严格保留衣服原始材质与外观",
+          "designContent": "人台或模特架展示服装，严格保留衣服的原始材质和外观：颜色、款式、剪裁、纹理、面料质感不做任何改变。模拟摄影棚或自然光下的真实光影效果，包括高光、阴影和面料反光。本质是换场景/换人台展示，不是重新设计衣服。"
+        },
+        "detail": {
+          "title": "细节特写图 {index}",
+          "description": "放大展示面料与工艺细节",
+          "designContent": "聚焦领口、袖口、印花或走线，保证细节清晰度和质感。"
+        },
+        "sellingPoint": {
+          "title": "卖点展示图 {index}",
+          "description": "突出产品核心卖点",
+          "designContent": "围绕核心卖点构图，强化视觉层级与记忆点。"
+        },
+        "fallback": {
+          "title": "图片方案 1",
+          "description": "请编辑该图片方案的标题和描述",
+          "designContent": "请基于产品特征补充该图片方案内容。"
+        }
+      },
+      "tryOnDefaultPlans": {
+        "whiteBg": {
+          "front": {
+            "title": "白底精修图（正面）",
+            "description": "参考主体正面穿着展示，突出服装正面版型与穿着状态",
+            "designContent": "图片类型：白底精修图（正面）\n主体识别：保持参考主体身份或物种一致，使用正面站姿或正面面对镜头。\n服装识别：完整保留服装正面颜色、材质、版型、图案与关键工艺。\n试穿策略：服装真实穿在参考主体身上，不漂浮、不改款，正面展示穿着效果。\n构图方案：纯白背景，主体居中，突出服装正面轮廓与贴合状态。\n光影方案：柔和影棚光，保证材质纹理和体积感。\n背景描述：纯白无干扰背景。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：干净、专业、真实、商业电商。"
+          },
+          "back": {
+            "title": "白底精修图（背面）",
+            "description": "参考主体背面穿着展示，突出服装背部结构与细节",
+            "designContent": "图片类型：白底精修图（背面）\n主体识别：保持参考主体身份或物种一致，使用背向镜头的稳定姿态。\n服装识别：完整保留服装背面颜色、材质、结构与背部工艺。\n试穿策略：服装真实穿在参考主体身上，不漂浮、不改款，背面展示结构细节。\n构图方案：纯白背景，主体居中，突出背部版型与穿着贴合。\n光影方案：柔和影棚光，清晰表现背部轮廓和材质。\n背景描述：纯白无干扰背景。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：干净、专业、真实、商业电商。"
+          }
+        },
+        "threeD": {
+          "title": "3D立体效果图",
+          "description": "突出服装穿在参考主体身上的立体感、廓形与层次",
+          "designContent": "图片类型：3D立体效果图\n主体识别：保持参考主体身份或物种一致，保留主体体态与姿势方向。\n服装识别：完整保留服装颜色、材质、轮廓和关键细节。\n试穿策略：强调服装穿在主体身上的体积感、层次感和自然贴合，不将主体变成 3D 模型或无人台。\n构图方案：中近景或七分身构图，突出服装轮廓与穿着层次。\n光影方案：方向性柔光增强立体感和褶皱层次。\n背景描述：简洁商业背景或纯净过渡背景。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：立体、层次、质感、商业感。"
+        },
+        "mannequin": {
+          "title": "人台图",
+          "description": "主体标准展示图，严格保留服装原始材质与外观",
+          "designContent": "图片类型：人台图\n主体识别：保持参考主体身份或物种一致，不得替换为真实无人台。\n服装识别：严格保留衣服原始材质、颜色、款式、剪裁、纹理和面料质感。\n试穿策略：将该类型解释为主体标准展示图，主体自然穿着服装，强调标准化展示与材质真实感。\n构图方案：稳定标准展示构图，突出服装整体外观。\n光影方案：真实棚拍或自然光下的高光、阴影和面料反光。\n背景描述：简洁标准背景，不干扰服装主体。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：标准化、真实、材质感、专业展示。"
+        },
+        "detail": {
+          "title": "细节特写图 {index}",
+          "description": "放大展示服装与主体接触部位的面料、工艺与贴合细节",
+          "designContent": "图片类型：细节特写图\n主体识别：保持参考主体身份或物种一致，聚焦局部穿着部位。\n服装识别：突出领口、袖口、纽扣、面料纹理或缝线等关键细节。\n试穿策略：展示服装穿在主体身上的局部贴合与真实材质，不改变服装结构。\n构图方案：微距或近景构图，聚焦一个高价值细节。\n光影方案：侧向柔光增强纹理与工艺。\n背景描述：浅景深或柔化背景。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：精细、质感、工艺、清晰。"
+        },
+        "sellingPoint": {
+          "title": "卖点展示图 {index}",
+          "description": "围绕核心卖点构图，突出主体穿着后的视觉记忆点",
+          "designContent": "图片类型：卖点展示图\n主体识别：保持参考主体身份或物种一致，围绕主体穿着后的使用感或视觉冲击展开。\n服装识别：突出服装最关键的卖点，如版型、功能、材质或设计亮点。\n试穿策略：让服装真实穿在主体身上，通过构图和动作突出卖点，不漂移服装设计。\n构图方案：中景或特写结合，强化卖点区域与视觉层级。\n光影方案：强调光或轮廓光引导焦点。\n背景描述：服务卖点表达的简洁商业场景。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：高转化、聚焦、记忆点、商业感。"
+        },
+        "fallback": {
+          "title": "主体试穿方案 1",
+          "description": "参考主体穿着展示方案",
+          "designContent": "图片类型：主体试穿展示\n主体识别：保持参考主体身份或物种一致。\n服装识别：保持颜色、材质、版型与关键细节一致。\n试穿策略：服装真实穿在参考主体身上。\n构图方案：中景商业构图。\n光影方案：柔和商业光。\n背景描述：简洁背景。\n配色方案：精确还原服装色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：真实、专业、商业电商。"
+        }
+      },
+      "tryOnFallbackSpecs": {
+        "title": "主体试穿设计规范",
+        "visualThemeTitle": "核心视觉基调",
+        "visualThemeDirection": "整体方向：真实自然的商业试穿展示",
+        "visualThemeBackground": "背景环境：简洁干净，不干扰主体与服装",
+        "visualThemeColorTone": "色彩调性：以服装真实色彩为核心",
+        "photoSpecsTitle": "全局摄影参数建议",
+        "photoSpecsLens": "镜头建议：50mm-85mm 商业人像或主体展示镜头",
+        "photoSpecsLighting": "布光原则：柔和主光搭配轮廓光，保留材质纹理",
+        "photoSpecsQuality": "画质要求：高清、锐利、无明显噪点",
+        "subjectSummaryTitle": "主体识别摘要",
+        "subjectSummaryType": "主体类型：以参考主体图为准，保持身份或物种一致",
+        "subjectSummaryLock": "锁定规则：不得人化动物，不得动物化人类，不得改变体态结构",
+        "garmentTraitsTitle": "服装基础特征",
+        "garmentTraitsPreserve": "保持服装颜色、材质、版型、图案、logo、结构和关键工艺细节",
+        "garmentTraitsWear": "服装必须真实穿在主体身上，不能漂浮或改款",
+        "typographyTitle": "文字系统规范",
+        "typographyVisualOnly": "默认纯视觉，无新增文字",
+        "typographyLanguage": "若需文字，必须遵守目标语言约束"
+      }
     },
     "refinementStudio": {
-      "heroBadge": "AI 产品精修",
-      "title": "一键智能产品精修",
-      "description": "上传产品图片，AI 自动分析并优化画质、去除瑕疵、增强细节，让您的产品图更专业",
+      "heroBadge": "精修规划",
+      "title": "图片精修工作室",
+      "description": "上传产品图片与精修要求，AI 先分析问题和处理方向，再批量输出精修结果。",
       "resultTitle": "精修结果",
       "resultSubtitle": "上传产品图片后查看精修效果",
       "uploadProduct": "上传产品图",
@@ -514,6 +745,7 @@
       "requirements": "需求描述（可选）",
       "requirementsPlaceholder": "描述你想要的场景、风格或背景…",
       "model": "模型",
+      "modelTextHint": "有文字需求建议选择均衡及以上模型。",
       "imageSize": "分辨率",
       "aspectRatio": "宽高比",
       "imageCount": "生成数量",
@@ -566,7 +798,7 @@
     },
     "usage": {
       "title": "生成消耗参考",
-      "speed": "极速：15积分/张",
+      "fast": "极速：15积分/张",
       "balanced": "均衡：30积分/张",
       "quality": "高质：50积分/张"
     },

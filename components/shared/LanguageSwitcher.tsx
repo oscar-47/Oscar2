@@ -30,22 +30,23 @@ export function LanguageSwitcher() {
       <DropdownMenuTrigger asChild>
         <button
           disabled={isPending}
-          className="flex h-9 items-center gap-1.5 rounded-full px-3 text-sm text-[#666b78] hover:bg-[#eceef2] hover:text-[#222731] transition-colors outline-none"
+          aria-label="Switch language"
+          className="flex h-9 items-center gap-1.5 rounded-full px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors outline-none"
         >
           <Globe className="h-4 w-4" />
           <span className="text-xs font-medium uppercase">{locale === 'zh' ? 'ZH' : 'EN'}</span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-36 rounded-2xl border-[#d6d9e0] bg-[#f7f7f8]">
+      <DropdownMenuContent align="end" className="w-36 rounded-2xl border-border bg-popover">
         <DropdownMenuItem
           onClick={() => switchLocale('en')}
-          className={locale === 'en' ? 'font-medium bg-[#eceef2]' : ''}
+          className={locale === 'en' ? 'font-medium bg-muted' : ''}
         >
           English
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => switchLocale('zh')}
-          className={locale === 'zh' ? 'font-medium bg-[#eceef2]' : ''}
+          className={locale === 'zh' ? 'font-medium bg-muted' : ''}
         >
           中文
         </DropdownMenuItem>

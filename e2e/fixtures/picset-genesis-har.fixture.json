@@ -1,0 +1,81 @@
+{
+  "source": "picsetai.com.har",
+  "captured_at": "2026-03-09",
+  "analysis_request": {
+    "productImage": "temp/example/product_0.png",
+    "productImages": ["temp/example/product_0.png"],
+    "requirements": "A sleek iPhone case made of biodegradable material, featuring a dynamic iridescent liquid metal surface that shifts colors gently, reflecting daily mood changes. Soft pastel gradients merging with futuristic holographic patterns, elegant and tech-forward, minimalistic design with a subtle glossy finish. Product photography style, soft studio lighting, 8k resolution, ultra-detailed, clean white background.",
+    "uiLanguage": "en",
+    "targetLanguage": "en",
+    "imageCount": 1,
+    "trace_id": "fixture-trace-id"
+  },
+  "blueprint": {
+    "images": [
+      {
+        "title": "The Future of Fluid Protection",
+        "description": "A high-angle hero shot showcasing the iridescent liquid metal texture of the iPhone case against a clean, minimalist backdrop.",
+        "design_content": "## Image [1]: The Future of Fluid Protection\n\n**Design Goal**: A high-angle hero shot showcasing the iridescent liquid metal texture of the iPhone case against a clean, minimalist backdrop.\n\n**Product Appearance**: The subject in this image must stay strictly consistent with the same SKU and product from the reference image. The product appearance should match the uploaded product; the true dominant color is Iridescent Pearl (#D9D3F8); the material is biodegradable liquid-metal shell; Key features include precise camera cutouts, slim-fit profile, reflective holographic finish.\n\n**In-Graphic Elements**:\n- Decorative elements: floating glass-like spheres and subtle light refraction streaks that reinforce the hero selling point.\n- Unified style direction: futuristic minimal / soft rim light / centered hero composition\n- Safe whitespace: keep roughly 30%-40% usable negative space for typography or breathing room without crowding the product.\n\n**Composition Plan**:\n- Product Proportion: product occupies roughly 65% of the frame\n- Layout Method: central vertical alignment with a dynamic 15-degree tilt\n- Text Area: reserve the top-left safe zone for headline and the lower-center zone for support copy without covering the product\n\n**Content Elements**:\n- Focus of Display: the interplay of soft pastel gradients across the liquid metal surface\n- Key Selling Points: biodegradable material, iridescent finish, holographic pattern\n- Background Elements: pure white studio floor with a soft diffused shadow and minimalist white backdrop\n- Decorative Elements: subtle rainbow flares, glass-like spheres, and restrained refraction details\n\n**Text Content** (Using English):\n- Main Title: Dynamic Iridiscence\n- Subtitle: Shifting colors to match your daily mood.\n- Description Text: Crafted from premium biodegradable materials with a futuristic holographic finish.\n\n**Atmosphere Creation**:\n- Mood Keywords: Futuristic, Ethereal, Sophisticated, Sustainable\n- Light and Shadow Effects: soft top-down key light with lavender and soft cyan rim light, shallow depth, crisp material highlights"
+      }
+    ],
+    "design_specs": "# Overall Design Specifications\n\n> All images must follow the unified specifications below to ensure visual consistency\n\n## Color System\n- Primary Color: Iridescent Pearl (a shifting spectrum of soft cyan, magenta, and lavender)\n- Secondary Color: Holographic Silver for high-tech accents and edge highlights\n- Background Color: Pure Minimalist White (#FFFFFF)\n\n## Font System\n- Heading Font: Helvetica Neue Light or similar sans serif\n- Body Font: Inter Regular\n- Hierarchy: Heading:Subtitle:Body = 3:1.8:1\n\n## Visual Language\n- Decorative Elements: soft-edged geometric shapes, floating glass-like spheres, and subtle liquid-metal ripples\n- Icon Style: ultra-thin linear icons with a slight metallic gradient\n- Negative Space Principle: high utilization of white space to emphasize the premium holographic finish\n\n## Photography Style\n- Lighting: soft studio key lighting with secondary colored rim lights to catch the iridescent texture\n- Depth of Field: shallow (f/2.8) to isolate the product texture\n- Camera Parameter Reference: ISO 100, 85mm Prime Lens, Shutter 1/125\n\n## Quality Requirements\n- Resolution: 8K\n- Style: high-end technology lifestyle aesthetic\n- Realism: hyper-realistic with accurate material physics",
+    "product_summary": "A sleek biodegradable iPhone case with an iridescent liquid metal surface and futuristic holographic finish.",
+    "product_visual_identity": {
+      "primary_color": "Iridescent Pearl (#D9D3F8)",
+      "secondary_colors": ["Holographic Silver", "Soft Cyan", "Lavender"],
+      "material": "biodegradable liquid-metal shell",
+      "key_features": ["precise camera cutouts", "slim-fit profile", "reflective holographic finish"]
+    },
+    "copy_analysis": {
+      "mode": "product-inferred",
+      "source_brief": "",
+      "brief_summary": "Short-form hero copy that highlights iridescence and sustainable material.",
+      "product_summary": "A sleek biodegradable iPhone case with an iridescent liquid metal surface and futuristic holographic finish.",
+      "resolved_output_language": "en",
+      "shared_copy": "Dynamic Iridiscence\nShifting colors to match your daily mood.",
+      "can_clear_to_visual_only": true,
+      "per_plan_adaptations": [
+        {
+          "plan_index": 0,
+          "plan_type": "hero",
+          "copy_role": "headline+support",
+          "adaptation_summary": "Place the headline in the top-left safe zone, keep the support copy below it, and center the short body line at the bottom without covering the product."
+        }
+      ]
+    }
+  },
+  "expected_prompt_object": {
+    "title": "The Future of Fluid Protection",
+    "negative_prompt_contains": [
+      "blurry",
+      "wrong colorway",
+      "missing logo"
+    ],
+    "prompt_contains": [
+      "Subject:",
+      "Composition:",
+      "Background:",
+      "Lighting:",
+      "Color scheme:",
+      "Material details:",
+      "Text layout:",
+      "Inset images:",
+      "Atmosphere:",
+      "Style:",
+      "Quality:"
+    ],
+    "exact_prompt": "Subject: The subject in this image must stay strictly consistent with the same SKU and product from the reference image. The product appearance should match the uploaded product; the true dominant color is Iridescent Pearl (#D9D3F8); the material is biodegradable liquid-metal shell; Key features include precise camera cutouts, slim-fit profile, reflective holographic finish. Composition: product occupies roughly 65% of the frame. central vertical alignment with a dynamic 15-degree tilt. reserve the top-left safe zone for headline and the lower-center zone for support copy without covering the product Background: pure white studio floor with a soft diffused shadow and minimalist white backdrop. subtle rainbow flares, glass-like spheres, and restrained refraction details Lighting: soft top-down key light with lavender and soft cyan rim light, shallow depth, crisp material highlights. soft studio key lighting with secondary colored rim lights to catch the iridescent texture Color scheme: The primary color is Iridescent Pearl (a shifting spectrum of soft cyan, magenta, and lavender), accented by Holographic Silver for high-tech accents and edge highlights, on a background of Pure Minimalist White (#FFFFFF) Material details: biodegradable material, iridescent finish, holographic pattern. biodegradable liquid-metal shell. precise camera cutouts, slim-fit profile, reflective holographic finish Text layout: Use \"Dynamic Iridiscence\" as the main title. Use \"Shifting colors to match your daily mood.\" as the subtitle. Crafted from premium biodegradable materials with a futuristic holographic finish. reserve the top-left safe zone for headline and the lower-center zone for support copy without covering the product Inset images: Decorative elements: floating glass-like spheres and subtle light refraction streaks that reinforce the hero selling point. Unified style direction: futuristic minimal / soft rim light / centered hero composition Safe whitespace: keep roughly 30%-40% usable negative space for typography or breathing room without crowding the product. Atmosphere: Futuristic, Ethereal, Sophisticated, Sustainable. A high-angle hero shot showcasing the iridescent liquid metal texture of the iPhone case against a clean, minimalist backdrop. Style: soft studio key lighting with secondary colored rim lights to catch the iridescent texture. shallow (f/2.8) to isolate the product texture. ISO 100, 85mm Prime Lens, Shutter 1/125. high-end technology lifestyle aesthetic. hyper-realistic with accurate material physics. Helvetica Neue Light or similar sans serif Quality: 8K, high-end technology lifestyle aesthetic, hyper-realistic with accurate material physics"
+  },
+  "generate_image_request": {
+    "productImage": "temp/example/product_0.png",
+    "productImages": ["temp/example/product_0.png"],
+    "model": "or-gemini-3.1-flash",
+    "aspectRatio": "3:4",
+    "imageSize": "1K",
+    "imageCount": 1,
+    "turboEnabled": false,
+    "trace_id": "fixture-trace-id",
+    "client_job_id": "fixture-client-job-0",
+    "fe_attempt": 1
+  }
+}

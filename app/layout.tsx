@@ -1,6 +1,14 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { Noto_Sans_SC } from 'next/font/google'
+import { Plus_Jakarta_Sans, Noto_Sans_SC } from 'next/font/google'
+import { getSiteUrl } from '@/lib/site'
+
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['500', '600', '700', '800'],
+  display: 'swap',
+  variable: '--font-display',
+})
 
 const notoSansSc = Noto_Sans_SC({
   subsets: ['latin'],
@@ -10,9 +18,12 @@ const notoSansSc = Noto_Sans_SC({
 })
 
 export const metadata: Metadata = {
-  title: 'Shopix AI — Professional E-Commerce Product Images',
-  description:
-    'Generate professional e-commerce product images with AI. Hero Image Generator, Aesthetic Mirror, Clothing Studio, and Refinement Studio.',
+  metadataBase: new URL(getSiteUrl()),
+  title: 'Shopix AI',
+  description: 'AI ecommerce product image generator and product photo editing suite.',
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
+  },
 }
 
 // Root layout — no locale-specific logic here.
@@ -24,7 +35,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={notoSansSc.className}>{children}</body>
+      <body className={`${notoSansSc.className} ${plusJakarta.variable}`}>{children}</body>
     </html>
   )
 }

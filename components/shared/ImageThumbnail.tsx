@@ -24,7 +24,7 @@ export function ImageThumbnail({
   return (
     <div
       className={cn(
-        'group relative overflow-hidden rounded-xl border border-[#d0d4dc]',
+        'group relative overflow-hidden rounded-xl border border-border',
         isSmall ? 'h-12 w-12' : 'aspect-square',
         className
       )}

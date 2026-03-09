@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl'
 import { Sparkles } from 'lucide-react'
 import { useEditorStore } from '@/lib/stores/editor-store'
-import { DEFAULT_CREDIT_COSTS } from '@/types'
+import { getGenerationCreditCost } from '@/types'
 
 interface QuickEditButtonProps {
   objectId: string
@@ -22,7 +22,7 @@ export function QuickEditButton({ objectId, x, y, width, height, zoom }: QuickEd
 
   if (crop.active || quickEdit.open) return null
 
-  const cost = DEFAULT_CREDIT_COSTS['azure-flux'] ?? 5
+  const cost = getGenerationCreditCost(quickEdit.model, quickEdit.imageSize)
 
   const btnY = y + height * zoom + 8
   const btnX = x + (width * zoom) / 2
@@ -32,7 +32,7 @@ export function QuickEditButton({ objectId, x, y, width, height, zoom }: QuickEd
       type="button"
       onClick={() => openQuickEdit(objectId)}
       onMouseDown={(e) => e.stopPropagation()}
-      className="pointer-events-auto absolute z-50 flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] px-4 py-2 text-xs font-medium text-white shadow-lg hover:shadow-xl transition-shadow"
+      className="pointer-events-auto absolute z-50 flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground shadow-lg hover:shadow-xl transition-shadow"
       style={{
         left: btnX,
         top: btnY,

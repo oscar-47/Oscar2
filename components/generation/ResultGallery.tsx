@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { motion } from 'framer-motion'
@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createEditorSession } from '@/lib/utils/editor-session'
+import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
 import { groupResultAssetsByBatch, splitResultAssetsByActiveBatch } from '@/lib/utils/result-assets'
 import type { ResultAsset, ResultAssetOrigin } from '@/types'
 
@@ -28,6 +29,7 @@ interface ResultGalleryProps {
   loadingCount?: number
   className?: string
   aspectRatio?: string
+  historyInitiallyExpanded?: boolean
   onImageClick?: (image: ResultImage, index: number) => void
   onClear?: () => void
   editorSessionKey?: string
@@ -40,6 +42,40 @@ interface LightboxState {
   index: number
 }
 
+function sanitizeFilenamePart(value?: string): string {
+  return (value ?? '')
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function inferExtension(url: string, contentType?: string | null): string {
+  const normalizedType = contentType?.toLowerCase() ?? ''
+  if (normalizedType.includes('png')) return '.png'
+  if (normalizedType.includes('jpeg') || normalizedType.includes('jpg')) return '.jpg'
+  if (normalizedType.includes('webp')) return '.webp'
+
+  try {
+    const pathname = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost').pathname
+    const match = pathname.match(/\.(png|jpe?g|webp)(?:$|\?)/i)
+    if (match) return `.${match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase()}`
+  } catch {}
+
+  return '.png'
+}
+
+function buildDownloadFilename(image: ResultImage, contentType?: string | null): string {
+  const baseParts = [
+    'shopix',
+    sanitizeFilenamePart(image.originModule),
+    sanitizeFilenamePart(image.label),
+  ].filter(Boolean)
+
+  const baseName = baseParts.join('-') || 'shopix-image'
+  return `${baseName}${inferExtension(image.url, contentType)}`
+}
+
 function toCssAspectRatio(aspectRatio: string): string {
   const [w, h] = aspectRatio.split(':').map((value) => Number(value))
   if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return '4 / 3'
@@ -47,9 +83,7 @@ function toCssAspectRatio(aspectRatio: string): string {
 }
 
 function SkeletonCard({ aspectRatio }: { aspectRatio: string }) {
-  return (
-    <div className="w-[220px] max-w-full animate-pulse rounded-xl bg-muted" style={{ aspectRatio }} />
-  )
+  return <FluidPendingCard aspectRatio={aspectRatio} className="w-[220px] max-w-full" />
 }
 
 function formatBatchTime(timestamp: number): string {
@@ -63,6 +97,7 @@ export function ResultGallery({
   loadingCount = 1,
   className,
   aspectRatio = '4:3',
+  historyInitiallyExpanded = false,
   onImageClick,
   onClear,
   editorSessionKey,
@@ -70,10 +105,12 @@ export function ResultGallery({
   activeBatchId,
 }: ResultGalleryProps) {
   const t = useTranslations('studio.editor')
+  const tc = useTranslations('studio.common')
   const locale = useLocale()
   const router = useRouter()
   const [lightbox, setLightbox] = useState<LightboxState | null>(null)
-  const [historyExpanded, setHistoryExpanded] = useState(false)
+  const [historyExpanded, setHistoryExpanded] = useState(historyInitiallyExpanded)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const cssAspectRatio = toCssAspectRatio(aspectRatio)
 
   const {
@@ -129,6 +166,31 @@ export function ResultGallery({
     openAssetsInEditor([image])
   }
 
+  const downloadImage = useCallback(async (image: ResultImage) => {
+    if (!image.url || downloadingId === image.id) return
+
+    try {
+      setDownloadingId(image.id)
+      const response = await fetch(image.url)
+      if (!response.ok) throw new Error(`DOWNLOAD_FAILED_${response.status}`)
+
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = buildDownloadFilename(image, blob.type)
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch (error) {
+      console.error('Failed to download image directly, falling back to opening the asset URL.', error)
+      window.open(image.url, '_blank', 'noopener,noreferrer')
+    } finally {
+      setDownloadingId(null)
+    }
+  }, [downloadingId])
+
   if (!isLoading && images.length === 0) return null
 
   const hasHistory = historicalGroups.length > 0
@@ -181,16 +243,18 @@ export function ResultGallery({
         >
           <Pencil className="h-4 w-4 text-white" />
         </button>
-        <a
-          href={image.url}
-          download
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(event) => event.stopPropagation()}
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            void downloadImage(image)
+          }}
+          disabled={downloadingId === image.id}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm transition-colors hover:bg-white/30"
+          title={tc('download')}
         >
           <Download className="h-4 w-4 text-white" />
-        </a>
+        </button>
       </div>
     </motion.div>
   )
@@ -377,17 +441,15 @@ export function ResultGallery({
               className="max-h-[80vh] max-w-full rounded-xl object-contain"
             />
             <div className="flex gap-2">
-              <a
-                href={lightbox.images[lightbox.index].url}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void downloadImage(lightbox.images[lightbox.index])}
+                disabled={downloadingId === lightbox.images[lightbox.index].id}
               >
-                <Button variant="secondary" size="sm">
                   <Download className="mr-1.5 h-4 w-4" />
-                  Download
-                </Button>
-              </a>
+                  {tc('download')}
+              </Button>
               <Button
                 variant="secondary"
                 size="sm"

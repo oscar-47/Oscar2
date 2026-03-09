@@ -2,29 +2,9 @@
 
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
-import { Fragment } from 'react'
-import {
-  ArrowRight,
-  Upload,
-  Brain,
-  Images,
-  LayoutGrid,
-  Wand2,
-  Camera,
-  ScanLine,
-  Globe,
-  Palette,
-  Maximize,
-  Layers,
-  Search,
-  Package,
-  Award,
-  ChevronRight,
-  Zap,
-  Sparkles,
-  type LucideIcon,
-} from 'lucide-react'
+import { ArrowRight, ImageIcon } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
+import Image from 'next/image'
 
 function parsePlatforms(value: string): string[] {
   return value
@@ -33,52 +13,92 @@ function parsePlatforms(value: string): string[] {
     .filter(Boolean)
 }
 
-interface SectionTheme {
-  accent: string
-  accentLight: string
-  accentMid: string
-  accentBorder: string
-  numBg: string
-  numColor: string
-  stepIcons: LucideIcon[]
-  capIcons: LucideIcon[]
+type SectionImagePair = {
+  before: string | null
+  after: string | null
+  aspectRatio: string
+  objectFit?: 'cover' | 'contain'
+  beforeObjectFit?: 'cover' | 'contain'
+  afterObjectFit?: 'cover' | 'contain'
+  frameClassName?: string
+  beforeFrameClassName?: string
+  afterFrameClassName?: string
+  imageClassName?: string
+  beforeImageClassName?: string
+  afterImageClassName?: string
 }
 
-const SECTION_THEMES: SectionTheme[] = [
+/**
+ * Before/After image pairs for each feature section.
+ * Images go in public/images/showcase/
+ */
+const SECTION_IMAGES: SectionImagePair[] = [
   {
-    accent: '#3b82f6',
-    accentLight: 'rgba(59, 130, 246, 0.06)',
-    accentMid: 'rgba(59, 130, 246, 0.12)',
-    accentBorder: 'rgba(59, 130, 246, 0.15)',
-    numBg: 'bg-blue-50',
-    numColor: 'text-blue-600',
-    stepIcons: [Upload, Brain, Images],
-    capIcons: [ScanLine, Globe, Palette],
-  },
+    before: '/images/showcase/hero-left.png',
+    after: '/images/showcase/hero-right.png',
+    aspectRatio: '3 / 4',
+    objectFit: 'cover',
+  }, // Section 1: Hero Image Generator
   {
-    accent: '#f59e0b',
-    accentLight: 'rgba(245, 158, 11, 0.06)',
-    accentMid: 'rgba(245, 158, 11, 0.12)',
-    accentBorder: 'rgba(245, 158, 11, 0.15)',
-    numBg: 'bg-amber-50',
-    numColor: 'text-amber-600',
-    stepIcons: [Camera, LayoutGrid, Layers],
-    capIcons: [Brain, Maximize, Zap],
-  },
+    before: '/images/showcase/detail-before.jpg',
+    after: '/images/showcase/detail-right.png',
+    aspectRatio: '9 / 16',
+    objectFit: 'contain',
+    beforeFrameClassName: 'bg-white',
+    afterFrameClassName: 'bg-[#e8e0d5]',
+    beforeImageClassName: 'p-3 sm:p-4',
+    afterImageClassName: 'p-0',
+  }, // Section 2: Detail Page Assets
   {
-    accent: '#8b5cf6',
-    accentLight: 'rgba(139, 92, 246, 0.06)',
-    accentMid: 'rgba(139, 92, 246, 0.12)',
-    accentBorder: 'rgba(139, 92, 246, 0.15)',
-    numBg: 'bg-violet-50',
-    numColor: 'text-violet-600',
-    stepIcons: [Upload, Wand2, Sparkles],
-    capIcons: [Search, Package, Award],
-  },
+    before: '/images/showcase/refinement-lipstick-before.jpg',
+    after: '/images/showcase/refinement-lipstick-after.png',
+    aspectRatio: '3 / 4',
+    objectFit: 'contain',
+    beforeFrameClassName: 'bg-[#ddd2c5]',
+    afterFrameClassName: 'bg-[#ececec]',
+    beforeImageClassName: 'p-3 sm:p-4',
+    afterImageClassName: 'p-0',
+  }, // Section 3: Photo Editing
 ]
+
+function ImageSlot({
+  src,
+  alt,
+  label,
+  objectFit = 'cover',
+  imageClassName,
+}: {
+  src: string | null
+  alt: string
+  label: string
+  objectFit?: 'cover' | 'contain'
+  imageClassName?: string
+}) {
+  if (src) {
+    return (
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        className={[
+          objectFit === 'contain' ? 'object-contain' : 'object-cover',
+          'transition-transform duration-500 group-hover:scale-[1.02]',
+          imageClassName ?? '',
+        ].join(' ').trim()}
+      />
+    )
+  }
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/40">
+      <ImageIcon className="h-10 w-10 sm:h-12 sm:w-12" strokeWidth={1} />
+      <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
+    </div>
+  )
+}
 
 export function FeatureShowcase() {
   const t = useTranslations('landing')
+  const tc = useTranslations('landing.showcase')
   const locale = useLocale()
   const reduceMotion = useReducedMotion()
 
@@ -89,11 +109,6 @@ export function FeatureShowcase() {
       { title: t(`features.section${n}.cap1`), desc: t(`features.section${n}.cap1Desc`) },
       { title: t(`features.section${n}.cap2`), desc: t(`features.section${n}.cap2Desc`) },
       { title: t(`features.section${n}.cap3`), desc: t(`features.section${n}.cap3Desc`) },
-    ],
-    steps: [
-      t(`features.section${n}.step1`),
-      t(`features.section${n}.step2`),
-      t(`features.section${n}.step3`),
     ],
   }))
 
@@ -107,10 +122,15 @@ export function FeatureShowcase() {
   const platforms = parsePlatforms(t('bottomCta.platforms'))
 
   return (
-    <section className="bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_46%,#ffffff_100%)] pb-[160px] pt-[124px]">
-      <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-[120px] px-5 sm:px-8">
+    <section className="bg-secondary pb-32 pt-24 sm:pb-40 sm:pt-32">
+      <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-24 px-5 sm:gap-32 sm:px-8">
         {sections.map((section, index) => {
-          const theme = SECTION_THEMES[index]
+          const images = SECTION_IMAGES[index]
+          const hasComparison = Boolean(images.before && images.after)
+          const singleImageSrc = images.before ?? images.after
+          const singleImageAlt = images.before
+            ? tc('beforeAlt', { index: index + 1 })
+            : tc('afterAlt', { index: index + 1 })
           const imageFirst = index % 2 === 0
           const contentOrder = imageFirst ? 'lg:order-1' : 'lg:order-2'
           const visualOrder = imageFirst ? 'lg:order-2' : 'lg:order-1'
@@ -120,105 +140,97 @@ export function FeatureShowcase() {
               key={index}
               {...sectionMotion}
               viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.55, ease: 'easeOut' }}
+              transition={{ duration: 0.55, ease: [0.25, 1, 0.5, 1] }}
               className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16"
             >
-              {/* Content */}
+              {/* Text content */}
               <div className={contentOrder}>
-                <div className={`inline-flex items-center rounded-lg ${theme.numBg} px-3 py-1.5`}>
-                  <span className={`text-sm font-bold ${theme.numColor}`}>0{index + 1}</span>
-                </div>
+                <span className="text-sm font-semibold text-muted-foreground">0{index + 1}</span>
 
-                <h2 className="mt-5 text-[36px] font-semibold leading-[1.22] tracking-[-0.015em] text-[#0f172a] md:text-[44px]">
+                <h2 className="mt-3 text-[32px] font-semibold leading-[1.22] tracking-[-0.015em] text-foreground md:text-[40px]">
                   {section.title}
                 </h2>
 
-                <p className="mt-5 max-w-[520px] text-base leading-8 text-[#475569] sm:text-lg sm:leading-9">
+                <p className="mt-4 max-w-[520px] text-base leading-8 text-muted-foreground sm:text-lg sm:leading-9">
                   {section.subtitle}
                 </p>
 
-                {/* Capabilities */}
-                <div className="mt-8 space-y-5">
-                  {section.caps.map((cap, capIndex) => {
-                    const CapIcon = theme.capIcons[capIndex]
-                    return (
-                      <div key={capIndex} className="flex gap-4">
-                        <div
-                          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-                          style={{ backgroundColor: theme.accentLight }}
-                        >
-                          <CapIcon className="h-4 w-4" style={{ color: theme.accent }} />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-[#0f172a]">{cap.title}</h4>
-                          <p className="mt-1 text-sm leading-6 text-[#64748b]">{cap.desc}</p>
-                        </div>
-                      </div>
-                    )
-                  })}
+                <div className="mt-8 space-y-4">
+                  {section.caps.map((cap, capIndex) => (
+                    <div key={capIndex}>
+                      <h4 className="text-sm font-semibold text-foreground">{cap.title}</h4>
+                      <p className="mt-0.5 text-sm leading-6 text-muted-foreground">{cap.desc}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Visual — Workflow Steps */}
+              {/* Visual — Before/After comparison */}
               <div className={visualOrder}>
-                <div
-                  className="rounded-[28px] border p-8 shadow-[0_22px_50px_rgba(15,23,42,0.06)] sm:p-10"
-                  style={{
-                    borderColor: theme.accentBorder,
-                    background: `linear-gradient(135deg, white 0%, ${theme.accentLight} 100%)`,
-                  }}
-                >
-                  <div className="flex flex-col items-center gap-5">
-                    {section.steps.map((step, stepIndex) => {
-                      const StepIcon = theme.stepIcons[stepIndex]
-                      return (
-                        <Fragment key={stepIndex}>
-                          {stepIndex > 0 && (
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="h-3 w-px" style={{ backgroundColor: theme.accentMid }} />
-                              <ChevronRight
-                                className="h-4 w-4 rotate-90"
-                                style={{ color: theme.accent }}
-                              />
-                              <div className="h-3 w-px" style={{ backgroundColor: theme.accentMid }} />
-                            </div>
-                          )}
-                          <motion.div
-                            className="flex w-full items-center gap-4 rounded-2xl border bg-white/90 px-5 py-4 shadow-sm backdrop-blur"
-                            style={{ borderColor: theme.accentBorder }}
-                            initial={
-                              reduceMotion
-                                ? undefined
-                                : { opacity: 0, x: index % 2 === 0 ? 20 : -20 }
-                            }
-                            whileInView={{ opacity: 1, x: 0 }}
-                            viewport={{ once: true }}
-                            transition={{
-                              duration: 0.4,
-                              delay: 0.15 + stepIndex * 0.12,
-                              ease: 'easeOut',
-                            }}
-                          >
-                            <div
-                              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
-                              style={{ backgroundColor: theme.accentLight }}
-                            >
-                              <StepIcon className="h-5 w-5" style={{ color: theme.accent }} />
-                            </div>
-                            <div>
-                              <span
-                                className="text-[11px] font-semibold uppercase tracking-wider"
-                                style={{ color: theme.accent }}
-                              >
-                                Step {stepIndex + 1}
-                              </span>
-                              <p className="text-sm font-medium text-[#1e293b]">{step}</p>
-                            </div>
-                          </motion.div>
-                        </Fragment>
-                      )
-                    })}
-                  </div>
+                <div className="group overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+                  {hasComparison ? (
+                    <>
+                      <div className="relative grid grid-cols-2">
+                        <div
+                          className={`relative overflow-hidden bg-secondary ${images.frameClassName ?? ''} ${images.beforeFrameClassName ?? ''}`}
+                          style={{ aspectRatio: images.aspectRatio }}
+                        >
+                          <ImageSlot
+                            src={images.before}
+                            alt={tc('beforeAlt', { index: index + 1 })}
+                            label={tc('beforeLabel')}
+                            objectFit={images.beforeObjectFit ?? images.objectFit}
+                            imageClassName={images.beforeImageClassName ?? images.imageClassName}
+                          />
+                        </div>
+
+                        <div className="absolute inset-y-0 left-1/2 z-10 flex -translate-x-1/2 items-center pointer-events-none">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background shadow-lg">
+                            <ArrowRight className="h-4 w-4 text-accent" />
+                          </div>
+                        </div>
+
+                        <div
+                          className={`relative overflow-hidden border-l border-border bg-secondary ${images.frameClassName ?? ''} ${images.afterFrameClassName ?? ''}`}
+                          style={{ aspectRatio: images.aspectRatio }}
+                        >
+                          <ImageSlot
+                            src={images.after}
+                            alt={tc('afterAlt', { index: index + 1 })}
+                            label={tc('afterLabel')}
+                            objectFit={images.afterObjectFit ?? images.objectFit}
+                            imageClassName={images.afterImageClassName ?? images.imageClassName}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 border-t border-border text-center">
+                        <div className="py-3">
+                          <span className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground">
+                            {tc('beforeLabel')}
+                          </span>
+                        </div>
+                        <div className="border-l border-border bg-accent/5 py-3">
+                          <span className="text-[12px] font-semibold uppercase tracking-wider text-accent">
+                            {tc('afterLabel')}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div
+                      className={`relative overflow-hidden bg-secondary ${images.frameClassName ?? ''} ${images.beforeFrameClassName ?? images.afterFrameClassName ?? ''}`}
+                      style={{ aspectRatio: images.aspectRatio }}
+                    >
+                      <ImageSlot
+                        src={singleImageSrc}
+                        alt={singleImageAlt}
+                        label={tc('afterLabel')}
+                        objectFit={images.beforeObjectFit ?? images.afterObjectFit ?? images.objectFit}
+                        imageClassName={images.beforeImageClassName ?? images.afterImageClassName ?? images.imageClassName}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -230,21 +242,21 @@ export function FeatureShowcase() {
           {...sectionMotion}
           viewport={{ once: true, amount: 0.4 }}
           transition={{ duration: 0.55, ease: 'easeOut' }}
-          className="rounded-[32px] border border-[#dce3ee] bg-[linear-gradient(135deg,#ffffff_0%,#f7f9fc_60%,#eef2f8_100%)] px-6 py-10 text-center shadow-[0_24px_60px_rgba(15,23,42,0.08)] sm:px-12 sm:py-14"
+          className="rounded-2xl border border-border bg-background px-6 py-10 text-center shadow-sm sm:px-12 sm:py-14"
         >
-          <h2 className="text-[28px] font-semibold leading-[1.34] tracking-[-0.01em] text-[#0f172a] sm:text-[42px]">
+          <h2 className="text-[28px] font-semibold leading-[1.34] tracking-[-0.01em] text-foreground sm:text-[40px]">
             {t('bottomCta.title')}
           </h2>
 
           <Link
             href={`/${locale}/auth`}
-            className="mx-auto mt-8 inline-flex h-12 items-center gap-2 rounded-full bg-[#0f172a] px-7 text-sm font-semibold text-white transition-all hover:bg-[#1e293b] hover:shadow-[0_12px_30px_rgba(15,23,42,0.2)] sm:h-[54px] sm:px-9 sm:text-base"
+            className="mx-auto mt-8 inline-flex h-12 items-center gap-2 rounded-lg bg-accent px-7 text-sm font-semibold text-accent-foreground transition-all press-scale hover:opacity-90 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:h-[54px] sm:px-9 sm:text-base"
           >
             {t('bottomCta.button')}
             <ArrowRight className="h-4 w-4" />
           </Link>
 
-          <p className="mx-auto mt-7 max-w-[920px] text-xs leading-7 text-[#64748b] sm:text-sm sm:leading-8">
+          <p className="mx-auto mt-7 max-w-[920px] text-xs leading-7 text-text-tertiary sm:text-sm sm:leading-8">
             {platforms.join(' · ')}
           </p>
         </motion.section>

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
+import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
 import { ResultGallery } from '@/components/generation/ResultGallery'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
@@ -10,10 +11,12 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ImageUploader } from '@/components/upload/ImageUploader'
 import { CreditCostBadge } from '@/components/generation/CreditCostBadge'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
 import { CorePageShell } from '@/components/studio/CorePageShell'
+import { ModelTextHint } from '@/components/studio/ModelTextHint'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { uploadFile, uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
@@ -32,7 +35,7 @@ import {
 import { useUserEmail } from '@/lib/hooks/useUserEmail'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import { friendlyError } from '@/lib/utils'
-import { Loader2, Sparkles, Plus, Download, Image as ImageIcon, ShieldCheck } from 'lucide-react'
+import { Download, GalleryVerticalEnd, Image as ImageIcon, LayoutGrid, Loader2, Plus, ShieldCheck, Sparkles } from 'lucide-react'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
 
@@ -328,44 +331,52 @@ export function AestheticMirrorForm() {
   return (
     <>
     <CorePageShell maxWidthClass="max-w-[1360px]" contentClassName="space-y-8">
-        <section className="pt-6 text-center sm:pt-8">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-4 py-1.5 text-xs font-medium text-[#3f4047]">
-            <Sparkles className="h-4 w-4" />
-            {t('heroBadge')}
+        <div className="mb-7 flex items-start gap-3">
+          <SectionIcon icon={ImageIcon} className="mt-1" />
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-foreground">{t('heroTitle')}</h1>
+              <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-600 dark:bg-violet-500/15 dark:text-violet-400">
+                {t('heroBadge')}
+              </span>
+            </div>
+            <p className="mt-1 text-[13px] text-muted-foreground">{t('heroDescription')}</p>
           </div>
-          <h1 className="mt-5 text-3xl font-semibold tracking-tight text-[#17181d] sm:text-4xl">{t('heroTitle')}</h1>
-          <p className="mx-auto mt-3 max-w-3xl text-sm leading-relaxed text-[#70727a] sm:text-base">{t('heroDescription')}</p>
-        </section>
+        </div>
 
         <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="space-y-4">
-            <div className="inline-flex rounded-2xl bg-transparent p-0.5">
-              <button
-                type="button"
-                className={`h-11 rounded-xl px-7 text-base font-medium ${mode === 'single' ? 'bg-[#111318] text-white shadow-sm' : 'text-[#6f727b]'}`}
-                onClick={() => setMode('single')}
-              >
-                {t('singleMode')}
-              </button>
-              <button
-                type="button"
-                className={`h-11 rounded-xl px-7 text-base font-medium ${mode === 'batch' ? 'bg-[#111318] text-white shadow-sm' : 'text-[#6f727b]'}`}
-                onClick={() => setMode('batch')}
-              >
-                {t('batchMode')}
-              </button>
-            </div>
+            <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
+              <TabsList className="grid h-11 w-full grid-cols-2 rounded-full bg-transparent p-0">
+                <TabsTrigger
+                  value="single"
+                  disabled={isRunning}
+                  className="h-11 rounded-full border border-transparent bg-transparent text-sm font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-white"
+                >
+                  <LayoutGrid className="mr-1.5 h-4 w-4" />
+                  {t('singleMode')}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="batch"
+                  disabled={isRunning}
+                  className="h-11 rounded-full border border-transparent bg-transparent text-sm font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-white"
+                >
+                  <GalleryVerticalEnd className="mr-1.5 h-4 w-4" />
+                  {t('batchMode')}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-            <section className="rounded-[28px] border border-[#d0d4dc] bg-white p-5">
+            <section className="rounded-[28px] border border-border bg-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <SectionIcon icon={ImageIcon} className="mt-0.5" />
                   <div>
-                    <p className="text-[15px] font-semibold text-[#1a1d24]">{t('referenceCardTitle')}</p>
-                    <p className="mt-0.5 text-[13px] text-[#7d818d]">{t('referenceCardDesc')}</p>
+                    <p className="text-[15px] font-semibold text-foreground">{t('referenceCardTitle')}</p>
+                    <p className="mt-0.5 text-[13px] text-muted-foreground">{t('referenceCardDesc')}</p>
                   </div>
                 </div>
-                {mode === 'batch' && <span className="text-[13px] text-[#6f7380]">{batchRefs.length}/12</span>}
+                {mode === 'batch' && <span className="text-[13px] text-muted-foreground">{batchRefs.length}/12</span>}
               </div>
               {mode === 'single' ? (
                 <div className="mt-4">
@@ -399,7 +410,7 @@ export function AestheticMirrorForm() {
                       />
                     ))}
                     {batchRefs.length < 12 && (
-                      <button className="aspect-square rounded-xl border border-dashed border-[#d0d4dc] bg-[#f1f3f6] text-[#848791]" onClick={() => batchRefInputRef.current?.click()}>
+                      <button className="aspect-square rounded-xl border border-dashed border-border bg-secondary text-muted-foreground" onClick={() => batchRefInputRef.current?.click()}>
                         <Plus className="mx-auto h-5 w-5" />
                       </button>
                     )}
@@ -409,30 +420,30 @@ export function AestheticMirrorForm() {
               )}
             </section>
 
-            <section className="rounded-[28px] border border-[#d0d4dc] bg-white p-5">
+            <section className="rounded-[28px] border border-border bg-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <SectionIcon icon={ImageIcon} className="mt-0.5" />
                   <div>
-                    <p className="text-[15px] font-semibold text-[#1a1d24]">{t('productCardTitle')}</p>
-                    <p className="mt-0.5 text-[13px] text-[#7d818d]">{t('productCardDesc')}</p>
+                    <p className="text-[15px] font-semibold text-foreground">{t('productCardTitle')}</p>
+                    <p className="mt-0.5 text-[13px] text-muted-foreground">{t('productCardDesc')}</p>
                   </div>
                 </div>
-                <span className="text-[13px] text-[#6f7380]">{mode === 'batch' ? (batchProduct ? '1/1' : '0/1') : `${singleProducts.length}/6`}</span>
+                <span className="text-[13px] text-muted-foreground">{mode === 'batch' ? (batchProduct ? '1/1' : '0/1') : `${singleProducts.length}/6`}</span>
               </div>
               {mode === 'single' ? (
                 <>
                   {singleProducts.length === 0 ? (
                     <button
                       type="button"
-                      className="mt-4 flex h-36 w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#d0d4dc] bg-[#f1f3f6] px-4 text-center"
+                      className="mt-4 flex h-36 w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-secondary px-4 text-center"
                       onClick={() => productInputRef.current?.click()}
                     >
-                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#f0f0f2] text-[#73757e]">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
                         <Plus className="h-5 w-5" />
                       </div>
-                      <p className="text-sm font-medium text-[#35373e]">{t('uploadProduct')}</p>
-                      <p className="text-xs text-[#8d9098]">{t('productDropHint')}</p>
+                      <p className="text-sm font-medium text-foreground">{t('uploadProduct')}</p>
+                      <p className="text-xs text-muted-foreground">{t('productDropHint')}</p>
                     </button>
                   ) : (
                     <div className="mt-4 grid grid-cols-3 gap-2">
@@ -447,7 +458,7 @@ export function AestheticMirrorForm() {
                       {singleProducts.length < 6 && (
                         <button
                           type="button"
-                          className="aspect-square rounded-xl border border-dashed border-[#d0d4dc] bg-[#f1f3f6] text-[#848791]"
+                          className="aspect-square rounded-xl border border-dashed border-border bg-secondary text-muted-foreground"
                           onClick={() => productInputRef.current?.click()}
                         >
                           <Plus className="mx-auto h-5 w-5" />
@@ -459,7 +470,7 @@ export function AestheticMirrorForm() {
                 </>
               ) : (
                 <>
-                  <p className="mt-3 text-xs text-[#8d9098]">{t('batchSingleProductHint')}</p>
+                  <p className="mt-3 text-xs text-muted-foreground">{t('batchSingleProductHint')}</p>
                   {batchProduct ? (
                     <ImageThumbnail
                       src={batchProduct.previewUrl}
@@ -468,7 +479,7 @@ export function AestheticMirrorForm() {
                       className="mt-2 h-24 w-24"
                     />
                   ) : (
-                    <button className="mt-2 h-24 w-24 rounded-xl border border-dashed border-[#d0d4dc] bg-[#f1f3f6] text-[#848791]" onClick={() => batchProductInputRef.current?.click()}>
+                    <button className="mt-2 h-24 w-24 rounded-xl border border-dashed border-border bg-secondary text-muted-foreground" onClick={() => batchProductInputRef.current?.click()}>
                       <Plus className="mx-auto h-5 w-5" />
                     </button>
                   )}
@@ -477,18 +488,18 @@ export function AestheticMirrorForm() {
               )}
             </section>
 
-            <section className="space-y-4 rounded-[28px] border border-[#d0d4dc] bg-white p-5">
-              <Label className="text-[13px] font-medium text-[#5a5e6b]">{t('promptTitle')}</Label>
+            <section className="space-y-4 rounded-[28px] border border-border bg-white p-5">
+              <Label className="text-[13px] font-medium text-muted-foreground">{t('promptTitle')}</Label>
               <Textarea
                 value={userPrompt}
                 onChange={(e) => setUserPrompt(e.target.value)}
                 rows={3}
-                className="min-h-[128px] rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] placeholder:text-[#9599a3]"
+                className="min-h-[128px] rounded-2xl border-border bg-secondary text-[14px] placeholder:text-muted-foreground"
                 placeholder={t('promptPlaceholder')}
               />
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{tc('model')}</Label>
+                  <Label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">{tc('model')}</Label>
                   <Select
                     value={model}
                     onValueChange={(v) => {
@@ -497,7 +508,7 @@ export function AestheticMirrorForm() {
                       setImageSize((current) => sanitizeImageSizeForModel(nextModel, current))
                     }}
                   >
-                    <SelectTrigger className="h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px]">
+                    <SelectTrigger className="h-11 rounded-2xl border-border bg-secondary text-[14px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -506,11 +517,12 @@ export function AestheticMirrorForm() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <ModelTextHint />
                 </div>
                 <div>
-                  <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{tc('aspectRatio')}</Label>
+                  <Label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">{tc('aspectRatio')}</Label>
                   <Select value={aspectRatio} onValueChange={(v) => setAspectRatio(v as AspectRatio)}>
-                    <SelectTrigger className="h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px]">
+                    <SelectTrigger className="h-11 rounded-2xl border-border bg-secondary text-[14px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -519,9 +531,9 @@ export function AestheticMirrorForm() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="mb-1.5 block text-[13px] font-medium text-[#5a5e6b]">{mode === 'batch' ? t('groupCountLabel') : tc('imageCount')}</Label>
+                  <Label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">{mode === 'batch' ? t('groupCountLabel') : tc('imageCount')}</Label>
                   <Select value={String(mode === 'batch' ? groupCount : imageCount)} onValueChange={(v) => mode === 'batch' ? setGroupCount(Number(v)) : setImageCount(Number(v))}>
-                    <SelectTrigger className="h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px]">
+                    <SelectTrigger className="h-11 rounded-2xl border-border bg-secondary text-[14px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -532,13 +544,13 @@ export function AestheticMirrorForm() {
               </div>
 
               {isRunning ? (
-                <Button className="h-12 w-full rounded-2xl bg-[#111318]" disabled>
+                <Button className="h-12 w-full rounded-2xl bg-primary" disabled>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   {t('generating')}
                 </Button>
               ) : (
                 <Button
-                  className="h-12 w-full rounded-2xl bg-[#191b22] text-white hover:bg-[#13151a] disabled:bg-[#9a9ca3] disabled:text-white"
+                  className="h-12 w-full rounded-2xl bg-primary text-white hover:opacity-90 disabled:bg-muted disabled:text-white"
                   disabled={!canGenerate}
                   onClick={handleSubmit}
                 >
@@ -546,7 +558,7 @@ export function AestheticMirrorForm() {
                   {mode === 'batch' ? t('generateBatchCount', { count: Math.max(1, expectedCount) }) : t('generateOne')}
                 </Button>
               )}
-              <div className="flex items-center justify-between text-xs text-[#7f828c]">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>{t('eta', { seconds: 5 })}</span>
                 <CreditCostBadge cost={totalCost} />
               </div>
@@ -558,12 +570,12 @@ export function AestheticMirrorForm() {
             </section>
           </div>
 
-          <div className="min-h-[840px] rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+          <div className="min-h-[840px] rounded-[28px] border border-border bg-white p-5 sm:p-6">
             <div className="mb-4 flex items-start gap-3">
               <SectionIcon icon={Sparkles} className="mt-0.5" />
               <div>
-                <h2 className="text-[15px] font-semibold text-[#1a1d24]">{resultPanelTitle}</h2>
-                <p className="text-[13px] text-[#7d818d]">{resultPanelSubtitle}</p>
+                <h2 className="text-[15px] font-semibold text-foreground">{resultPanelTitle}</h2>
+                <p className="text-[13px] text-muted-foreground">{resultPanelSubtitle}</p>
               </div>
             </div>
             {phase === 'running' && (
@@ -580,19 +592,13 @@ export function AestheticMirrorForm() {
                   {cards.map((c, i) => c.status === 'success' && c.url ? (
                     <div
                       key={i}
-                      className="relative w-[220px] max-w-full overflow-hidden rounded-2xl border border-[#dcdce1] bg-white opacity-60"
+                      className="relative w-[220px] max-w-full overflow-hidden rounded-2xl border border-border bg-white opacity-60"
                       style={{ aspectRatio: previewAspectRatio }}
                     >
                       <img src={c.url} alt={`prev-${i + 1}`} className="w-full object-cover" />
                     </div>
                   ) : (
-                    <div
-                      key={i}
-                      className="flex w-[220px] max-w-full items-center justify-center rounded-2xl border border-[#e1e1e5] bg-white/70"
-                      style={{ aspectRatio: previewAspectRatio }}
-                    >
-                      <Loader2 className="h-5 w-5 animate-spin text-[#666973]" />
-                    </div>
+                    <FluidPendingCard key={i} aspectRatio={previewAspectRatio} className="w-[220px] max-w-full rounded-2xl" />
                   ))}
                 </div>
                 {resultAssets.length > 0 && (
@@ -654,11 +660,11 @@ export function AestheticMirrorForm() {
             {phase === 'idle' && resultAssets.length === 0 && (
               <div className="flex min-h-[620px] items-center justify-center">
                 <div className="text-center">
-                  <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#ececef] text-[#7f828c]">
+                  <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-muted text-muted-foreground">
                     <Sparkles className="h-9 w-9" />
                   </div>
-                  <p className="mt-5 text-base text-[#7f828c]">{t('waiting')}</p>
-                  <p className="mt-1 text-base text-[#7f828c]">{isZh ? '点击左侧“开始复刻风格”按钮' : 'Click "Replicate Style" on the left to start'}</p>
+                  <p className="mt-5 text-base text-muted-foreground">{t('waiting')}</p>
+                  <p className="mt-1 text-base text-muted-foreground">{isZh ? '点击左侧“开始复刻风格”按钮' : 'Click "Replicate Style" on the left to start'}</p>
                 </div>
               </div>
             )}
@@ -676,17 +682,17 @@ export function AestheticMirrorForm() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-3xl border border-[#d0d4dc] bg-white p-6">
-            <p className="flex items-center gap-2 text-lg font-semibold text-[#17181d]"><Sparkles className="h-4 w-4 text-[#686b74]" />{t('featureA.title')}</p>
-            <p className="mt-2 text-sm text-[#777a83]">{t('featureA.desc')}</p>
+          <div className="rounded-3xl border border-border bg-white p-6">
+            <p className="flex items-center gap-2 text-lg font-semibold text-foreground"><Sparkles className="h-4 w-4 text-muted-foreground" />{t('featureA.title')}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{t('featureA.desc')}</p>
           </div>
-          <div className="rounded-3xl border border-[#d0d4dc] bg-white p-6">
-            <p className="flex items-center gap-2 text-lg font-semibold text-[#17181d]"><ShieldCheck className="h-4 w-4 text-[#686b74]" />{t('featureB.title')}</p>
-            <p className="mt-2 text-sm text-[#777a83]">{t('featureB.desc')}</p>
+          <div className="rounded-3xl border border-border bg-white p-6">
+            <p className="flex items-center gap-2 text-lg font-semibold text-foreground"><ShieldCheck className="h-4 w-4 text-muted-foreground" />{t('featureB.title')}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{t('featureB.desc')}</p>
           </div>
-          <div className="rounded-3xl border border-[#d0d4dc] bg-white p-6">
-            <p className="flex items-center gap-2 text-lg font-semibold text-[#17181d]"><Download className="h-4 w-4 text-[#686b74]" />{t('featureC.title')}</p>
-            <p className="mt-2 text-sm text-[#777a83]">{t('featureC.desc')}</p>
+          <div className="rounded-3xl border border-border bg-white p-6">
+            <p className="flex items-center gap-2 text-lg font-semibold text-foreground"><Download className="h-4 w-4 text-muted-foreground" />{t('featureC.title')}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{t('featureC.desc')}</p>
           </div>
         </div>
     </CorePageShell>

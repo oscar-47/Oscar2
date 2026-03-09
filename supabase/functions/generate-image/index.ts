@@ -2,6 +2,7 @@ import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser, isAdminEmail, isToApisModel } from "../_shared/auth.ts";
 import { assertUserCanQueueJob } from "../_shared/generation-queue.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 import {
   getCreditCostForModel,
   getDefaultImageSizeForModel,
@@ -85,6 +86,15 @@ Deno.serve(async (req) => {
       ...(originalImage ? { original_image_url: originalImage } : {}),
     },
   };
+
+  // Rate limit: per-minute across all job types
+  const rateCheck = await checkRateLimit(authResult.user.id);
+  if (!rateCheck.ok) {
+    return err("RATE_LIMIT_EXCEEDED", "Too many requests. Please slow down.", 429, {
+      count: rateCheck.count,
+      limit: rateCheck.limit,
+    });
+  }
 
   const supabase = createServiceClient();
   const queueGate = await assertUserCanQueueJob(authResult.user.id, "IMAGE_GEN");

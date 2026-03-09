@@ -141,7 +141,7 @@ export function EditorCanvas() {
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 overflow-hidden bg-[#f0f1f3] outline-none"
+      className="relative flex-1 overflow-hidden bg-secondary outline-none"
       style={{ cursor: activeTool === 'pan' ? 'grab' : 'default' }}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
@@ -168,7 +168,7 @@ export function EditorCanvas() {
           return (
             <>
               <div
-                className="pointer-events-none absolute rounded-full bg-[#6366f1]/85"
+                className="pointer-events-none absolute rounded-full bg-accent/85"
                 style={{ left: startX, top: y - 1, width: lineWidth, height: 2, zIndex: 9997 }}
               />
               <div
@@ -180,7 +180,7 @@ export function EditorCanvas() {
                   height: 0,
                   borderTop: '5px solid transparent',
                   borderBottom: '5px solid transparent',
-                  borderLeft: '8px solid #6366f1',
+                  borderLeft: '8px solid hsl(var(--accent))',
                   zIndex: 9997,
                 }}
               />

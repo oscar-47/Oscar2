@@ -49,10 +49,14 @@
       "type": "object",
       "properties": {
         "selections": { "type": "object", "additionalProperties": { "type": "string" } },
-        "prompt": { "type": "string" },
+        "prompt": { "type": "string", "maxLength": 600 },
         "source": { "type": "string" }
       },
       "additionalProperties": true
+    },
+    "textEdits": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "maxLength": 80 }
     }
   },
   "required": ["model", "prompt"],

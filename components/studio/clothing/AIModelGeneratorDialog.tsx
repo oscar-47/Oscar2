@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -454,7 +455,7 @@ export function AIModelGeneratorDialog({
                 {dialogState === 'generating' && (
                   <div className="grid grid-cols-2 gap-3">
                     {Array.from({ length: count }).map((_, i) => (
-                      <div key={`sk-${i}`} className="aspect-[4/5] animate-pulse rounded-xl bg-muted" />
+                      <FluidPendingCard key={`sk-${i}`} aspectRatio="4/5" className="rounded-xl" />
                     ))}
                   </div>
                 )}

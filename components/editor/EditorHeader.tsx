@@ -28,40 +28,40 @@ export function EditorHeader({ onBack }: EditorHeaderProps) {
   }
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-[#e5e7eb] bg-white px-4">
+    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-4">
       <button
         type="button"
         onClick={() => {
           onBack?.()
           router.back()
         }}
-        className="flex items-center gap-2 text-sm text-[#6b7280] hover:text-[#111827] transition-colors"
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
         <span>{t('back')}</span>
       </button>
 
-      <h1 className="text-sm font-semibold text-[#111827]">{t('title')}</h1>
+      <h1 className="text-sm font-semibold text-foreground">{t('title')}</h1>
 
       <div className="flex items-center gap-1">
         <button
           type="button"
           onClick={zoomOut}
-          className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#f3f4f6] transition-colors"
+          className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted transition-colors"
           title={t('zoomOut')}
         >
-          <Minus className="h-3.5 w-3.5 text-[#6b7280]" />
+          <Minus className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
-        <span className="min-w-[48px] text-center text-xs tabular-nums text-[#374151]">
+        <span className="min-w-[48px] text-center text-xs tabular-nums text-foreground">
           {Math.round(zoom * 100)}%
         </span>
         <button
           type="button"
           onClick={zoomIn}
-          className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#f3f4f6] transition-colors"
+          className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted transition-colors"
           title={t('zoomIn')}
         >
-          <Plus className="h-3.5 w-3.5 text-[#6b7280]" />
+          <Plus className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
       </div>
     </header>

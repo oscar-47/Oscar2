@@ -80,61 +80,721 @@ function parseAnalysisRecord(value: unknown): Record<string, unknown> | null {
   }
 }
 
-function sanitizeString(value: unknown, fallback = ""): string {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
-
-function detectPlanType(value: unknown): string {
-  const record = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-  const explicit = sanitizeString(record.type, "").toLowerCase();
-  if (["refined", "3d", "mannequin", "detail", "selling_point"].includes(explicit)) return explicit;
-
-  const text = `${sanitizeString(record.title)} ${sanitizeString(record.description)} ${sanitizeString(record.design_content)}`.toLowerCase();
-  if (/3d|ghost/.test(text)) return "3d";
-  if (/人台|mannequin/.test(text)) return "mannequin";
-  if (/细节|特写|macro|detail/.test(text)) return "detail";
-  if (/卖点|selling point/.test(text)) return "selling_point";
-  return "refined";
-}
-
-function parseClothingCopyAnalysis(value: unknown, fallbackLanguage: string): Record<string, unknown> | null {
-  const analysis = parseAnalysisRecord(value);
-  const raw = analysis?.copy_analysis && typeof analysis.copy_analysis === "object" && !Array.isArray(analysis.copy_analysis)
-    ? analysis.copy_analysis as Record<string, unknown>
-    : analysis?.copyAnalysis && typeof analysis.copyAnalysis === "object" && !Array.isArray(analysis.copyAnalysis)
-    ? analysis.copyAnalysis as Record<string, unknown>
-    : null;
-  if (!raw) return null;
-
-  const images = Array.isArray(analysis?.images) ? analysis?.images : [];
-  const rawPlansValue = raw.per_plan_adaptations ?? raw.perPlanAdaptations;
-  const rawPlans = Array.isArray(rawPlansValue)
-    ? rawPlansValue as unknown[]
-    : [];
-
+function normalizeGenesisCommercialIntent(value: unknown): GenesisCommercialIntent | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
   return {
-    mode: sanitizeString(raw.mode, fallbackLanguage === "none" ? "visual-only" : "product-inferred"),
-    resolved_output_language: sanitizeLanguage(raw.resolved_output_language ?? raw.resolvedOutputLanguage ?? fallbackLanguage),
-    shared_copy: sanitizeString(raw.shared_copy ?? raw.sharedCopy, ""),
-    per_plan_adaptations: images.map((image, index) => {
-      const rawPlan = rawPlans[index] && typeof rawPlans[index] === "object" && !Array.isArray(rawPlans[index])
-        ? rawPlans[index] as Record<string, unknown>
-        : {};
-      return {
-        plan_index: Number.isFinite(Number(rawPlan.plan_index ?? rawPlan.planIndex))
-          ? Math.max(0, Math.round(Number(rawPlan.plan_index ?? rawPlan.planIndex)))
-          : index,
-        plan_type: sanitizeString(rawPlan.plan_type ?? rawPlan.planType, detectPlanType(image)),
-        copy_role: sanitizeString(rawPlan.copy_role ?? rawPlan.copyRole, "none"),
-        adaptation_summary: sanitizeString(rawPlan.adaptation_summary ?? rawPlan.adaptationSummary, ""),
-      };
-    }),
+    archetype: compactLine(String(record.archetype ?? "")),
+    brief_summary: compactLine(String(record.brief_summary ?? "")),
+    visual_tone: compactLine(String(record.visual_tone ?? "")),
+    mood_keywords: Array.isArray(record.mood_keywords)
+      ? record.mood_keywords.map((item) => compactLine(String(item ?? ""))).filter(Boolean)
+      : [],
+    composition_bias: compactLine(String(record.composition_bias ?? "")),
+    set_treatment: compactLine(String(record.set_treatment ?? "")),
+    lighting_bias: compactLine(String(record.lighting_bias ?? "")),
+    copy_strategy: compactLine(String(record.copy_strategy ?? "")),
   };
 }
 
-Deno.serve(async (req) => {
+function normalizeGenesisSceneRecipe(value: unknown): GenesisSceneRecipe | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return {
+    shot_role: compactLine(String(record.shot_role ?? "")),
+    hero_focus: compactLine(String(record.hero_focus ?? "")),
+    product_ratio: compactLine(String(record.product_ratio ?? "")),
+    layout_method: compactLine(String(record.layout_method ?? "")),
+    subject_angle: compactLine(String(record.subject_angle ?? "")),
+    support_elements: compactLine(String(record.support_elements ?? "")),
+    background_surface: compactLine(String(record.background_surface ?? "")),
+    background_elements: compactLine(String(record.background_elements ?? "")),
+    decorative_elements: compactLine(String(record.decorative_elements ?? "")),
+    lighting_setup: compactLine(String(record.lighting_setup ?? "")),
+    lens_hint: compactLine(String(record.lens_hint ?? "")),
+    text_zone: compactLine(String(record.text_zone ?? "")),
+    mood_keywords: compactLine(String(record.mood_keywords ?? "")),
+  };
+}
+
+function normalizeVisibleCopyValue(value: string): string {
+  const normalized = compactLine(value);
+  if (!normalized) return "";
+  return /^(none|no text|无|无文字)$/i.test(normalized) ? "" : normalized;
+}
+
+function isVisualOnlyCopyStrategy(value: string): boolean {
+  return /\bvisual-only|no added typography|no added visible copy\b|纯视觉|不新增文案|不加字|无新增文字/i.test(value);
+}
+
+type GenesisPlanSectionKey =
+  | "design_goal"
+  | "product_appearance"
+  | "in_graphic_elements"
+  | "composition_plan"
+  | "content_elements"
+  | "text_content"
+  | "atmosphere_creation";
+
+type GenesisPromptObject = {
+  prompt: string;
+  title: string;
+  negative_prompt: string;
+  marketing_hook: string;
+  priority: number;
+};
+
+type GenesisCommercialIntent = {
+  archetype: string;
+  brief_summary: string;
+  visual_tone: string;
+  mood_keywords: string[];
+  composition_bias: string;
+  set_treatment: string;
+  lighting_bias: string;
+  copy_strategy: string;
+};
+
+type GenesisSceneRecipe = {
+  shot_role: string;
+  hero_focus: string;
+  product_ratio: string;
+  layout_method: string;
+  subject_angle: string;
+  support_elements: string;
+  background_surface: string;
+  background_elements: string;
+  decorative_elements: string;
+  lighting_setup: string;
+  lens_hint: string;
+  text_zone: string;
+  mood_keywords: string;
+};
+
+function normalizeGenesisBlueprintForPrompt(
+  value: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!value) return null;
+  return Array.isArray(value.images) ? value : null;
+}
+
+function normalizeGenesisPlanSectionLabel(label: string): string {
+  const raw = label.trim();
+  if (!raw) return "";
+
+  const zhCompact = raw.replace(/\s+/g, "");
+  switch (zhCompact) {
+    case "设计目标":
+      return "design_goal";
+    case "产品外观":
+    case "商品外观":
+      return "product_appearance";
+    case "画内元素":
+      return "in_graphic_elements";
+    case "构图规划":
+      return "composition_plan";
+    case "内容元素":
+      return "content_elements";
+    case "文字内容":
+      return "text_content";
+    case "氛围营造":
+      return "atmosphere_creation";
+    case "色彩系统":
+      return "color_system";
+    case "字体系统":
+    case "字体系统/文案系统":
+    case "文案系统":
+      return "font_system";
+    case "视觉语言":
+      return "visual_language";
+    case "摄影风格":
+      return "photography_style";
+    case "品质要求":
+      return "quality_requirements";
+    case "主色调":
+      return "primary_color";
+    case "辅助色":
+    case "辅助颜色":
+      return "secondary_color";
+    case "背景色":
+      return "background_color";
+    case "标题字体":
+      return "heading_font";
+    case "正文字体":
+      return "body_font";
+    case "字号层级":
+      return "hierarchy";
+    case "文案规则":
+      return "copy_rules";
+    case "装饰元素":
+      return "decorative_elements";
+    case "图标风格":
+      return "icon_style";
+    case "留白原则":
+      return "whitespace_principle";
+    case "光线":
+      return "lighting";
+    case "景深":
+      return "depth_of_field";
+    case "相机参数参考":
+    case "镜头/光圈参考":
+    case "镜头光圈参考":
+      return "camera_parameter_reference";
+    case "分辨率":
+      return "resolution";
+    case "风格":
+      return "style";
+    case "真实感":
+      return "realism";
+    case "商品占比":
+      return "product_proportion";
+    case "布局方式":
+      return "layout_method";
+    case "主体角度":
+    case "机位角度":
+      return "subject_angle";
+    case "文字区域":
+      return "text_area";
+    case "展示重点":
+      return "focus_of_display";
+    case "核心卖点":
+      return "key_selling_points";
+    case "背景元素":
+      return "background_elements";
+    case "主标题":
+      return "main_title";
+    case "副标题":
+      return "subtitle";
+    case "描述文案":
+    case "说明文字":
+      return "description_text";
+    case "排版说明":
+      return "layout_guidance";
+    case "氛围关键词":
+    case "情绪关键词":
+      return "mood_keywords";
+    case "光影效果":
+      return "light_and_shadow_effects";
+    default:
+      break;
+  }
+
+  const ascii = raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  switch (ascii) {
+    case "design_goal":
+    case "product_appearance":
+    case "in_graphic_elements":
+    case "composition_plan":
+    case "content_elements":
+    case "text_content":
+    case "atmosphere_creation":
+    case "color_system":
+    case "font_system":
+    case "typography_copy_system":
+    case "visual_language":
+    case "photography_style":
+    case "quality_requirements":
+    case "primary_color":
+    case "secondary_color":
+    case "background_color":
+    case "heading_font":
+    case "body_font":
+    case "hierarchy":
+    case "copy_rules":
+    case "decorative_elements":
+    case "icon_style":
+    case "whitespace_principle":
+    case "lighting":
+    case "depth_of_field":
+    case "camera_parameter_reference":
+    case "resolution":
+    case "style":
+    case "realism":
+    case "product_proportion":
+    case "layout_method":
+    case "subject_angle":
+    case "text_area":
+    case "focus_of_display":
+    case "key_selling_points":
+    case "background_elements":
+    case "main_title":
+    case "subtitle":
+    case "description_text":
+    case "layout_guidance":
+    case "mood_keywords":
+    case "light_and_shadow_effects":
+      return ascii;
+    case "typography_copy":
+    case "typography_copy_system_":
+      return "font_system";
+    case "camera_reference":
+    case "lens_aperture_reference":
+      return "camera_parameter_reference";
+    default:
+      return ascii;
+  }
+}
+
+function detectGenesisPlanSectionKey(label: string): GenesisPlanSectionKey | null {
+  switch (normalizeGenesisPlanSectionLabel(label)) {
+    case "design_goal":
+      return "design_goal";
+    case "product_appearance":
+      return "product_appearance";
+    case "in_graphic_elements":
+      return "in_graphic_elements";
+    case "composition_plan":
+      return "composition_plan";
+    case "content_elements":
+      return "content_elements";
+    case "text_content":
+      return "text_content";
+    case "atmosphere_creation":
+      return "atmosphere_creation";
+    default:
+      return null;
+  }
+}
+
+function stripBulletPrefix(value: string): string {
+  return value
+    .trim()
+    .replace(/^[-*+]\s*/, "")
+    .replace(/^\d+\.\s*/, "")
+    .trim();
+}
+
+function clipLine(value: string): string {
+  return value.trim().replace(/\s+/g, " ").replace(/[.。;；:,，\s]+$/g, "");
+}
+
+function compactLine(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function extractGenesisPlanSections(
+  value: string,
+): Partial<Record<GenesisPlanSectionKey, string[]>> {
+  const sections: Partial<Record<GenesisPlanSectionKey, string[]>> = {};
+  let activeKey: GenesisPlanSectionKey | null = null;
+
+  for (const rawLine of value.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("## ")) continue;
+
+    const headingMatch = line.match(/^\*\*(.+?)\*\*(?:\s*(?:\([^)]+\)|（[^）]+）))?\s*[：:]\s*(.*)$/);
+    if (headingMatch) {
+      activeKey = detectGenesisPlanSectionKey(headingMatch[1]);
+      if (!activeKey) continue;
+      const rest = headingMatch[2]?.trim();
+      if (rest) {
+        sections[activeKey] = [...(sections[activeKey] ?? []), rest];
+      } else if (!sections[activeKey]) {
+        sections[activeKey] = [];
+      }
+      continue;
+    }
+
+    if (!activeKey) continue;
+    sections[activeKey] = [...(sections[activeKey] ?? []), stripBulletPrefix(line)];
+  }
+
+  return sections;
+}
+
+function extractMarkdownHeadingSections(value: string): Record<string, string[]> {
+  const sections: Record<string, string[]> = {};
+  let activeKey = "";
+
+  for (const rawLine of value.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const headingMatch = line.match(/^##\s+(.+)$/);
+    if (headingMatch) {
+      activeKey = normalizeGenesisPlanSectionLabel(headingMatch[1]);
+      if (!sections[activeKey]) sections[activeKey] = [];
+      continue;
+    }
+    if (!activeKey || line.startsWith("# ")) continue;
+    if (line.startsWith(">")) continue;
+    sections[activeKey].push(stripBulletPrefix(line));
+  }
+
+  return sections;
+}
+
+function extractSectionDetail(lines: string[] | undefined, label: string): string {
+  if (!Array.isArray(lines)) return "";
+  const target = normalizeGenesisPlanSectionLabel(label);
+  for (const line of lines) {
+    const clean = stripBulletPrefix(line);
+    const idx = clean.search(/[：:]/);
+    if (idx === -1) continue;
+    const key = normalizeGenesisPlanSectionLabel(clean.slice(0, idx));
+    if (key === target) return clean.slice(idx + 1).trim();
+  }
+  return "";
+}
+
+function flattenSectionLines(lines: string[] | undefined): string[] {
+  if (!Array.isArray(lines)) return [];
+  return lines.map((line) => compactLine(stripBulletPrefix(line))).filter(Boolean);
+}
+
+function splitCopyLines(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => clipLine(line))
+    .filter(Boolean);
+}
+
+function sentenceJoin(values: string[], delimiter = ". "): string {
+  const cleaned = values.map((value) => compactLine(value)).filter(Boolean);
+  if (delimiter !== ". ") return cleaned.join(delimiter);
+
+  let result = "";
+  for (const value of cleaned) {
+    if (!result) {
+      result = value;
+      continue;
+    }
+    result += /[.!?]$/.test(result) ? ` ${value}` : `. ${value}`;
+  }
+  return result;
+}
+
+function buildGenesisColorSchemeSentence(specSections: Record<string, string[]>): string {
+  const colorLines = specSections.color_system ?? [];
+  const primary = extractSectionDetail(colorLines, "Primary Color");
+  const secondary = extractSectionDetail(colorLines, "Secondary Color");
+  const background = extractSectionDetail(colorLines, "Background Color");
+
+  const parts: string[] = [];
+  if (primary) parts.push(`The primary color is ${primary}`);
+  if (secondary) parts.push(`accented by ${secondary}`);
+  if (background) parts.push(`on a background of ${background}`);
+  return parts.join(", ");
+}
+
+function buildGenesisStyleSentence(specSections: Record<string, string[]>, styleConstraintPrompt: string, promptProfile: string): string {
+  const photography = specSections.photography_style ?? [];
+  const quality = specSections.quality_requirements ?? [];
+  const font = specSections.font_system ?? [];
+
+  const parts = [
+    extractSectionDetail(photography, "Depth of Field"),
+    extractSectionDetail(photography, "Camera Parameter Reference"),
+    extractSectionDetail(quality, "Style"),
+    extractSectionDetail(quality, "Realism"),
+    extractSectionDetail(font, "Heading Font"),
+    styleConstraintPrompt,
+    promptProfile === "ta-pro" ? "zero drift same-SKU lock and exact product identity retention" : "",
+  ].filter(Boolean);
+
+  return sentenceJoin(parts);
+}
+
+function buildGenesisQualitySentence(specSections: Record<string, string[]>): string {
+  const quality = specSections.quality_requirements ?? [];
+  return [
+    extractSectionDetail(quality, "Resolution"),
+    extractSectionDetail(quality, "Style"),
+    extractSectionDetail(quality, "Realism"),
+  ].map((value) => clipLine(value)).filter(Boolean).join(", ");
+}
+
+function ensureSentence(value: string): string {
+  const cleaned = compactLine(value);
+  if (!cleaned) return "";
+  return /[.!?]$/.test(cleaned) ? cleaned : `${cleaned}.`;
+}
+
+function paragraphJoin(values: string[]): string {
+  return values.map((value) => ensureSentence(value)).filter(Boolean).join(" ");
+}
+
+function buildGenesisIdentityLockSentence(params: {
+  primaryColor: string;
+  productMaterial: string;
+  keyFeatures: string[];
+  promptProfile: string;
+}): string {
+  const { primaryColor, productMaterial, keyFeatures, promptProfile } = params;
+  const parts = [
+    primaryColor
+      ? `Keep the exact same SKU and product identity locked to the uploaded reference, especially the true product color ${primaryColor}`
+      : "Keep the exact same SKU and product identity locked to the uploaded reference color",
+    productMaterial ? `the original material ${productMaterial}` : "the original material rendering",
+    keyFeatures.length > 0 ? `and these immutable features: ${keyFeatures.join(", ")}` : "and the visible logo, hardware, texture, silhouette, and structure",
+  ];
+  if (promptProfile === "ta-pro") {
+    parts.push("with zero drift");
+  }
+  return `${parts.join(", ")}. Do not recolor, redesign, simplify, or flatten the product into a generic packshot.`;
+}
+
+function buildGenesisNegativePrompt(
+  colorAnchor: string,
+  materialAnchor: string,
+  keyFeatures: string[],
+  promptProfile: string,
+  apparelHeroGuard: boolean,
+): string {
+  const parts = [
+    "blurry",
+    "low resolution",
+    "wrong colorway",
+    "recolored product",
+    materialAnchor ? `wrong ${clipLine(materialAnchor)}` : "wrong material",
+    "missing logo",
+    "altered hardware",
+    "simplified structure",
+    "distorted proportions",
+    "broken cutouts",
+    keyFeatures.length > 0 ? `missing ${clipLine(keyFeatures[0])}` : "missing key features",
+    colorAnchor ? `off-tone ${clipLine(colorAnchor)}` : "",
+    apparelHeroGuard ? "hanger display" : "",
+    apparelHeroGuard ? "mannequin display" : "",
+    apparelHeroGuard ? "floating garment" : "",
+    apparelHeroGuard ? "blank white backdrop" : "",
+    promptProfile === "ta-pro" ? "identity drift" : "",
+  ];
+  return parts.filter(Boolean).join(", ");
+}
+
+const GENESIS_APPAREL_RE = /\b(shirt|t-?shirt|tee|blouse|jacket|coat|dress|skirt|hoodie|sweater|cardigan|pants|trousers|jeans|denim|garment|apparel|outerwear|top|shirting)\b|衬衫|衬衣|上衣|外套|夹克|连衣裙|裙装|半裙|裤子|长裤|牛仔|卫衣|毛衣|针织|服装/i;
+const GENESIS_WHITE_BG_PLAN_RE = /\b(clean\s*packshot|packshot|pure white|white background|white backdrop|seamless white)\b|白底|纯白背景|白色背景/i;
+const GENESIS_APPAREL_RESTRICTED_SCENE_RE = /\b(hanger|white hanger|mannequin|hang separately|floating garment|blank white backdrop|empty white background|flat lay)\b|衣架|白色衣架|人台|悬挂|挂拍|纯白背景|空白背景|平铺/i;
+const GENESIS_APPAREL_STATIC_LAYOUT_RE = /\b(strictly centered|centered symmetric|symmetrical centered|front vertical|front-on vertical|flat front|dead-center|straight-on|zero-degree front|centered placement|centered display)\b|严格居中对称|居中对称|中心对称|绝对居中|正面垂直|正面平视|垂直居中|画面正中央|位于画面正中央|正中央|0度正拍|零度正拍|正拍|文字居中排列|居中摆放|居中陈列|居中位置|居中正拍|顶部居中/i;
+const GENESIS_APPAREL_BLAND_SET_RE = /\b(matte gray|plain gray background|clean plain background|no distracting elements?|linen background|neutral textile background|support elements?: none|decorative elements?: none)\b|浅灰.*磨砂|磨砂质感|无干扰元素|低饱和度.*背景|浅灰磨砂|浅灰.*亚麻|亚麻布材质|亚麻布背景|中性布面背景|浅灰渐变背景|布纹纹理|无辅助道具|辅助道具：无|装饰元素：无|无繁杂装饰/i;
+
+function isGenesisApparelBlueprint(params: {
+  analysisRecord: Record<string, unknown>;
+  image: Record<string, unknown>;
+}): boolean {
+  const { analysisRecord, image } = params;
+  const visualIdentity = analysisRecord.product_visual_identity && typeof analysisRecord.product_visual_identity === "object"
+    ? analysisRecord.product_visual_identity as Record<string, unknown>
+    : {};
+  const haystack = [
+    String(analysisRecord.product_summary ?? ""),
+    String(visualIdentity.material ?? ""),
+    Array.isArray(visualIdentity.key_features) ? visualIdentity.key_features.join(" ") : "",
+    String(image.title ?? ""),
+    String(image.description ?? ""),
+    String(image.design_content ?? ""),
+  ].join(" ");
+  return GENESIS_APPAREL_RE.test(haystack);
+}
+
+function isGenesisWhiteBackgroundPlan(image: Record<string, unknown>): boolean {
+  const haystack = [
+    String(image.type ?? ""),
+    String(image.title ?? ""),
+    String(image.description ?? ""),
+    String(image.design_content ?? ""),
+  ].join(" ");
+  return GENESIS_WHITE_BG_PLAN_RE.test(haystack);
+}
+
+function sanitizeGenesisApparelSceneDetail(value: string, apparelHeroGuard: boolean): string {
+  const cleaned = clipLine(value);
+  if (!cleaned) return "";
+  if (!apparelHeroGuard) return cleaned;
+  return (
+    GENESIS_APPAREL_RESTRICTED_SCENE_RE.test(cleaned) ||
+    GENESIS_APPAREL_STATIC_LAYOUT_RE.test(cleaned) ||
+    GENESIS_APPAREL_BLAND_SET_RE.test(cleaned)
+  )
+    ? ""
+    : cleaned;
+}
+
+export function buildGenesisHeroPromptObjects(params: {
+  analysisRecord: Record<string, unknown>;
+  language: string;
+  promptProfile: string;
+  styleConstraintPrompt: string;
+}): GenesisPromptObject[] {
+  const { analysisRecord, language, promptProfile, styleConstraintPrompt } = params;
+  const images = Array.isArray(analysisRecord.images)
+    ? analysisRecord.images.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+    : [];
+  const visualIdentity = analysisRecord.product_visual_identity && typeof analysisRecord.product_visual_identity === "object"
+    ? analysisRecord.product_visual_identity as Record<string, unknown>
+    : {};
+  const copyAnalysis = analysisRecord.copy_analysis && typeof analysisRecord.copy_analysis === "object"
+    ? analysisRecord.copy_analysis as Record<string, unknown>
+    : {};
+  const rawKeyFeatures = Array.isArray(visualIdentity.key_features)
+    ? visualIdentity.key_features.map((item) => clipLine(String(item ?? ""))).filter(Boolean)
+    : [];
+  const productMaterial = clipLine(String(visualIdentity.material ?? ""));
+  const primaryColor = clipLine(String(visualIdentity.primary_color ?? ""));
+  const sharedCopy = typeof copyAnalysis.shared_copy === "string" ? copyAnalysis.shared_copy.trim() : "";
+  const copyLines = splitCopyLines(sharedCopy);
+  const specSections = extractMarkdownHeadingSections(String(analysisRecord.design_specs ?? ""));
+  const commercialIntent = normalizeGenesisCommercialIntent(
+    analysisRecord.commercial_intent ?? analysisRecord.commercialIntent,
+  );
+
+  return images.map((image, index) => {
+    const title = clipLine(String(image.title ?? `Image ${index + 1}`)) || `Image ${index + 1}`;
+    const description = clipLine(String(image.description ?? ""));
+    const apparelHeroGuard = isGenesisApparelBlueprint({ analysisRecord, image }) && !isGenesisWhiteBackgroundPlan(image);
+    const keyFeatures = rawKeyFeatures.filter((value) =>
+      !(apparelHeroGuard && /\b(hanger|white hanger|mannequin)\b|衣架|白色衣架|木质衣架|人台|挂拍/i.test(value))
+    );
+    const planSections = extractGenesisPlanSections(String(image.design_content ?? ""));
+    const sceneRecipe = normalizeGenesisSceneRecipe(image.scene_recipe ?? image.sceneRecipe);
+    const visualOnlyCopy = language === "none";
+
+    const subject = sentenceJoin(flattenSectionLines(planSections.product_appearance), " ");
+    const composition = sentenceJoin([
+      sceneRecipe?.product_ratio ?? "",
+      sceneRecipe?.layout_method ?? "",
+      sceneRecipe?.subject_angle ?? "",
+      sceneRecipe?.text_zone ?? "",
+      extractSectionDetail(planSections.composition_plan, "Product Proportion"),
+      extractSectionDetail(planSections.composition_plan, "Layout Method"),
+      extractSectionDetail(planSections.composition_plan, "Subject Angle"),
+      extractSectionDetail(planSections.composition_plan, "Text Area"),
+    ].map((value) => sanitizeGenesisApparelSceneDetail(value, apparelHeroGuard)));
+    const background = sanitizeGenesisApparelSceneDetail(sentenceJoin([
+      sceneRecipe?.background_surface ?? "",
+      sceneRecipe?.background_elements ?? "",
+      sceneRecipe?.support_elements ?? "",
+      sceneRecipe?.decorative_elements ?? "",
+      extractSectionDetail(planSections.content_elements, "Background Elements"),
+      extractSectionDetail(planSections.content_elements, "Decorative Elements"),
+    ]), apparelHeroGuard);
+    const lighting = sentenceJoin([
+      sceneRecipe?.lighting_setup ?? "",
+      sceneRecipe?.lens_hint ?? "",
+      extractSectionDetail(planSections.atmosphere_creation, "Light and Shadow Effects"),
+      extractSectionDetail(specSections.photography_style, "Lighting"),
+    ].map((value) => sanitizeGenesisApparelSceneDetail(value, apparelHeroGuard)));
+    const colorScheme = buildGenesisColorSchemeSentence(specSections);
+    const materialDetails = sentenceJoin([
+      extractSectionDetail(planSections.content_elements, "Key Selling Points"),
+      productMaterial,
+      keyFeatures.join(", "),
+    ]);
+
+    const explicitMainTitle = normalizeVisibleCopyValue(extractSectionDetail(planSections.text_content, "Main Title"));
+    const explicitSubtitle = normalizeVisibleCopyValue(extractSectionDetail(planSections.text_content, "Subtitle"));
+    const explicitDescription = normalizeVisibleCopyValue(extractSectionDetail(planSections.text_content, "Description Text"));
+    const copyTextParts: string[] = [];
+    if (!visualOnlyCopy) {
+      if (explicitMainTitle) copyTextParts.push(`Use "${explicitMainTitle}" as the main title.`);
+      else if (copyLines[0]) copyTextParts.push(`Use "${copyLines[0]}" as the main title.`);
+      if (explicitSubtitle) copyTextParts.push(`Use "${explicitSubtitle}" as the subtitle.`);
+      else if (copyLines[1]) copyTextParts.push(`Use "${copyLines[1]}" as the subtitle.`);
+      if (explicitDescription) {
+        copyTextParts.push(/[.!?]$/.test(explicitDescription) ? explicitDescription : `${explicitDescription}.`);
+      } else if (copyLines.length > 2) {
+        const fallbackDescription = copyLines.slice(2).join(" ");
+        copyTextParts.push(/[.!?]$/.test(fallbackDescription) ? fallbackDescription : `${fallbackDescription}.`);
+      }
+    }
+    if (visualOnlyCopy && copyTextParts.length === 0) {
+      copyTextParts.push("No typography. Keep the composition visual-only with no added visible copy.");
+    }
+    const textLayout = sentenceJoin([
+      ...copyTextParts,
+      sceneRecipe?.text_zone ?? "",
+      commercialIntent?.copy_strategy ?? "",
+      extractSectionDetail(planSections.composition_plan, "Text Area"),
+      extractSectionDetail(planSections.text_content, "Layout Guidance"),
+    ].map((value) => sanitizeGenesisApparelSceneDetail(value, apparelHeroGuard)), " ");
+
+    const insetImages = sanitizeGenesisApparelSceneDetail(
+      sentenceJoin([
+        sceneRecipe?.support_elements ?? "",
+        sceneRecipe?.decorative_elements ?? "",
+        flattenSectionLines(planSections.in_graphic_elements).join(" "),
+      ]),
+      apparelHeroGuard,
+    );
+    const mood = sentenceJoin([
+      sceneRecipe?.mood_keywords ?? "",
+      commercialIntent?.mood_keywords.join(", ") ?? "",
+      extractSectionDetail(planSections.atmosphere_creation, "Mood Keywords"),
+    ], " ");
+    const designGoal = sentenceJoin([
+      commercialIntent?.brief_summary ?? "",
+      sceneRecipe?.shot_role ?? "",
+      flattenSectionLines(planSections.design_goal)[0] || description,
+    ], " ");
+    const cameraReference = sentenceJoin([
+      sceneRecipe?.lens_hint ?? "",
+      extractSectionDetail(planSections.atmosphere_creation, "Camera Parameter Reference"),
+    ]);
+    const style = buildGenesisStyleSentence(specSections, styleConstraintPrompt, promptProfile);
+    const quality = buildGenesisQualitySentence(specSections);
+    const identityLock = buildGenesisIdentityLockSentence({
+      primaryColor,
+      productMaterial,
+      keyFeatures,
+      promptProfile,
+    });
+
+    const openingParagraph = paragraphJoin([
+      subject || "Use the uploaded product as the exact hero subject.",
+      designGoal ? `Deliver ${designGoal}` : "",
+      composition
+        ? `Compose the frame so ${composition}`
+        : "Compose the frame with a dynamic commercial layout, a clear hero zone, and readable breathing room",
+      commercialIntent?.visual_tone ? `Keep the visual tone grounded in ${commercialIntent.visual_tone}` : "",
+      apparelHeroGuard
+        ? "Stage the garment as a premium editorial still life with layered set surfaces, tactile depth, and purposeful shadow shaping rather than a hanger display, mannequin display, or blank white packshot"
+        : "",
+      background
+        ? `Build a layered commercial set with ${background}`
+        : "Build a layered set with a tactile background surface, a readable midground, and restrained foreground accents instead of an empty backdrop",
+    ]);
+
+    const lightingParagraph = paragraphJoin([
+      lighting
+        ? `Light the scene with ${lighting}`
+        : "Use purposeful directional lighting with a key light, contour highlight, and soft shadow separation",
+      colorScheme ? `Anchor the palette around ${colorScheme}` : "",
+      materialDetails ? `Emphasize ${materialDetails}` : "",
+    ]);
+
+    const richnessParagraph = paragraphJoin([
+      insetImages
+        ? `Add scene richness with ${insetImages}`
+        : "Introduce subtle foreground and background accents that reinforce the product story without stealing focus from the hero product",
+      mood ? `Let the overall mood feel ${clipLine(mood)}` : "",
+      textLayout || (visualOnlyCopy
+        ? "Keep the composition visual-only with no added visible copy"
+        : ""),
+    ]);
+
+    const cameraParagraph = paragraphJoin([
+      cameraReference ? `Use ${cameraReference}` : "",
+      style ? `Shoot it with ${style}` : "",
+      quality ? `${quality}` : "",
+      identityLock,
+    ]);
+
+    return {
+      prompt: [
+        openingParagraph,
+        lightingParagraph,
+        richnessParagraph,
+        cameraParagraph,
+      ].filter(Boolean).join("\n\n"),
+      title,
+      negative_prompt: buildGenesisNegativePrompt(primaryColor, productMaterial, keyFeatures, promptProfile, apparelHeroGuard),
+      marketing_hook: description || clipLine(String(analysisRecord.product_summary ?? "")),
+      priority: 0,
+    };
+  });
+}
+
+export async function handleGeneratePromptsRequest(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return options();
   if (req.method !== "POST") return err("BAD_REQUEST", "Method not allowed", 405);
 
@@ -169,18 +829,11 @@ Deno.serve(async (req) => {
   const isGenesisModule = module === "genesis";
   const isEcomDetailModule = module === "ecom-detail";
   const analysisRecord = parseAnalysisRecord(body.analysisJson);
-  const clothingCopyAnalysis = isClothing ? parseClothingCopyAnalysis(body.analysisJson, language) : null;
-  const sharedClothingCopy = sanitizeString(clothingCopyAnalysis?.shared_copy, "");
-  const clothingVisualOnly = isClothing && (language === "none" || sharedClothingCopy.length === 0);
-  const isGenesisBlueprintMode = isGenesisModule && Array.isArray(analysisRecord?.images);
+  const normalizedGenesisRecord = isGenesisModule ? normalizeGenesisBlueprintForPrompt(analysisRecord) : null;
+  const isGenesisBlueprintMode = Boolean(normalizedGenesisRecord);
+  const useDeterministicGenesisPrompts = Boolean(normalizedGenesisRecord);
   const ecomDetailCopyRuleZh = buildVisibleCopyLanguageRule(language, true);
   const ecomDetailCopyRuleEn = buildVisibleCopyLanguageRule(language, false);
-  const clothingCopyRuleZh = clothingVisualOnly
-    ? "运行时共享主文案为空，所有图片必须保持纯视觉构图，禁止任何新增画面文字。"
-    : buildVisibleCopyLanguageRule(language, true);
-  const clothingCopyRuleEn = clothingVisualOnly
-    ? "The runtime shared master copy is empty, so every image must stay visual-only with no added visible text."
-    : buildVisibleCopyLanguageRule(language, false);
   const analysisJson = typeof body.analysisJson === "string"
     ? body.analysisJson
     : JSON.stringify(body.analysisJson, null, 2);
@@ -224,8 +877,6 @@ Deno.serve(async (req) => {
 - 必须从分析蓝图中提取精确色值（如 #FFDB58、#3C3C3C），在 prompt 中直接使用十六进制色值。
 - 声明面料类型（棉质/涤纶/牛仔布/丝绸等）与视觉特征（哑光/光泽/粗糙纹理等）。
 - 完整保留产品的形状、颜色、图案、logo、文字印花和所有关键设计细节。
-- 运行时以 analysisJson.copy_analysis.shared_copy 为最终文案裁决：若为空则所有图片必须纯视觉；若非空则整批共用同一份主文案，只允许按每张图的适配策略改变位置、层级和角色。
-- 文案语言硬约束：${clothingCopyRuleZh}
 - 每段 prompt 结尾统一追加：8K分辨率，超清画质，极致锐度，商业摄影级品质，无视觉噪点。
 - 严格输出 JSON 数组，每个元素包含 prompt, title, negative_prompt, marketing_hook, priority 字段，不含 Markdown，不含任何解释。`;
 
@@ -249,8 +900,6 @@ Universal requirements:
 - Extract exact hex color values from the blueprint (e.g. #FFDB58, #3C3C3C) and use them directly in the prompt.
 - State fabric type (cotton, polyester, denim, silk, etc.) and visual properties (matte, glossy, textured, etc.).
 - Preserve all product identity: shape, color, pattern, logo, print, and every key design detail.
-- Treat analysisJson.copy_analysis.shared_copy as the final runtime copy authority: if it is empty, every image must remain visual-only; if it is present, the whole batch shares that same master copy and only placement, hierarchy, and role may change per image adaptation.
-- Visible-copy language rule: ${clothingCopyRuleEn}
 - End every prompt with: 8K resolution, ultra-clear, maximum sharpness, commercial photography quality, zero visual artifacts.
 - Output a strict JSON array only; each element must contain prompt, title, negative_prompt, marketing_hook, priority fields; no Markdown; no explanations.`;
 
@@ -338,6 +987,11 @@ Return a strict JSON array only. Each item must contain prompt, title, negative_
 - 若蓝图中存在商品身份锁定信息、主色锚定、材质锚定、关键特征，必须在 prompt 正文中明确写出，而不是只放在 negative_prompt。
 - negative_prompt 只用于补充易漂移风险，正向 prompt 本身必须显式声明禁止改款和禁止漂移。
 - 若蓝图要求共享文案，则必须写明原文、位置、层级、留白和可读性，且文案不得遮挡商品。
+- 每条 prompt 必须写成自然语言英文段落，不要使用 Subject: / Composition: / Background: 这类标签式前缀。
+- 每条 prompt 默认至少包含 2 层可读场景深度，除白底精修型方案外禁止空背景或单层纯色背景。
+- 光线必须有明确方向性和层次感，至少要交代主光和轮廓光/环境补光关系。
+- 构图不能全部正摆正拍，优先吸收蓝图里的微倾斜、对角线、三分法、高低机位等动态信息。
+- 装饰元素必须与商品品类和卖点相关，不能为了“高级感”硬塞无关道具。
 - 文案语言硬约束：${genesisCopyRuleZh}
 - 输出严格 JSON 数组，每项包含 prompt, title, negative_prompt, marketing_hook, priority。`;
   const genesisBlueprintSystemPromptEn = `You are a top-tier e-commerce hero-image prompt engineer. The input is a structured hero-image blueprint, not a compact analysis summary. Generate one prompt per blueprint image in the exact same order.
@@ -348,6 +1002,11 @@ Rules:
 - If the blueprint contains identity-lock details, color anchors, material anchors, or key features, state them explicitly in the positive prompt instead of relying only on negative_prompt.
 - negative_prompt is supplemental only. The positive prompt itself must explicitly forbid redesign, recoloring, and feature drift.
 - If shared copy is required, include the exact copy, placement, hierarchy, whitespace, and readability instructions, and ensure the text does not cover the product.
+- Every prompt must be written as natural English paragraphs, not as labeled sections such as Subject:, Composition:, or Background:.
+- Default to at least two readable layers of scene depth. Except for clean packshot / white-background plans, do not use an empty background or a single flat backdrop.
+- Lighting must feel directional and layered, explicitly covering the key light plus contour or ambient support.
+- Do not make every composition square and static; absorb the blueprint's tilt, diagonal flow, rule-of-thirds placement, or high/low camera variation.
+- Decorative elements must fit the product category and selling points instead of acting as generic premium filler.
 - Visible-copy language rule: ${genesisCopyRuleEn}
 - Return a strict JSON array only. Each item must contain prompt, title, negative_prompt, marketing_hook, priority.`;
 
@@ -390,6 +1049,8 @@ Rules:
 - If outputLanguage is none but the user manually provided copy, use the user's original copy without translation.
 - Selected style tags are high-priority visual constraints, but integrate them naturally.
 - Generate exactly ${imageCount} prompts. Keep them stylistically consistent while varying angle, framing, composition, or scene appropriately.
+- The prompt field must be natural English paragraphs, not label-style sections such as Subject:, Composition:, or Lighting:.
+- Build commercially rich scenes with readable depth, tactile background surfaces, directional lighting, and restrained category-relevant accents rather than a blank centered packshot.
 - Visible-copy language rule: ${genesisCopyRuleEn}
 - The title and marketing_hook fields must also follow the same language rule.
 - Return a strict JSON array only. Each item must contain prompt, title, negative_prompt, marketing_hook, priority.`
@@ -481,6 +1142,8 @@ Rules:
 - The positive prompt must explicitly say that color, material, logo, hardware, texture, silhouette, proportions, and structure cannot change.
 - If the blueprint requires visible copy, the prompt must include the exact copy instructions, placement, hierarchy, whitespace, readability, and non-occlusion rules.
 - Use negative_prompt to list the most likely drift risks, including wrong colors, wrong materials, missing logo, changed hardware, or simplified structure.
+- The prompt field must be natural English paragraphs, not label-style sections such as Subject:, Composition:, or Lighting:.
+- Make the scene feel commercially staged: include readable depth layers, a tactile background surface, directional light, and category-appropriate accents instead of a flat empty packshot.
 ${genesisLangRule}
 - Return JSON array only. No markdown fences. No explanation text.
 
@@ -611,13 +1274,8 @@ Rules:
 - One prompt object per image plan, in the same order as the blueprint.
 - Each prompt must be self-contained and immediately usable for image generation.
 - Extract and use exact hex color codes from the blueprint's color system and product description.
-- Read analysisJson.copy_analysis first. It is the final runtime source of truth for copy mode, shared_copy, and per-plan adaptations.
-- If analysisJson.copy_analysis.shared_copy is empty, every prompt must explicitly require no added text overlay and pure visual composition only.
-- If analysisJson.copy_analysis.shared_copy is non-empty:
-  - Use that exact shared master copy across the full batch instead of inventing a new copy block.
-  - Use per_plan_adaptations[i] to decide the copy role, placement, hierarchy, whitespace, and non-occlusion requirement for image i.
-  - Do not paraphrase the shared copy into a different marketing message; only adapt how it is presented in each image.
-- Runtime visible-copy language rule: ${clothingCopyRuleEn}
+- If output language is "none", no in-image text of any kind — pure visual composition only.
+- Otherwise, keep any in-image text language as: ${language === "none" ? "none (no text)" : language}.
 - If style constraints are provided, treat them as highest priority visual requirements.
 - Return JSON array only. No markdown fences. No explanation text.
 
@@ -650,8 +1308,6 @@ ${styleConstraintPrompt || "(none)"}
   const finalSystemPrompt = applyPromptVariant(promptRegistryKey, "system", systemPrompt);
   const finalUserPrompt = applyPromptVariant(promptRegistryKey, "user", userPrompt);
 
-  const config = getQnChatConfig();
-  const isAzure = config.endpoint.includes(".openai.azure.com") || config.endpoint.includes(".cognitiveservices.azure.com") || config.endpoint.includes(".services.ai.azure.com");
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -659,6 +1315,28 @@ ${styleConstraintPrompt || "(none)"}
       let fullText = "";
       try {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ fullText })}\n\n`));
+
+        if (useDeterministicGenesisPrompts && normalizedGenesisRecord) {
+          const content = JSON.stringify(
+            buildGenesisHeroPromptObjects({
+              analysisRecord: normalizedGenesisRecord,
+              language,
+              promptProfile,
+              styleConstraintPrompt,
+            }),
+          );
+          const chunkSize = 96;
+          for (let i = 0; i < content.length; i += chunkSize) {
+            fullText += content.slice(i, i + chunkSize);
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ fullText })}\n\n`));
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          return;
+        }
+
+        const config = getQnChatConfig();
+        const isAzure = config.endpoint.includes(".openai.azure.com") || config.endpoint.includes(".cognitiveservices.azure.com") || config.endpoint.includes(".services.ai.azure.com");
 
         const controller2 = new AbortController();
         const timer = setTimeout(() => controller2.abort(), config.timeoutMs * 2);
@@ -757,4 +1435,8 @@ ${styleConstraintPrompt || "(none)"}
       Connection: "keep-alive",
     },
   });
-});
+}
+
+if (import.meta.main) {
+  Deno.serve(handleGeneratePromptsRequest);
+}

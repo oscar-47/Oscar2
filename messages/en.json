@@ -1,16 +1,19 @@
 {
   "nav": {
-    "studioGenesis": "Hero Image Generator",
-    "aestheticMirror": "Aesthetic Mirror",
-    "clothingStudio": "Clothing Details Suite",
-    "ecomStudio": "One-Click Generate",
-    "refinementStudio": "Refinement Studio",
-    "pricing": "Buy Now",
+    "studioGenesis": "Hero Images",
+    "studioGenesis2": "Hero Images",
+    "aestheticMirror": "Style Match",
+    "clothingStudio": "Clothing",
+    "ecomStudio": "Detail Images",
+    "refinementStudio": "Retouch",
+    "pricing": "Pricing",
     "history": "History",
     "profile": "Profile",
+    "users": "Users",
     "signIn": "Sign In",
     "signUp": "Sign Up",
-    "signOut": "Sign Out"
+    "signOut": "Sign Out",
+    "credits": "Credits"
   },
   "credits": {
     "label": "Credits",
@@ -33,71 +36,94 @@
     "checkEmail": "Check your email for the verification code",
     "otpPlaceholder": "Enter code from email",
     "welcome": "Welcome back",
-    "createAccount": "Create your account"
+    "createAccount": "Create your account",
+    "back": "← Back"
   },
   "landing": {
     "nav": {
-      "tagline": "AI Imaging for Fashion Commerce",
-      "cta": "Enter Workspace"
+      "tagline": "Shopix Ecommerce Imaging",
+      "cta": "Get Started"
     },
     "hero": {
-      "badge": "AI Business Visual Engine",
-      "title": "AI-Powered E-Commerce Visual Productivity",
-      "subtitle": "From product photography to commercial retouching — three core engines covering the entire e-commerce imaging workflow.",
-      "cta": "Enter Workspace",
-      "platformHint": "Compatible with 30+ mainstream domestic and global e-commerce style and size standards.",
+      "badge": "Shopix Ecommerce Product Image Generator",
+      "title": "Instant images. Every shot sells.",
+      "subtitle": "Generate hero images, detail pages, and retouched product photos for any marketplace. Upload your product, get studio-quality results.",
+      "cta": "Start Creating",
+      "platformHint": "Works with every major marketplace",
       "platforms": "Taobao|Tmall|JD.com|Pinduoduo|Douyin E-Commerce|Kuaishou E-Commerce|Xiaohongshu|WeChat Shop|Amazon|Shopee|Lazada|AliExpress|SHEIN|TikTok Shop",
-      "feature1Title": "Hero Image Generator",
-      "feature1Desc": "AI analyzes product features and selling points to generate high-conversion hero images",
-      "feature2Title": "One-Click Generate",
-      "feature2Desc": "Upload references, AI plans detail page modules and generates a full asset set in one click",
-      "feature3Title": "Image Refinement",
-      "feature3Desc": "Smart material analysis with batch commercial-grade refinement output"
+      "feature1Title": "Shopix Hero Image Generator",
+      "feature1Desc": "Turn raw product shots into conversion-focused ecommerce hero images",
+      "feature2Title": "Detail Page Asset Creation",
+      "feature2Desc": "Plan and generate complete product detail visuals from a single workflow",
+      "feature3Title": "Shopix Product Photo Editing",
+      "feature3Desc": "Refine product textures, lighting, and cleanup tasks in commercial batches"
     },
     "features": {
       "section1": {
-        "title": "Hero Image Generator",
-        "subtitle": "Upload product images and let AI analyze product traits and selling points to generate high-conversion e-commerce hero images.",
-        "cap1": "Smart Product Analysis",
-        "cap1Desc": "AI auto-detects material, lighting, and texture features for accurate product reproduction",
-        "cap2": "30+ Platform Compatibility",
-        "cap2Desc": "One-click switching between Taobao, Tmall, JD, Amazon and more platform sizes and styles",
-        "cap3": "Flexible Style Customization",
-        "cap3Desc": "Freely adjust scene style, lighting, composition, color tone, and surface material",
+        "title": "Shopix Hero Image Generator",
+        "subtitle": "Upload your product images and let Shopix generate ecommerce hero images tailored for marketplace conversion.",
+        "cap1": "Product Trait Analysis",
+        "cap1Desc": "Detect materials, color, texture, and selling points before generation starts",
+        "cap2": "Marketplace-Ready Output",
+        "cap2Desc": "Adapt image direction for Amazon, TikTok Shop, Taobao, Tmall, JD, and more",
+        "cap3": "Brand-Safe Art Direction",
+        "cap3Desc": "Control scene, lighting, composition, tone, and product presentation without manual rework",
         "step1": "Upload Product Images",
-        "step2": "AI Smart Analysis",
-        "step3": "Generate Hero Images"
+        "step2": "Analyze Product Intent",
+        "step3": "Generate Hero Visuals"
       },
       "section2": {
-        "title": "One-Click Generate",
-        "subtitle": "Upload multi-angle references and let AI plan detail page modules, then generate a complete e-commerce asset set in one click.",
-        "cap1": "Smart Module Planning",
-        "cap1Desc": "AI analyzes selling points and auto-plans content layout for each detail page module",
-        "cap2": "Multi-Platform Sizing",
-        "cap2Desc": "One-click switching between Pinduoduo, Douyin, Xiaohongshu, and Taobao detail page ratios",
-        "cap3": "Batch High-Speed Output",
-        "cap3Desc": "Single analysis with concurrent multi-image generation for maximum efficiency",
+        "title": "Detail Page Asset Creation",
+        "subtitle": "Generate a full set of ecommerce product visuals, from selling-point modules to campaign-ready supporting images.",
+        "cap1": "Module Planning with Shopix",
+        "cap1Desc": "Organize detail-page sections around product benefits, features, and shopper objections",
+        "cap2": "Cross-Platform Formats",
+        "cap2Desc": "Switch between domestic and global commerce layouts without rebuilding every asset",
+        "cap3": "Fast Batch Delivery",
+        "cap3Desc": "Run one analysis, then produce multiple creative assets in parallel for launch speed",
         "step1": "Upload Multi-Angle References",
-        "step2": "AI Plans Detail Modules",
-        "step3": "One-Click Full Asset Set"
+        "step2": "Plan Detail Modules",
+        "step3": "Generate Full Asset Set"
       },
       "section3": {
-        "title": "Image Refinement",
-        "subtitle": "One-click smart refinement — AI analyzes product material details and produces commercial-grade retouched results.",
-        "cap1": "Smart Material Analysis",
-        "cap1Desc": "Auto-identifies product materials and detail features for a tailored refinement plan",
-        "cap2": "Batch Processing",
-        "cap2Desc": "Refine up to 50 images at once with one-click output for all results",
-        "cap3": "Commercial-Grade Quality",
-        "cap3Desc": "Remove blemishes, enhance details, and optimize lighting for professional output",
+        "title": "Shopix Product Photo Editing",
+        "subtitle": "Use Shopix to retouch product photos, clean distractions, enhance materials, and ship marketplace-ready images faster.",
+        "cap1": "Material-Aware Cleanup",
+        "cap1Desc": "Adjust gloss, fabric, edges, and texture while preserving the real product identity",
+        "cap2": "Batch Editing Workflow",
+        "cap2Desc": "Refine up to 50 product images in one pass for catalog and campaign production",
+        "cap3": "Commercial Visual Quality",
+        "cap3Desc": "Improve clarity, lighting, and detail for polished ecommerce product photo editing output",
         "step1": "Batch Upload Originals",
-        "step2": "AI Smart Analysis",
-        "step3": "Commercial-Grade Output"
+        "step2": "Analyze Product Surface",
+        "step3": "Export Refined Results"
+      }
+    },
+    "showcase": {
+      "title": "Before vs After",
+      "subtitle": "No pro photography needed — upload product photos and get studio-quality ecommerce assets",
+      "beforeLabel": "Original",
+      "afterLabel": "Shopix Result",
+      "beforeAlt": "Original product photo {index}",
+      "afterAlt": "Shopix-generated result {index}",
+      "videoTitle": "See it in action",
+      "video": {
+        "spec": "16:9 · 1920×1080",
+        "demo": {
+          "label": "Product Demo",
+          "title": "Generate hero images in 30 seconds",
+          "desc": "Full walkthrough from uploading product photos to generating conversion-ready hero images"
+        },
+        "workflow": {
+          "label": "Workflow",
+          "title": "Batch generation workflow",
+          "desc": "See how to produce multiple assets at once and speed up product launches"
+        }
       }
     },
     "bottomCta": {
-      "title": "Help Brands Boost Shooting & Retouching Efficiency by 10x",
-      "button": "Your AI Commerce Imaging Tool",
+      "title": "Ready to let Shopix create product images that convert?",
+      "button": "Start Creating",
       "platforms": "Taobao|Tmall|JD.com|Pinduoduo|Douyin E-Commerce|Kuaishou E-Commerce|Xiaohongshu|WeChat Shop|Amazon|Shopee|Lazada|AliExpress|SHEIN|TikTok Shop"
     },
     "footer": {
@@ -113,9 +139,9 @@
       "designBrief": "Design Brief",
       "designBriefPlaceholder": "Describe your product's USP and desired aesthetic",
       "outputLanguage": "Output Language",
-      "outputLanguageNone": "None Text(Visual Only)",
+      "outputLanguageNone": "No text (visual only)",
       "analyze": "Analyze Product",
-      "emptyState": "Upload your product images and fill the hero-image brief. Click 'Analyze Product' to start.",
+      "emptyState": "Upload product images and describe your requirements, then click Analyze to begin.",
       "planPreview": "Design Blueprint",
       "planPreviewDesc": "Review the proposed scene logic and asset distribution.",
       "designSpecs": "Design Specifications",
@@ -153,6 +179,7 @@
       "platformTiktok": "TikTok Shop",
       "platformHint": "This platform requires at least {min} images",
       "platformMinWarning": "Please select at least {min} images for this platform",
+      "analysisTimeout": "Analysis timed out. Please try again.",
       "reanalyzeWarning": "Key parameters changed since last analysis. Please re-analyze.",
       "reanalyze": "Re-Analyze",
       "templateStructured": "Use template",
@@ -210,6 +237,65 @@
         }
       }
     },
+    "genesis2": {
+      "badge": "Commercial Hero Workflow",
+      "title": "Hero Image Generator",
+      "description": "Upload product assets and your brief to generate a commercial photography blueprint and the full hero-image set.",
+      "productSource": "Product Source",
+      "productSourceDesc": "Upload clear, well-lit, clean product images.",
+      "uploadHint": "For multi-image upload, only upload necessary angles or SKU images. More is not always better.",
+      "briefTitle": "Design Brief",
+      "briefDesc": "Describe your product USP, visual direction, and the selling points to emphasize.",
+      "briefPlaceholder": "Describe your product's USP and desired hero-image direction",
+      "outputLanguage": "Output Language",
+      "analyzeButton": "Analyze & Blueprint",
+      "analyzingButton": "Analyzing Blueprint...",
+      "generateButton": "Generate {count} Hero Images",
+      "generatingButton": "Generating...",
+      "newGeneration": "New Generation",
+      "backToEdit": "Back to Edit",
+      "livePreviewTitle": "Live Preview",
+      "livePreviewSubtitle": "Upload product images and fill the brief to start analysis.",
+      "emptyStateLine1": "Upload your product images and fill the Design Brief.",
+      "emptyStateLine2": "Click Analyze & Blueprint to build the hero-image blueprint.",
+      "analyzingTitle": "Analyzing",
+      "analyzingSubtitle": "Uploading assets and analyzing the hero-image blueprint.",
+      "previewTitle": "Blueprint Preview",
+      "previewSubtitle": "Review design specs and per-image blueprint content before generation.",
+      "generatingTitle": "Generating",
+      "generatingSubtitle": "Generating hero images from the approved blueprint.",
+      "resultsTitle": "Results",
+      "resultsSubtitle": "Results stay attached to the current hero-image session.",
+      "analysisTimeout": "Analysis timed out. Please try again.",
+      "promptsMissing": "The prompt response was empty. Please re-analyze or try again later.",
+      "allImagesFailed": "All images failed to generate. Please check your settings and try again.",
+      "partialFailed": "{count} image(s) failed to generate",
+      "quantityValue": "{count} Images",
+      "imagePlan": "Image Plan",
+      "imagePlanCount": "{count} images total, click to edit title, description, and design content",
+      "designSpecs": "Design Specifications",
+      "designSpecsDesc": "Unified visual standards shared by the full set",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "addPlan": "Add Image Plan",
+      "selectedCount": "Selected {selected} / {total}",
+      "generatedPrompt": "Generated Prompt",
+      "analyzingStep1": "Uploading source assets...",
+      "analyzingStep2": "Analyzing product identity...",
+      "analyzingStep3": "Structuring design blueprint...",
+      "analyzingStep4": "Preparing generation plan...",
+      "generatingStatus": "Generating images from the approved commercial blueprint...",
+      "stepInput": "Input",
+      "stepAnalyzing": "Analyzing",
+      "stepPreview": "Plan Preview",
+      "stepGenerating": "Generating",
+      "stepComplete": "Complete",
+      "stepUpload": "Uploading images",
+      "stepAnalyze": "Analyzing product",
+      "stepPrompts": "Engineering prompts",
+      "stepGenerate": "Generating images",
+      "stepDone": "Complete"
+    },
     "aestheticMirrorSteps": {
       "upload": "Uploading images",
       "generate": "Replicating style",
@@ -231,9 +317,9 @@
     "aestheticMirror": {
       "title": "Style Replicate",
       "description": "Upload a reference image and product assets to replicate the visual style in one click.",
-      "heroBadge": "AI Powered",
-      "heroTitle": "One-Click Replication of High-Converting Detail Page Styles",
-      "heroDescription": "Upload your preferred design references and product assets. AI intelligently blends style language and product traits to generate conversion-focused detail visuals.",
+      "heroBadge": "Style Planning",
+      "heroTitle": "Style Replicate Studio",
+      "heroDescription": "Upload a reference image and product assets. AI first extracts the style language, then generates matching product visuals.",
       "singleMode": "Single Replicate",
       "batchMode": "Batch Replicate",
       "batchComingSoon": "Batch replicate is coming soon",
@@ -312,10 +398,10 @@
       "variant3": "Macro Detail",
       "threeDEnabled": "3D Mannequin",
       "creditCost": "Cost: {cost} credits",
-      "badge": "AI Fashion",
-      "pageTitle": "AI-Powered Clothing Photo Set Generator",
-      "pageDescriptionLine1": "Upload clothing product images. AI analyzes style, fabric & details to generate white-bg retouched,",
-      "pageDescriptionLine2": "3D showcase & detail close-up e-commerce grade photo sets",
+      "badge": "Set Planning",
+      "pageTitle": "Clothing Photo Set Studio",
+      "pageDescriptionLine1": "Upload clothing product images or subject images and choose generation types. AI first plans the set from silhouette, fabric, and detail cues,",
+      "pageDescriptionLine2": "then generates white-background shots, dimensional showcases, and detail close-ups.",
       "tabModelTryOn": "Model Try-On",
       "tabBasicPhotoSet": "Basic Photo Set",
       "stepUpload": "Upload",
@@ -418,12 +504,157 @@
       "sharedMasterCopy": "Shared Master Copy",
       "clearForVisualOnly": "Clear this to generate visual-only images",
       "sharedCopyPlaceholder": "Enter or edit the shared master copy. Clear it to generate visual-only images.",
-      "imageIndexLabel": "Image {index}"
+      "imageIndexLabel": "Image {index}",
+      "generationTypeSelector": {
+        "title": "Select Generation Types",
+        "subtitle": "Choose the image types you want to generate",
+        "selectedCount": "Selected {count}",
+        "whiteBg": {
+          "title": "White Background Retouched",
+          "description": "A polished product showcase on a pure white background",
+          "front": "Front",
+          "back": "Back"
+        },
+        "threeD": {
+          "title": "3D Showcase",
+          "description": "A dimensional product presentation with depth and layering",
+          "whiteBackground": "White Background"
+        },
+        "mannequin": {
+          "title": "Mannequin Shot",
+          "description": "A professional apparel showcase displayed on a mannequin",
+          "whiteBackground": "White Background"
+        },
+        "detail": {
+          "title": "Detail Close-up",
+          "description": "Close-up shots that highlight construction, fabric, and finishing"
+        },
+        "sellingPoint": {
+          "title": "Selling Point Image",
+          "description": "A dedicated image that spotlights the product's key selling point"
+        }
+      },
+      "modelImageSection": {
+        "label": "Subject Image",
+        "generateButton": "Generate AI Model",
+        "uploadLabel": "Upload a subject image or use AI to generate a real model"
+      },
+      "defaultPlans": {
+        "designSpecs": "All images must follow a consistent apparel e-commerce visual system, emphasizing material, silhouette, and detail presentation.",
+        "whiteBg": {
+          "front": {
+            "title": "White Background Retouched (Front)",
+            "description": "Show the garment's front silhouette and color details",
+            "designContent": "Use a white-background flatlay or front-facing model shot to clearly present the garment's silhouette, primary color, and workmanship."
+          },
+          "back": {
+            "title": "White Background Retouched (Back)",
+            "description": "Show the garment's back silhouette and construction details",
+            "designContent": "Use a clean white-background back view to clearly present the rear cut, structure, and finishing."
+          }
+        },
+        "threeD": {
+          "front": {
+            "title": "3D Showcase (Front)",
+            "description": "A front-facing wear shot that highlights volume and silhouette",
+            "designContent": "Use a front-facing model pose to show dimensional volume and silhouette through lighting, while preserving the garment's texture and keeping the background and styling consistent."
+          },
+          "back": {
+            "title": "3D Showcase (Back)",
+            "description": "A back-facing wear shot that shows rear structure and cut",
+            "designContent": "Use a back-facing model pose to clearly show the rear cut, seams, and structure while preserving the fabric texture and keeping the same model, styling, and background."
+          },
+          "side": {
+            "title": "3D Showcase (Side)",
+            "description": "A side profile that reveals side layering and shape",
+            "designContent": "Use a side-facing model pose to show the garment's layering and silhouette from the side while preserving texture and maintaining the same model, styling, and background."
+          }
+        },
+        "mannequin": {
+          "title": "Mannequin Display Image",
+          "description": "A mannequin or dress-form display that preserves the garment's original look",
+          "designContent": "Display the garment on a mannequin or dress form while strictly preserving its original material, color, cut, texture, and overall appearance. Simulate realistic studio or natural lighting with highlights, shadows, and fabric reflections. This is a display change, not a redesign."
+        },
+        "detail": {
+          "title": "Detail Close-up {index}",
+          "description": "Magnify fabric texture and craftsmanship details",
+          "designContent": "Focus on the collar, cuff, print, or stitching to ensure strong detail clarity and material texture."
+        },
+        "sellingPoint": {
+          "title": "Selling Point Image {index}",
+          "description": "Highlight the product's core selling point",
+          "designContent": "Compose the shot around the core selling point and strengthen the visual hierarchy and memorability."
+        },
+        "fallback": {
+          "title": "Image Plan 1",
+          "description": "Edit the title and description for this image plan",
+          "designContent": "Complete this image plan based on the product's key traits."
+        }
+      },
+      "tryOnDefaultPlans": {
+        "whiteBg": {
+          "front": {
+            "title": "White Background Retouched (Front)",
+            "description": "Show the garment worn on the reference subject from the front",
+            "designContent": "Image type: White Background Retouched (Front)\nSubject recognition: Keep the reference subject's identity or species consistent and use a stable front-facing pose.\nGarment recognition: Fully preserve the garment's front color, material, silhouette, pattern, and key craft details.\nTry-on strategy: The garment must be naturally worn by the reference subject with no floating clothes or redesign, while clearly showing the front wear state.\nComposition: Pure white background with the subject centered to highlight the garment's front silhouette and fit.\nLighting: Soft studio light that preserves material texture and volume.\nBackground: Clean pure white background with no distractions.\nColor plan: Accurately restore the garment's main and secondary colors, including exact hex values.\nText: No text added (visual only).\nMood keywords: clean, professional, realistic, commercial e-commerce."
+          },
+          "back": {
+            "title": "White Background Retouched (Back)",
+            "description": "Show the garment worn on the reference subject from the back",
+            "designContent": "Image type: White Background Retouched (Back)\nSubject recognition: Keep the reference subject's identity or species consistent and use a stable back-facing pose.\nGarment recognition: Fully preserve the garment's back color, material, structure, and rear craft details.\nTry-on strategy: The garment must be naturally worn by the reference subject with no floating clothes or redesign, while clearly showing the back structure.\nComposition: Pure white background with the subject centered to highlight the back silhouette and fit.\nLighting: Soft studio light that clearly reveals the rear contour and material.\nBackground: Clean pure white background with no distractions.\nColor plan: Accurately restore the garment's main and secondary colors, including exact hex values.\nText: No text added (visual only).\nMood keywords: clean, professional, realistic, commercial e-commerce."
+          }
+        },
+        "threeD": {
+          "title": "3D Showcase",
+          "description": "Highlight the garment's volume, silhouette, and layering on the reference subject",
+          "designContent": "Image type: 3D Showcase\nSubject recognition: Keep the reference subject's identity or species consistent and preserve body posture and pose direction.\nGarment recognition: Fully preserve the garment's color, material, silhouette, and key details.\nTry-on strategy: Emphasize volume, layering, and natural fit while keeping the subject realistic rather than turning it into a 3D mannequin.\nComposition: Use a medium close-up or three-quarter-body framing to highlight the garment's silhouette and layering.\nLighting: Directional soft light that enhances dimensionality and wrinkle definition.\nBackground: A simple commercial backdrop or a clean gradient background.\nColor plan: Accurately restore the garment's main and secondary colors, including exact hex values.\nText: No text added (visual only).\nMood keywords: dimensional, layered, textured, commercial."
+        },
+        "mannequin": {
+          "title": "Mannequin Shot",
+          "description": "A standardized showcase that preserves the garment's original material and appearance",
+          "designContent": "Image type: Mannequin Shot\nSubject recognition: Keep the reference subject's identity or species consistent and do not replace it with a literal empty mannequin.\nGarment recognition: Strictly preserve the garment's original material, color, style, cut, texture, and fabric handfeel.\nTry-on strategy: Treat this as a standardized showcase where the subject naturally wears the garment while emphasizing clarity and material realism.\nComposition: Use a steady standardized composition that highlights the garment as a whole.\nLighting: Realistic studio or natural lighting with clear highlights, shadows, and fabric reflections.\nBackground: A clean standard backdrop that does not compete with the garment.\nColor plan: Accurately restore the garment's main and secondary colors, including exact hex values.\nText: No text added (visual only).\nMood keywords: standardized, realistic, material-driven, professional."
+        },
+        "detail": {
+          "title": "Detail Close-up {index}",
+          "description": "Magnify the fabric, craft, and fit details where the garment meets the subject",
+          "designContent": "Image type: Detail Close-up\nSubject recognition: Keep the reference subject's identity or species consistent and focus on a local worn area.\nGarment recognition: Highlight key details such as collar, cuff, buttons, fabric texture, or stitching.\nTry-on strategy: Show the garment's local fit and true material on the subject without changing the garment structure.\nComposition: Use a macro or close-up framing focused on one high-value detail.\nLighting: Side soft light that enhances texture and craftsmanship.\nBackground: Softened or shallow-depth background.\nColor plan: Accurately restore the garment's main and secondary colors, including exact hex values.\nText: No text added (visual only).\nMood keywords: precise, textured, crafted, clear."
+        },
+        "sellingPoint": {
+          "title": "Selling Point Image {index}",
+          "description": "Compose around the core selling point and make the worn result memorable",
+          "designContent": "Image type: Selling Point Image\nSubject recognition: Keep the reference subject's identity or species consistent and build around the worn experience or visual impact.\nGarment recognition: Highlight the garment's most important selling point, such as silhouette, function, material, or design feature.\nTry-on strategy: Keep the garment naturally worn by the subject and use composition or pose to strengthen the selling point without drifting from the design.\nComposition: Combine medium and close-up framing to reinforce the selling-point area and hierarchy.\nLighting: Use accent light or rim light to guide focus.\nBackground: A concise commercial setting that supports the selling-point story.\nColor plan: Accurately restore the garment's main and secondary colors, including exact hex values.\nText: No text added (visual only).\nMood keywords: conversion-focused, concentrated, memorable, commercial."
+        },
+        "fallback": {
+          "title": "Try-on Plan 1",
+          "description": "A wear presentation plan for the reference subject",
+          "designContent": "Image type: Subject Try-on Showcase\nSubject recognition: Keep the reference subject's identity or species consistent.\nGarment recognition: Keep the garment's color, material, silhouette, and key details consistent.\nTry-on strategy: The garment must be naturally worn by the reference subject.\nComposition: Medium-shot commercial composition.\nLighting: Soft commercial lighting.\nBackground: Clean background.\nColor plan: Restore the garment's color values accurately.\nText: No text added (visual only).\nMood keywords: realistic, professional, commercial e-commerce."
+        }
+      },
+      "tryOnFallbackSpecs": {
+        "title": "Try-on Design Specifications",
+        "visualThemeTitle": "Overall Visual Theme",
+        "visualThemeDirection": "Direction: realistic commercial try-on presentation",
+        "visualThemeBackground": "Background: clean and uncluttered",
+        "visualThemeColorTone": "Color tone: led by the garment's true color",
+        "photoSpecsTitle": "Global Photography Specs",
+        "photoSpecsLens": "Lens: 50mm-85mm commercial portrait or subject showcase",
+        "photoSpecsLighting": "Lighting: soft key light with subtle rim light",
+        "photoSpecsQuality": "Quality: high-detail, sharp, low-noise",
+        "subjectSummaryTitle": "Subject Recognition Summary",
+        "subjectSummaryType": "Subject type must follow the reference subject image",
+        "subjectSummaryLock": "Never humanize animals or animalize humans",
+        "garmentTraitsTitle": "Garment Core Traits",
+        "garmentTraitsPreserve": "Preserve color, material, silhouette, logo, print, construction, and key details",
+        "garmentTraitsWear": "The garment must be naturally worn by the reference subject",
+        "typographyTitle": "Typography System",
+        "typographyVisualOnly": "Default to visual-only composition",
+        "typographyLanguage": "Any added text must follow the target language rules"
+      }
     },
     "refinementStudio": {
-      "heroBadge": "AI Product Refinement",
-      "title": "One-Click Smart Product Refinement",
-      "description": "Upload product images and let AI analyze quality, remove blemishes, and enhance details for more professional product visuals.",
+      "heroBadge": "Refinement Planning",
+      "title": "Image Refinement Studio",
+      "description": "Upload product images and refinement requirements. AI first diagnoses issues and treatment direction, then outputs refined results in batch.",
       "resultTitle": "Refinement Results",
       "resultSubtitle": "View refinement results after uploading product images",
       "uploadProduct": "Upload Product Images",
@@ -514,6 +745,7 @@
       "requirements": "Requirements (optional)",
       "requirementsPlaceholder": "Describe the scene, style, or background you want…",
       "model": "Model",
+      "modelTextHint": "For images with text, use Balanced or a higher model.",
       "imageSize": "Resolution",
       "aspectRatio": "Aspect Ratio",
       "imageCount": "Image Count",
@@ -566,7 +798,7 @@
     },
     "usage": {
       "title": "Generation Cost Reference",
-      "speed": "Fast: 15 credits/image",
+      "fast": "Fast: 15 credits/image",
       "balanced": "Balanced: 30 credits/image",
       "quality": "High Quality: 50 credits/image"
     },

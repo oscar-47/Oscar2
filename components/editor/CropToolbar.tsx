@@ -133,7 +133,7 @@ export function CropToolbar() {
   if (!crop.active) return null
 
   return (
-    <div className="absolute bottom-16 left-1/2 z-[10000] -translate-x-1/2 rounded-xl border border-[#e5e7eb] bg-white px-4 py-3 shadow-2xl">
+    <div className="absolute bottom-16 left-1/2 z-[10000] -translate-x-1/2 rounded-xl border border-border bg-background px-4 py-3 shadow-2xl">
       <div className="flex flex-wrap items-center gap-1.5">
         <button
           type="button"
@@ -141,8 +141,8 @@ export function CropToolbar() {
           className={cn(
             'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
             crop.aspectRatioLock === null
-              ? 'bg-[#111827] text-white'
-              : 'text-[#6b7280] hover:bg-[#f3f4f6]'
+              ? 'bg-foreground text-background'
+              : 'text-muted-foreground hover:bg-muted'
           )}
         >
           {t('cropFree')}
@@ -153,14 +153,14 @@ export function CropToolbar() {
           className={cn(
             'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
             crop.aspectRatioLock === 'original'
-              ? 'bg-[#111827] text-white'
-              : 'text-[#6b7280] hover:bg-[#f3f4f6]'
+              ? 'bg-foreground text-background'
+              : 'text-muted-foreground hover:bg-muted'
           )}
         >
           {t('cropOriginal')}
         </button>
 
-        <div className="mx-1 h-4 w-px bg-[#e5e7eb]" />
+        <div className="mx-1 h-4 w-px bg-muted" />
 
         {ASPECT_PRESETS.map((preset) => (
           <button
@@ -170,8 +170,8 @@ export function CropToolbar() {
             className={cn(
               'rounded-md px-2 py-1 text-xs font-medium transition-colors',
               crop.aspectRatioLock === preset.value
-                ? 'bg-[#111827] text-white'
-                : 'text-[#6b7280] hover:bg-[#f3f4f6]'
+                ? 'bg-foreground text-background'
+                : 'text-muted-foreground hover:bg-muted'
             )}
           >
             {preset.label}
@@ -183,14 +183,14 @@ export function CropToolbar() {
         <button
           type="button"
           onClick={cancelCrop}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f3f4f6] text-[#6b7280] hover:bg-[#e5e7eb] transition-colors"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
         <button
           type="button"
           onClick={() => void handleApply()}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#111827] text-white hover:bg-[#1f2937] transition-colors"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-foreground text-background hover:bg-foreground transition-colors"
         >
           <Check className="h-4 w-4" />
         </button>

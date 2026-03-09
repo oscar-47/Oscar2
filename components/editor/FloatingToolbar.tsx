@@ -40,7 +40,7 @@ export function FloatingToolbar({ objectId, x, y, width, zoom }: FloatingToolbar
 
   return (
     <div
-      className="pointer-events-auto absolute z-50 flex items-center gap-1 rounded-lg border border-[#e5e7eb] bg-white px-1.5 py-1 shadow-lg"
+      className="pointer-events-auto absolute z-50 flex items-center gap-1 rounded-lg border border-border bg-background px-1.5 py-1 shadow-lg"
       style={{
         left: toolbarX,
         top: toolbarY,
@@ -51,29 +51,29 @@ export function FloatingToolbar({ objectId, x, y, width, zoom }: FloatingToolbar
       <button
         type="button"
         onClick={() => openTextEdit(objectId)}
-        className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+        className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-foreground hover:bg-muted transition-colors"
       >
         <Type className="h-3.5 w-3.5" />
         {t('editText')}
       </button>
 
-      <div className="h-4 w-px bg-[#e5e7eb]" />
+      <div className="h-4 w-px bg-muted" />
 
       <button
         type="button"
         onClick={() => startCrop(objectId)}
-        className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+        className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-foreground hover:bg-muted transition-colors"
       >
         <Crop className="h-3.5 w-3.5" />
         {t('crop')}
       </button>
 
-      <div className="h-4 w-px bg-[#e5e7eb]" />
+      <div className="h-4 w-px bg-muted" />
 
       <button
         type="button"
         onClick={handleDownload}
-        className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+        className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-foreground hover:bg-muted transition-colors"
       >
         <Download className="h-3.5 w-3.5" />
         {t('download')}

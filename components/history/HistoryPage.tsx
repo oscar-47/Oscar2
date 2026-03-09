@@ -341,10 +341,10 @@ export function HistoryPage() {
       {sectionItems.map((item) => (
         <div
           key={item.id}
-          className="group overflow-hidden rounded-2xl border border-[#d0d4dc] bg-white"
+          className="group overflow-hidden rounded-2xl border border-border bg-background"
           onClick={() => selectionMode && item.url && toggleSelection(item.id)}
         >
-          <div className="relative aspect-[3/4] overflow-hidden bg-[#f1f3f6]">
+          <div className="relative aspect-[3/4] overflow-hidden bg-muted">
             {item.url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -353,7 +353,7 @@ export function HistoryPage() {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className="flex h-full flex-col items-center justify-center text-[#8b8f99]">
+              <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
                 <ImageIcon className="h-7 w-7" />
                 <p className="mt-2 text-xs">{t('noImage')}</p>
               </div>
@@ -362,7 +362,7 @@ export function HistoryPage() {
             {selectionMode && item.url && (
               <div className="absolute left-2 top-2">
                 {selectedIds.has(item.id) ? (
-                  <CheckSquare className="h-6 w-6 text-[#3b82f6] drop-shadow" />
+                  <CheckSquare className="h-6 w-6 text-accent drop-shadow" />
                 ) : (
                   <Square className="h-6 w-6 text-white drop-shadow" />
                 )}
@@ -382,18 +382,18 @@ export function HistoryPage() {
 
           <div className="space-y-2 p-3">
             <div className="flex items-center gap-2 text-xs">
-              <span className="rounded-md bg-[#eef0f4] px-2 py-1 text-[#5c6271]">{typeLabel(item.type)}</span>
-              <span className="rounded-md bg-[#f3f4f7] px-2 py-1 text-[#6b7280]">{statusLabel(item.status)}</span>
+              <span className="rounded-md bg-secondary px-2 py-1 text-muted-foreground">{typeLabel(item.type)}</span>
+              <span className="rounded-md bg-secondary px-2 py-1 text-muted-foreground">{statusLabel(item.status)}</span>
             </div>
 
-            <p className="text-xs text-[#7d818d]">{formatter.format(new Date(item.createdAt))}</p>
+            <p className="text-xs text-muted-foreground">{formatter.format(new Date(item.createdAt))}</p>
 
             {item.prompt && (
-              <p className="line-clamp-2 text-xs leading-5 text-[#5d6372]">{item.prompt}</p>
+              <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{item.prompt}</p>
             )}
 
             {item.errorMessage && (
-              <p className="line-clamp-2 text-xs leading-5 text-[#ba4656]">{item.errorMessage}</p>
+              <p className="line-clamp-2 text-xs leading-5 text-destructive">{item.errorMessage}</p>
             )}
 
             <div className="flex items-center gap-2 pt-1">
@@ -474,7 +474,7 @@ export function HistoryPage() {
       )}
 
       {error && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#f2c5cb] bg-[#fff2f4] px-4 py-3 text-sm text-[#8d2f39]">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
             <span>{error}</span>
@@ -519,8 +519,8 @@ export function HistoryPage() {
 
       {/* Selection bar */}
       {selectionMode && selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-[#e5e7eb] bg-white px-5 py-3 shadow-2xl">
-          <span className="text-sm font-medium text-[#374151]">
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-border bg-background px-5 py-3 shadow-2xl">
+          <span className="text-sm font-medium text-foreground">
             {t('selectedCount', { count: selectedIds.size })}
           </span>
           <Button size="sm" onClick={openSelectedInEditor} className="gap-1.5">

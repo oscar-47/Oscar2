@@ -50,10 +50,12 @@ type TaskRow = {
 };
 
 type BlueprintImagePlan = {
+  id?: string;
   title: string;
   description: string;
   design_content: string;
   type?: string;
+  scene_recipe?: GenesisSceneRecipe;
 };
 
 type AnalysisBlueprint = {
@@ -64,6 +66,10 @@ type AnalysisBlueprint = {
   garment_profile?: Record<string, unknown>;
   tryon_strategy?: Record<string, unknown>;
   copy_analysis?: BlueprintCopyAnalysis;
+  product_summary?: string;
+  product_visual_identity?: ProductVisualIdentity;
+  style_directions?: GenesisStyleDirectionGroup[];
+  commercial_intent?: GenesisCommercialIntent;
 };
 
 type BlueprintCopyMode = "user-brief" | "product-inferred" | "visual-only";
@@ -102,6 +108,57 @@ type ProductVisualIdentity = {
   material: string;
   key_features: string[];
 };
+
+type GenesisProductArchetype =
+  | "apparel"
+  | "beauty-liquid"
+  | "beauty-bottle"
+  | "footwear"
+  | "electronics"
+  | "jewelry"
+  | "generic";
+
+type GenesisCommercialIntent = {
+  archetype: GenesisProductArchetype;
+  brief_summary: string;
+  visual_tone: string;
+  mood_keywords: string[];
+  composition_bias: string;
+  set_treatment: string;
+  lighting_bias: string;
+  copy_strategy: string;
+};
+
+type GenesisSceneRecipe = {
+  shot_role: string;
+  hero_focus: string;
+  product_ratio: string;
+  layout_method: string;
+  subject_angle: string;
+  support_elements: string;
+  background_surface: string;
+  background_elements: string;
+  decorative_elements: string;
+  lighting_setup: string;
+  lens_hint: string;
+  text_zone: string;
+  mood_keywords: string;
+};
+
+type GenesisPlanTextContent = {
+  mainTitle: string;
+  subtitle: string;
+  descriptionText: string;
+};
+
+type GenesisPlanSectionKey =
+  | "designGoal"
+  | "productAppearance"
+  | "inGraphicElements"
+  | "compositionPlan"
+  | "contentElements"
+  | "textContent"
+  | "atmosphereCreation";
 
 type GenesisAnalysisResult = {
   product_summary: string;
@@ -148,11 +205,22 @@ function toPublicUrl(pathOrUrl: string): string {
 async function toDataUrl(pathOrUrl: string): Promise<string> {
   if (pathOrUrl.startsWith("data:image/")) return pathOrUrl;
   const url = toPublicUrl(pathOrUrl);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`SOURCE_IMAGE_FETCH_FAILED ${res.status}: ${url}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  const mime = res.headers.get("content-type") || guessMime(url);
-  return `data:${mime};base64,${bytesToBase64(bytes)}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`SOURCE_IMAGE_FETCH_FAILED ${res.status}: ${url}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const mime = res.headers.get("content-type") || guessMime(url);
+    return `data:${mime};base64,${bytesToBase64(bytes)}`;
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error(`SOURCE_IMAGE_FETCH_TIMEOUT: ${url}`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function parseJsonFromContent(content: string): Record<string, unknown> {
@@ -205,6 +273,10 @@ function parseJsonFromContent(content: string): Record<string, unknown> {
 
 function sanitizeString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function clipGenesisTextLine(value: string, maxChars: number): string {
+  return Array.from(value.trim()).slice(0, maxChars).join("");
 }
 
 function normalizeStyleConstraintPrompt(value: unknown): string {
@@ -624,6 +696,10 @@ function buildGenesisCopyFallback(requirements: string, outputLanguage: string, 
   return requirements.trim();
 }
 
+function genesisRequestsVisibleCopy(requirements: string, outputLanguage: string): boolean {
+  return outputLanguage !== "none";
+}
+
 function copyPlanMatchesBrief(copyPlan: string, requirements: string, uiLanguage: string): boolean {
   const { product, sellingPoints } = extractGenesisBriefHints(requirements, uiLanguage.startsWith("zh"));
   const keywords = [product, ...sellingPoints]
@@ -636,13 +712,2405 @@ function copyPlanMatchesBrief(copyPlan: string, requirements: string, uiLanguage
   return keywords.some((keyword) => normalizedCopy.includes(keyword.replace(/\s+/g, "").toLowerCase()));
 }
 
-function normalizeGenesisAnalysis(
+function inferGenesisProductArchetype(
+  productSummary: string,
+  identity: ProductVisualIdentity | undefined,
+  requirements: string,
+): GenesisProductArchetype {
+  const haystack = [productSummary, identity?.material ?? "", ...(identity?.key_features ?? []), requirements].join(" ").toLowerCase();
+  if (GENESIS_APPAREL_RE.test(haystack)) return "apparel";
+  if (/\b(foundation|serum|essence|lotion|cream|skincare|cosmetic|makeup|concealer|primer|base)\b|粉底|粉底液|精华|乳液|面霜|护肤|彩妆|遮瑕|底妆|液体|肤感/.test(haystack)) {
+    return "beauty-liquid";
+  }
+  if (/\b(perfume|fragrance|cologne|bottle|jar|spray)\b|香水|香氛|喷雾|玻璃瓶|香氛瓶|膏霜瓶/.test(haystack)) {
+    return "beauty-bottle";
+  }
+  if (/\b(shoe|sneaker|boot|heel|loafer|sandal|footwear)\b|鞋|球鞋|运动鞋|靴|凉鞋/.test(haystack)) return "footwear";
+  if (/\b(phone|laptop|tablet|camera|headphone|earbud|speaker|keyboard|mouse|monitor|electronic|device|gadget)\b|手机|电脑|平板|相机|耳机|音箱|键盘|鼠标|显示器|电子/.test(haystack)) {
+    return "electronics";
+  }
+  if (/\b(ring|necklace|bracelet|earring|pendant|watch|jewelry|jewellery|diamond|gold|silver)\b|戒指|项链|手链|耳环|吊坠|腕表|珠宝|钻石|黄金|白银/.test(haystack)) {
+    return "jewelry";
+  }
+  return "generic";
+}
+
+function detectGenesisToneKey(requirements: string, styleLabels: string[]): "premium" | "natural" | "tech" | "energetic" | "clean" {
+  const haystack = `${requirements} ${styleLabels.join(" ")}`.toLowerCase();
+  if (/\b(premium|luxury|editorial|magazine|campaign)\b|高级|奢华|轻奢|大片|广告|杂志/.test(haystack)) return "premium";
+  if (/\b(natural|soft|organic|comfort|everyday|lifestyle)\b|自然|舒适|通勤|日常|柔和|生活感/.test(haystack)) return "natural";
+  if (/\b(tech|futuristic|metallic|cyber|minimal tech)\b|科技|未来|金属|赛博|冷感/.test(haystack)) return "tech";
+  if (/\b(sport|dynamic|energetic|motion|outdoor)\b|运动|动感|活力|户外/.test(haystack)) return "energetic";
+  return "clean";
+}
+
+function buildGenesisCommercialIntent(params: {
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+  requirements: string;
+  outputLanguage: string;
+  isZh: boolean;
+  styleLabels: string[];
+  wantsVisibleCopy: boolean;
+}): GenesisCommercialIntent {
+  const { productSummary, identity, requirements, outputLanguage, isZh, styleLabels, wantsVisibleCopy } = params;
+  const archetype = inferGenesisProductArchetype(productSummary, identity, requirements);
+  const toneKey = detectGenesisToneKey(requirements, styleLabels);
+  const briefSummary = requirements.trim() || productSummary.trim();
+
+  if (isZh) {
+    const toneMap = {
+      premium: {
+        visualTone: "商业大片、克制高级、材质主导",
+        mood: ["高级", "克制", "精致"],
+        composition: "偏轴主视觉、明确焦点、避免目录式摆放",
+        set: "分层背景表面、可读支撑面、前中后景都有商业摄影语境",
+        lighting: "定向侧上主光配轮廓补光，突出边缘与材质高光",
+      },
+      natural: {
+        visualTone: "自然通勤、柔和真实、轻生活感",
+        mood: ["自然", "舒适", "清新"],
+        composition: "三分法或轻偏轴构图，留白柔和，避免僵直正拍",
+        set: "布面、微纹理墙面、柔和渐层或日常材质表面组成场景",
+        lighting: "柔和侧光与环境补光，保留真实阴影与空气感",
+      },
+      tech: {
+        visualTone: "冷静科技、结构清晰、反射受控",
+        mood: ["科技", "冷静", "精确"],
+        composition: "对角线推进或结构化偏轴构图，强调体块与边线",
+        set: "金属、亚克力、玻璃或微纹理硬质表面构成层次背景",
+        lighting: "方向性硬朗主光配受控轮廓光，突出结构线与反射",
+      },
+      energetic: {
+        visualTone: "动感有张力、节奏明确、主体有推进感",
+        mood: ["动感", "利落", "有冲击"],
+        composition: "对角线、俯仰机位或前景遮挡制造运动张力",
+        set: "具有速度感的支撑面、阴影切片和层次背景加强节奏",
+        lighting: "侧逆光和局部高光制造速度感与体积变化",
+      },
+      clean: {
+        visualTone: "极简商业、干净利落、主体优先",
+        mood: ["简洁", "干净", "利落"],
+        composition: "偏轴平衡构图，保持清晰留白但禁止空白海报感",
+        set: "中性但有材质的背景表面和克制支撑元素",
+        lighting: "干净定向主光与柔和补光，避免平打光",
+      },
+    } as const;
+    const tone = toneMap[toneKey];
+    return {
+      archetype,
+      brief_summary: briefSummary || shortGenesisCue(productSummary, true, "商品主体商业主图"),
+      visual_tone: tone.visualTone,
+      mood_keywords: [...tone.mood, ...styleLabels.slice(0, 2)].filter((value, index, arr) => value && arr.indexOf(value) === index),
+      composition_bias: tone.composition,
+      set_treatment: tone.set,
+      lighting_bias: tone.lighting,
+      copy_strategy: !wantsVisibleCopy ? "默认纯视觉主图，不新增文案，只保留纯视觉留白。" : `文案仅服务于主图节奏，使用 ${outputLanguageLabel(outputLanguage)}，不改变画面构图逻辑。`,
+    };
+  }
+
+  const toneMap = {
+    premium: {
+      visualTone: "editorial campaign polish with restrained luxury and material-led detail",
+      mood: ["premium", "restrained", "refined"],
+      composition: "offset editorial balance with a clear hero zone instead of catalog centering",
+      set: "layered set surfaces with readable support planes and foreground/midground/background depth",
+      lighting: "directional side-top key light with rim separation and controlled highlights",
+    },
+    natural: {
+      visualTone: "soft lifestyle realism with everyday comfort and tactile warmth",
+      mood: ["natural", "comfortable", "fresh"],
+      composition: "rule-of-thirds or light offset framing with soft breathing room and no rigid frontality",
+      set: "textile surfaces, micro-textured walls, and gentle gradient planes for a lived-in commercial set",
+      lighting: "soft side light with ambient fill and realistic shadow falloff",
+    },
+    tech: {
+      visualTone: "calm high-tech precision with controlled reflections and sharp structure",
+      mood: ["tech", "precise", "cool"],
+      composition: "diagonal or structural offset framing that emphasizes edges, planes, and geometry",
+      set: "metal, acrylic, glass, or micro-textured hard surfaces with layered depth",
+      lighting: "directional key light with controlled contour highlights and reflective discipline",
+    },
+    energetic: {
+      visualTone: "dynamic commercial energy with a sense of movement and forward pull",
+      mood: ["dynamic", "crisp", "impactful"],
+      composition: "diagonal momentum, high/low angles, or foreground overlap to build motion",
+      set: "speed-led support planes, shadow slices, and layered backdrops that add rhythm",
+      lighting: "side-back light with sharp highlight accents and readable volume shifts",
+    },
+    clean: {
+      visualTone: "clean commercial focus with crisp hierarchy and no empty catalog stiffness",
+      mood: ["clean", "minimal", "focused"],
+      composition: "offset balance with controlled whitespace and no blank poster-like centering",
+      set: "neutral but tactile surfaces with restrained supporting elements",
+      lighting: "clean directional key light with soft fill and no flat front light",
+    },
+  } as const;
+  const tone = toneMap[toneKey];
+  return {
+    archetype,
+    brief_summary: briefSummary || shortGenesisCue(productSummary, false, "commercial hero visual"),
+    visual_tone: tone.visualTone,
+    mood_keywords: [...tone.mood, ...styleLabels.slice(0, 2)].filter((value, index, arr) => value && arr.indexOf(value) === index),
+    composition_bias: tone.composition,
+    set_treatment: tone.set,
+    lighting_bias: tone.lighting,
+    copy_strategy: !wantsVisibleCopy
+      ? "Visual-only hero image by default with no added typography."
+      : `Copy only supports the hero rhythm and must stay in ${outputLanguageLabel(outputLanguage)} without changing scene logic.`,
+  };
+}
+
+function applyGenesisRecipeVariation(
+  sceneRecipe: GenesisSceneRecipe,
+  archetype: GenesisProductArchetype,
+  variationIndex: number,
+  isZh: boolean,
+): GenesisSceneRecipe {
+  if (variationIndex === 0) return sceneRecipe;
+
+  const variations = isZh
+    ? {
+        apparel: [
+          {
+            layout_method: `${sceneRecipe.layout_method}，并加入更明显的高低错层和雕塑化支撑关系`,
+            background_surface: `${sceneRecipe.background_surface}，同时引入更明确的哑光石面或硬质支撑结构`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，让光切片更明显，层次更戏剧化`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、结构感`,
+          },
+          {
+            layout_method: `${sceneRecipe.layout_method}，但整体节奏更轻盈、更有生活化空气感`,
+            background_surface: `${sceneRecipe.background_surface}，并加入更柔和的布面渐层与空气留白`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，整体更柔和并保留空气感`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、轻生活感`,
+          },
+        ],
+        "beauty-liquid": [
+          {
+            support_elements: `${sceneRecipe.support_elements}，同时增加更明显的液体抹痕和珠光反射层`,
+            background_surface: `${sceneRecipe.background_surface}，让珠光与流体层次更丰富`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，高光滚降更浓郁，肤感更明显`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、润泽`,
+          },
+          {
+            support_elements: `${sceneRecipe.support_elements}，并让支撑面更干净、更克制`,
+            background_surface: `${sceneRecipe.background_surface}，整体更偏极简丝面和柔雾渐层`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，让光线更柔滑、通透感更强`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、通透`,
+          },
+        ],
+        "beauty-bottle": [
+          {
+            background_surface: `${sceneRecipe.background_surface}，并加入更强的镜面反射与切面光`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，让玻璃切面和边缘高光更凌厉`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、折射感`,
+          },
+          {
+            background_surface: `${sceneRecipe.background_surface}，更偏深浅层次渐层和绒面克制对比`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，让香氛氛围更柔和而克制`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、香氛感`,
+          },
+        ],
+        footwear: [
+          {
+            layout_method: `${sceneRecipe.layout_method}，并强化前冲式对角线和速度感`,
+            support_elements: `${sceneRecipe.support_elements}，加入更明确的阴影切片和速度方向`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，边缘冲击更强`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、张力`,
+          },
+          {
+            layout_method: `${sceneRecipe.layout_method}，让整体更偏雕塑感陈列和材质沉稳`,
+            background_surface: `${sceneRecipe.background_surface}，增加更稳定的硬质台面与空间秩序`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，更强调鞋面材质和鞋底厚度`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、雕塑感`,
+          },
+        ],
+        electronics: [
+          {
+            background_surface: `${sceneRecipe.background_surface}，并引入更清晰的几何光带与硬质反射`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，让边线和切面更锐`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、冷感`,
+          },
+          {
+            background_surface: `${sceneRecipe.background_surface}，整体更偏理性极简和留白`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，更强调受控反射和秩序感`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、理性`,
+          },
+        ],
+        jewelry: [
+          {
+            background_surface: `${sceneRecipe.background_surface}，并加入更强的镜面反射与高光闪点`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，让金属高光和宝石闪点更鲜明`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、闪耀`,
+          },
+          {
+            background_surface: `${sceneRecipe.background_surface}，整体更偏绒面与深浅渐层的静奢氛围`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，让珠宝更克制、更高级`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、静奢`,
+          },
+        ],
+        generic: [
+          {
+            layout_method: `${sceneRecipe.layout_method}，增加更明显的层次错位和支撑关系`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，让方向性更强`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、层次感`,
+          },
+          {
+            background_surface: `${sceneRecipe.background_surface}，整体更偏克制极简和表面质感`,
+            lighting_setup: `${sceneRecipe.lighting_setup}，让画面更纯净`,
+            mood_keywords: `${sceneRecipe.mood_keywords}、极简`,
+          },
+        ],
+      }
+    : {
+        apparel: [
+          {
+            layout_method: `${sceneRecipe.layout_method}, with more pronounced height variation and sculptural support relationships`,
+            background_surface: `${sceneRecipe.background_surface}, adding clearer matte stone and hard support planes`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, with stronger light slicing and more dramatic layering`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, sculptural`,
+          },
+          {
+            layout_method: `${sceneRecipe.layout_method}, but with a lighter rhythm and more lived-in air`,
+            background_surface: `${sceneRecipe.background_surface}, adding softer textile gradients and breathing space`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, with softer atmospheric separation`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, airy lifestyle`,
+          },
+        ],
+        "beauty-liquid": [
+          {
+            support_elements: `${sceneRecipe.support_elements}, with stronger liquid swipes and pearl reflections`,
+            background_surface: `${sceneRecipe.background_surface}, with richer pearl and fluid layering`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, with fuller highlight roll-off and skin-like richness`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, dewy`,
+          },
+          {
+            support_elements: `${sceneRecipe.support_elements}, but with a cleaner and more restrained stage`,
+            background_surface: `${sceneRecipe.background_surface}, leaning toward minimal silk planes and soft haze gradients`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, with smoother translucency and gentler light`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, translucent`,
+          },
+        ],
+        "beauty-bottle": [
+          {
+            background_surface: `${sceneRecipe.background_surface}, with stronger mirror reflections and facet light`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, making glass facets and edge highlights sharper`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, refractive`,
+          },
+          {
+            background_surface: `${sceneRecipe.background_surface}, leaning more into tonal gradients and restrained suede contrast`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, with a softer, more atmospheric fragrance mood`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, perfumed`,
+          },
+        ],
+        footwear: [
+          {
+            layout_method: `${sceneRecipe.layout_method}, with stronger forward diagonals and motion tension`,
+            support_elements: `${sceneRecipe.support_elements}, adding clearer shadow slices and directional pull`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, with more edge impact`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, tense`,
+          },
+          {
+            layout_method: `${sceneRecipe.layout_method}, leaning more sculptural and materially grounded`,
+            background_surface: `${sceneRecipe.background_surface}, with steadier hard plinths and spatial order`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, emphasizing upper texture and sole thickness`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, sculptural`,
+          },
+        ],
+        electronics: [
+          {
+            background_surface: `${sceneRecipe.background_surface}, adding clearer geometric light bands and hard reflections`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, with sharper edge definition`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, cool`,
+          },
+          {
+            background_surface: `${sceneRecipe.background_surface}, leaning further into rational minimalism and clean whitespace`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, with more disciplined reflections and order`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, rational`,
+          },
+        ],
+        jewelry: [
+          {
+            background_surface: `${sceneRecipe.background_surface}, with stronger mirror reflection and sharper sparkle points`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, making metal highlights and gemstone sparks more vivid`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, radiant`,
+          },
+          {
+            background_surface: `${sceneRecipe.background_surface}, leaning toward suede stillness and tonal luxury`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, making the jewelry feel more restrained and elevated`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, quiet luxury`,
+          },
+        ],
+        generic: [
+          {
+            layout_method: `${sceneRecipe.layout_method}, with stronger layered offsets and support relationships`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, with more directional definition`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, layered`,
+          },
+          {
+            background_surface: `${sceneRecipe.background_surface}, leaning more minimal and surface-led`,
+            lighting_setup: `${sceneRecipe.lighting_setup}, with a cleaner overall frame`,
+            mood_keywords: `${sceneRecipe.mood_keywords}, minimal`,
+          },
+        ],
+      };
+
+  const bucket = variations[archetype] ?? variations.generic;
+  const patch = bucket[Math.min(variationIndex - 1, bucket.length - 1)];
+  return patch ? { ...sceneRecipe, ...patch } : sceneRecipe;
+}
+
+function buildGenesisSceneRecipe(params: {
+  index: number;
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+  commercialIntent: GenesisCommercialIntent;
+  outputLanguage: string;
+  isZh: boolean;
+  totalImages: number;
+}): GenesisSceneRecipe {
+  const { index, productSummary, identity, commercialIntent, outputLanguage, isZh, totalImages } = params;
+  const summaryCue = shortGenesisCue(productSummary, isZh, isZh ? "商品主体" : "the product");
+  const material = identity?.material?.trim();
+  const roleIndex = index % 3;
+  const variationIndex = totalImages > 3 ? Math.floor(index / 3) % 3 : 0;
+
+  const copyZone = outputLanguage === "none"
+    ? (isZh ? "纯视觉构图，不新增文案，仅保留边缘呼吸留白" : "visual-only composition with no added copy, keeping only edge breathing room")
+    : roleIndex === 0
+    ? (isZh ? "优先侧边安全区，文字弱于主体，绝不压住产品" : "side safe zone first, with typography subordinate to the hero product")
+    : roleIndex === 1
+    ? (isZh ? "仅保留一组轻量标题区，依附边缘留白排布" : "only one light title cluster anchored to the edge whitespace")
+    : (isZh ? "只允许短标签或一句文案落在边缘留白" : "allow only a short label or one compact line in the edge whitespace");
+
+  const genericRole = roleIndex === 0
+    ? (isZh ? "主视觉英雄图" : "hero image")
+    : roleIndex === 1
+    ? (isZh ? "角度变化图" : "angle variation")
+    : (isZh ? "细节强化图" : "detail emphasis");
+
+  if (commercialIntent.archetype === "apparel") {
+    const recipeMap = isZh
+      ? [
+          {
+            shot_role: "服装英雄主图",
+            hero_focus: `${summaryCue} 的整体版型、门襟/领口/袖口结构与 ${material || "面料"} 质感`,
+            product_ratio: "主体约占画面 62%-72%",
+            layout_method: "采用偏轴主视觉或三分法构图，让主体落在偏左或偏右重心，避免目录式居中海报",
+            subject_angle: "保持正面识别的同时引入 5°-12° 轻微倾角或结构化前 3/4 站位",
+            support_elements: "使用折叠布片、低矮支撑面、前景柔焦或阴影切片承托服装，而不是悬空陈列",
+            background_surface: "背景使用微纹理墙面叠加织物/哑光表面，形成前中后景的商业静物层次",
+            background_elements: "用渐层阴影、材质过渡和局部支撑面制造场景深度，不要空背景",
+            decorative_elements: "仅允许布料回声、裁片切面、纽扣/缝线呼应元素，装饰必须服务于服装结构",
+            lighting_setup: "侧上方定向主光配柔和轮廓补光，突出布料褶皱、边缘高光和轮廓体积",
+            lens_hint: "70mm-100mm 商业镜头，f/5.6-f/8，保持服装结构清晰并控制背景层次",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "服装角度变化图",
+            hero_focus: `${summaryCue} 的轮廓张力、材质体积和细节节奏`,
+            product_ratio: "主体约占画面 54%-64%",
+            layout_method: "通过对角线、前景遮挡或高低机位建立空间感，避免平铺式展示",
+            subject_angle: "用轻俯拍、轻仰拍或前景遮挡制造服装体积感，但不得改变真实版型",
+            support_elements: "加入克制的支撑面、折叠布面或局部悬停阴影，让主体更有落点",
+            background_surface: "背景使用层次渐层、布面与微纹理硬面组合，保证视觉不空",
+            background_elements: "前景保留轻微虚化或阴影带，中景有支撑，背景有可读材质",
+            decorative_elements: "仅使用与服装材质、缝线和结构相关的弱装饰元素",
+            lighting_setup: "方向性主光从侧前或侧后打入，辅以环境补光，制造体积与层次",
+            lens_hint: "85mm 商业镜头，f/5.6 左右，保持主体清晰并让背景微虚化",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "服装材质细节图",
+            hero_focus: `${summaryCue} 的材质、车线、门襟或袖口等高价值细节`,
+            product_ratio: "主体约占画面 45%-58%",
+            layout_method: "使用局部斜切或细节近景构图，保留一定背景层次而不是完全贴满画面",
+            subject_angle: "细节视角优先，允许局部对角切入和层叠遮挡，强化触感",
+            support_elements: "以前景柔焦、裁片切面和材料回声形成近景层次",
+            background_surface: "背景用更近距离的织物、石材或哑光板材做微观衬底",
+            background_elements: "背景要为质感服务，只保留低密度但可读的层次信息",
+            decorative_elements: "仅允许材质呼应、纽扣/五金/车线局部强化，禁止无关道具",
+            lighting_setup: "斜向主光扫过材质表面，辅以边缘高光，突出纹理深浅变化",
+            lens_hint: "90mm-100mm 微距或近摄镜头，f/6.3-f/8，保证关键细节锐利",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+        ]
+      : [
+          {
+            shot_role: "apparel hero image",
+            hero_focus: `the full silhouette, collar/placket/cuff structure, and ${material || "fabric"} tactility of ${summaryCue}`,
+            product_ratio: "garment occupies roughly 62%-72% of the frame",
+            layout_method: "use an offset hero balance or rule-of-thirds placement instead of catalog-style centering",
+            subject_angle: "keep the garment front-readable while introducing a subtle 5-12 degree tilt or structured front three-quarter stance",
+            support_elements: "use folded fabric echoes, a low support plane, foreground haze, or shadow slices so the garment feels staged rather than floating",
+            background_surface: "combine a micro-textured wall with textile or matte support surfaces to create readable front/mid/back scene depth",
+            background_elements: "use gradient shadows, material transitions, and a visible support plane instead of an empty backdrop",
+            decorative_elements: "allow only fabric echoes, construction slices, and stitching/button-related accents that reinforce garment structure",
+            lighting_setup: "use a directional side-top key light with soft rim support to reveal folds, edge highlights, and silhouette volume",
+            lens_hint: "70mm-100mm commercial lens, f/5.6-f/8, keeping structure crisp with controlled background depth",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "apparel angle variation",
+            hero_focus: `the volume, layering, and secondary structural cues of ${summaryCue}`,
+            product_ratio: "garment occupies roughly 54%-64% of the frame",
+            layout_method: "build space with diagonal tension, foreground overlap, or a restrained high/low camera shift",
+            subject_angle: "use a light high angle, low angle, or foreground overlap to add volume without changing the true garment pattern",
+            support_elements: "add a restrained support plane, folded textile, or shadow anchor so the garment has a believable set position",
+            background_surface: "mix tonal gradients with textile and micro-textured hard surfaces to avoid a flat backdrop",
+            background_elements: "let the foreground carry soft blur, the midground hold the garment, and the background show readable material depth",
+            decorative_elements: "only weak, garment-relevant supporting elements are allowed",
+            lighting_setup: "use directional side-front or side-back lighting with ambient fill to create volume and scene separation",
+            lens_hint: "85mm commercial lens around f/5.6 for clean detail with restrained depth falloff",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "apparel detail emphasis",
+            hero_focus: `high-value fabric, stitch, placket, cuff, or trim details from ${summaryCue}`,
+            product_ratio: "garment occupies roughly 45%-58% of the frame",
+            layout_method: "use a diagonal detail crop or close composition that still preserves a sense of scene depth",
+            subject_angle: "favor a detail-driven cut-in with layered overlap and tactile perspective",
+            support_elements: "build the near field with foreground blur, material slices, and tonal overlaps",
+            background_surface: "use close textile, matte board, or stone surfaces as a micro backdrop for detail readability",
+            background_elements: "background depth should stay low-density but readable and never disappear completely",
+            decorative_elements: "only texture echoes and relevant trim details may appear",
+            lighting_setup: "let an angled key light skim across the surface and use restrained edge highlights to reveal texture depth",
+            lens_hint: "90mm-100mm macro or close commercial lens, f/6.3-f/8, with tack-sharp key detail",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+        ];
+    return applyGenesisRecipeVariation(recipeMap[roleIndex], commercialIntent.archetype, variationIndex, isZh);
+  }
+
+  if (commercialIntent.archetype === "beauty-liquid") {
+    const recipeMap = isZh
+      ? [
+          {
+            shot_role: "液体美妆英雄主图",
+            hero_focus: `${summaryCue} 的瓶身轮廓、液体质感与高光反射控制`,
+            product_ratio: "主体约占画面 48%-60%",
+            layout_method: "采用偏轴主视觉或低角度对角线构图，让产品与液体肌理共同主导画面",
+            subject_angle: "保持品牌识别的同时引入 8°-18° 轻微倾斜或结构化 3/4 角度",
+            support_elements: "使用液体抹痕、丝绸折面、柔光反射面或半透明支撑块承托主体",
+            background_surface: "背景使用大理石、丝绸、珠光渐层或雾面石材，形成柔和奢感层次",
+            background_elements: "以前景液体肌理、中景产品、背景柔焦表面形成三层结构，不要空白影棚底",
+            decorative_elements: "仅允许与肤感、丝滑、保湿、通透相关的流体或表面元素",
+            lighting_setup: "侧后方柔性主光配边缘轮廓光，控制玻璃/塑料高光滚降并突出液体丝滑感",
+            lens_hint: "85mm-100mm 商业微距镜头，f/5.6-f/8，保证瓶身与液体纹理兼顾清晰",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "液体美妆质感变化图",
+            hero_focus: `${summaryCue} 的材质细节、液体流动感和包装精致度`,
+            product_ratio: "主体约占画面 42%-54%",
+            layout_method: "通过高低错层、前景流体或局部遮挡建立空间张力",
+            subject_angle: "用轻俯拍或结构化侧前 3/4 视角展示瓶肩、泵头或盖体细节",
+            support_elements: "加入液滴、镜面反射、珠光表面或丝绸边缘加强美妆广告气质",
+            background_surface: "背景保留珠光雾面或石材表面，避免纯平和杂乱道具",
+            background_elements: "前景允许柔焦液滴或丝面，中景产品清晰，背景微虚化",
+            decorative_elements: "装饰必须围绕液体丝滑、肤感润泽和包装精致感展开",
+            lighting_setup: "主光由侧上方切入，辅以柔和底部反射和轻轮廓光，避免塑料感死白高光",
+            lens_hint: "90mm 商业镜头，f/6.3 左右，保留适度景深层次",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "液体美妆细节特写图",
+            hero_focus: `${summaryCue} 的液体纹理、泵头/瓶口结构或关键材质特写`,
+            product_ratio: "主体约占画面 36%-48%",
+            layout_method: "局部特写与对角线切入构图，突出微观质感但保留品牌识别线索",
+            subject_angle: "使用微距近拍或局部斜切视角强化液体厚度与材质表现",
+            support_elements: "以前景液体肌理、微反射和柔和高光衬托细节",
+            background_surface: "背景使用更近距离的珠光板、磨砂石面或柔焦丝面作为衬底",
+            background_elements: "背景低密度但要有材质层次和阴影关系",
+            decorative_elements: "只允许微量液滴、涂抹纹理或细腻反射面",
+            lighting_setup: "斜向柔光扫过液体表面，利用轮廓高光提升通透感和丝滑感",
+            lens_hint: "100mm 微距镜头，f/7.1-f/9，保持关键液体纹理锐利",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+        ]
+      : [
+          {
+            shot_role: "beauty liquid hero image",
+            hero_focus: `the bottle silhouette, liquid tactility, and controlled highlight roll-off of ${summaryCue}`,
+            product_ratio: "product occupies roughly 48%-60% of the frame",
+            layout_method: "use an offset hero balance or low-angle diagonal composition where the package and liquid texture share the frame",
+            subject_angle: "keep the branding readable while introducing an 8-18 degree tilt or structured three-quarter stance",
+            support_elements: "use liquid swipes, silk folds, reflective surfaces, or translucent support blocks to stage the product",
+            background_surface: "use marble, silk, pearl gradients, or matte stone surfaces to build a soft luxurious set",
+            background_elements: "build three layers with liquid texture in the foreground, the product in the midground, and a soft-focus surface behind",
+            decorative_elements: "only fluid or surface accents that communicate slip, hydration, radiance, or smooth skin feel are allowed",
+            lighting_setup: "use a soft side-back key light with rim separation to control glass/plastic highlights and emphasize silky liquid depth",
+            lens_hint: "85mm-100mm commercial macro lens at f/5.6-f/8 for sharp packaging and liquid texture",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "beauty liquid variation image",
+            hero_focus: `material detail, fluid movement, and packaging refinement for ${summaryCue}`,
+            product_ratio: "product occupies roughly 42%-54% of the frame",
+            layout_method: "build space with layered heights, foreground fluid shapes, or partial occlusion",
+            subject_angle: "use a light overhead or structured front-side three-quarter angle to reveal shoulder, pump, or cap details",
+            support_elements: "add droplets, mirrored reflections, pearl surfaces, or silk edges to keep the frame ad-like",
+            background_surface: "keep pearl matte or stone-like surfaces and avoid a plain studio slab",
+            background_elements: "allow soft-focus droplets or silk in the foreground, keep the product crisp, and the background softly diffused",
+            decorative_elements: "all accents must support silky slip, skin-like softness, and refined packaging cues",
+            lighting_setup: "let the key light enter from the side-top with soft lower bounce and a restrained rim so highlights do not turn chalky",
+            lens_hint: "90mm commercial lens around f/6.3 with readable depth layering",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "beauty liquid detail close-up",
+            hero_focus: `liquid texture, pump or opening structure, and high-value material detail from ${summaryCue}`,
+            product_ratio: "product occupies roughly 36%-48% of the frame",
+            layout_method: "use a tight diagonal detail crop that preserves some brand recognition",
+            subject_angle: "favor macro close-ups or oblique detail views that reveal thickness and translucency",
+            support_elements: "use foreground liquid texture, micro reflections, and soft highlight bands to support detail readability",
+            background_surface: "use close pearl boards, matte stone, or soft silk as a macro backdrop",
+            background_elements: "keep the background low-density but still materially layered",
+            decorative_elements: "only micro droplets, swipe textures, or delicate reflective planes are allowed",
+            lighting_setup: "skim soft light across the liquid surface and use edge highlights to increase translucency and depth",
+            lens_hint: "100mm macro lens at f/7.1-f/9 for tack-sharp liquid detail",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+        ];
+    return applyGenesisRecipeVariation(recipeMap[roleIndex], commercialIntent.archetype, variationIndex, isZh);
+  }
+
+  if (commercialIntent.archetype === "beauty-bottle") {
+    const recipeMap = isZh
+      ? [
+          {
+            shot_role: "玻璃瓶香氛英雄主图",
+            hero_focus: `${summaryCue} 的瓶身比例、玻璃折射与高光边缘`,
+            product_ratio: "主体约占画面 40%-52%",
+            layout_method: "采用偏轴英雄构图或镜面反射式对角线构图，让瓶身与反射共同形成主视觉",
+            subject_angle: "用结构化前 3/4 角度或轻微低机位展示瓶肩、瓶塞和正面标签",
+            support_elements: "使用镜面台、玻璃台、石材台或轻雾反射面承托瓶体",
+            background_surface: "背景使用深浅层次玻璃、石材、绒面或雾面渐层，增强折射和高级感",
+            background_elements: "前景反射、中景瓶体、背景柔焦光斑或材质面构成三层空间",
+            decorative_elements: "仅允许薄雾、微水珠、花瓣或矿石等与香氛调性相关的弱元素",
+            lighting_setup: "侧后方硬柔结合主光配边缘轮廓光，突出玻璃折射、边线高光和瓶塞体积",
+            lens_hint: "85mm-100mm 商业镜头，f/6.3-f/8，控制玻璃边缘清晰与背景虚化",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "玻璃瓶角度变化图",
+            hero_focus: `${summaryCue} 的折射变化、瓶塞结构和材质层次`,
+            product_ratio: "主体约占画面 36%-48%",
+            layout_method: "使用镜面延展、偏心构图或局部遮挡制造空间感",
+            subject_angle: "轻俯拍或低位斜拍，强调瓶肩、棱角或标签厚度",
+            support_elements: "允许镜面反射、折射影子或玻璃边缘前景进入画面",
+            background_surface: "背景保持材质化而不复杂，优先玻璃、石材、绒面或雾面硬质面",
+            background_elements: "保留反射层、主体层和背景光层，避免单薄空景",
+            decorative_elements: "只允许与香氛气质一致的低密度元素",
+            lighting_setup: "用方向性主光加边缘背光制造玻璃切面和标签层次",
+            lens_hint: "90mm 商业镜头，f/6.3 左右，保证瓶身结构清晰",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "玻璃瓶细节特写图",
+            hero_focus: `${summaryCue} 的瓶塞、喷头、标签压印或玻璃切面细节`,
+            product_ratio: "主体约占画面 30%-42%",
+            layout_method: "局部近景或斜切特写构图，强化玻璃材质与工艺感",
+            subject_angle: "优先用微距或斜切角度观察玻璃边缘和局部五金/压印",
+            support_elements: "使用微反射、局部折射和轻微雾化高光支撑特写气质",
+            background_surface: "背景使用近距离玻璃、金属或绒面做细节衬底",
+            background_elements: "背景保持低密度但要保留明暗和反射层次",
+            decorative_elements: "仅保留极轻的香氛相关质感元素",
+            lighting_setup: "用窄幅高光和边缘反射拉出玻璃切面与表面工艺",
+            lens_hint: "100mm 微距镜头，f/8-f/10，确保玻璃细节稳定锐利",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+        ]
+      : [
+          {
+            shot_role: "glass bottle hero image",
+            hero_focus: `the bottle proportion, glass refraction, and highlight edges of ${summaryCue}`,
+            product_ratio: "product occupies roughly 40%-52% of the frame",
+            layout_method: "use an offset hero balance or reflective diagonal composition where the bottle and reflection co-drive the frame",
+            subject_angle: "use a structured front three-quarter angle or subtle low angle to reveal shoulders, cap, and front label",
+            support_elements: "stage the bottle on mirror, glass, stone, or gently misted reflective planes",
+            background_surface: "use layered glass, stone, suede, or matte gradients to amplify refraction and luxury",
+            background_elements: "build three layers with foreground reflections, the bottle mid-plane, and soft-focus light or material planes behind",
+            decorative_elements: "only mist, micro droplets, petals, or mineral accents that fit the fragrance mood are allowed",
+            lighting_setup: "use a mixed hard-soft side-back key light with rim separation to reveal refraction, edge highlights, and cap volume",
+            lens_hint: "85mm-100mm commercial lens at f/6.3-f/8 for clean glass edges and soft background falloff",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "glass bottle variation image",
+            hero_focus: `refraction shifts, cap structure, and material layering for ${summaryCue}`,
+            product_ratio: "product occupies roughly 36%-48% of the frame",
+            layout_method: "use mirror extension, eccentric balance, or partial occlusion to create space",
+            subject_angle: "use a light overhead or low oblique angle to stress shoulders, facets, or label depth",
+            support_elements: "allow reflected planes, refracted shadows, or glass-edge foreground accents to enter the frame",
+            background_surface: "keep the set tactile but disciplined with glass, stone, suede, or matte hard surfaces",
+            background_elements: "preserve reflection, subject, and light layers so the set never feels thin",
+            decorative_elements: "only low-density accents aligned with the fragrance mood are allowed",
+            lighting_setup: "use directional key light with edge backlight to shape glass facets and label depth",
+            lens_hint: "90mm commercial lens around f/6.3 with crisp bottle structure",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "glass bottle detail close-up",
+            hero_focus: `cap, sprayer, embossing, or glass-facet details from ${summaryCue}`,
+            product_ratio: "product occupies roughly 30%-42% of the frame",
+            layout_method: "use a tight close crop or diagonal detail framing to stress material precision",
+            subject_angle: "favor macro or oblique detail views of glass edges and localized hardware or embossing",
+            support_elements: "use micro reflections, localized refraction, and soft misted highlights to support the close-up",
+            background_surface: "use close glass, metal, or suede surfaces as a detail backdrop",
+            background_elements: "keep the backdrop low-density but still layered in tone and reflection",
+            decorative_elements: "only the lightest fragrance-relevant texture accents are allowed",
+            lighting_setup: "use narrow highlight bands and edge reflections to reveal glass facets and surface finish",
+            lens_hint: "100mm macro lens at f/8-f/10 for stable tack-sharp glass detail",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+        ];
+    return applyGenesisRecipeVariation(recipeMap[roleIndex], commercialIntent.archetype, variationIndex, isZh);
+  }
+
+  if (commercialIntent.archetype === "footwear") {
+    const recipeMap = isZh
+      ? [
+          {
+            shot_role: "鞋履英雄主图",
+            hero_focus: `${summaryCue} 的鞋型轮廓、鞋面材质和鞋底结构`,
+            product_ratio: "主体约占画面 50%-62%",
+            layout_method: "采用对角线推进或偏轴构图，让鞋头和鞋侧同时建立识别点",
+            subject_angle: "使用前侧 3/4 角度或轻低机位，突出鞋头、侧墙和鞋底厚度",
+            support_elements: "使用低矮台面、轻雕塑支撑块、阴影切片或前景虚化增强落点",
+            background_surface: "背景采用混合硬质表面与柔和层次墙面，形成空间纵深",
+            background_elements: "保留前景切片、中景主体和背景层次，不允许只剩一张平板背景",
+            decorative_elements: "仅允许与鞋履材质、运动感或生活方式相关的弱元素",
+            lighting_setup: "侧前主光加边缘轮廓光，突出鞋面纹理、鞋底厚度和体积感",
+            lens_hint: "70mm-85mm 商业镜头，f/5.6-f/8，保证鞋型结构和材质清晰",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "鞋履角度变化图",
+            hero_focus: `${summaryCue} 的动态姿态、鞋侧线条和鞋底细节`,
+            product_ratio: "主体约占画面 44%-56%",
+            layout_method: "利用高低机位、对角线或双层支撑制造动态张力",
+            subject_angle: "轻俯拍、轻仰拍或前景遮挡都可，用于强调速度感或结构感",
+            support_elements: "加入低饱和支撑块、反射面或阴影切片加强空间关系",
+            background_surface: "背景需有层次墙面或地面交界，避免纯平广告板",
+            background_elements: "背景至少保留两个景层和明确的地平/支撑关系",
+            decorative_elements: "仅允许鞋带、材质切片或速度感阴影等相关元素",
+            lighting_setup: "方向性主光配侧逆光，让鞋侧线和鞋底边缘更有冲击力",
+            lens_hint: "85mm 商业镜头，f/5.6 左右",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "鞋履细节特写图",
+            hero_focus: `${summaryCue} 的鞋头纹理、鞋底纹路、鞋带孔或品牌细节`,
+            product_ratio: "主体约占画面 36%-48%",
+            layout_method: "局部近景或斜切特写构图，突出工艺和材料层次",
+            subject_angle: "优先局部斜切或近距离结构视角，增强质感和厚度",
+            support_elements: "利用微反射、前景虚化或局部支撑面托住细节",
+            background_surface: "背景使用更近距离的硬面、橡胶、织物或磨砂表面",
+            background_elements: "背景低密度但必须有材质与光影变化",
+            decorative_elements: "仅允许与鞋材和工艺相关的微量元素",
+            lighting_setup: "斜向主光扫过鞋面和鞋底细节，保留清晰阴影关系",
+            lens_hint: "90mm-100mm 近摄商业镜头，f/6.3-f/8",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+        ]
+      : [
+          {
+            shot_role: "footwear hero image",
+            hero_focus: `the shoe silhouette, upper material, and sole structure of ${summaryCue}`,
+            product_ratio: "product occupies roughly 50%-62% of the frame",
+            layout_method: "use a diagonal push or offset framing so the toe and sidewall both create recognition",
+            subject_angle: "use a front-side three-quarter angle or subtle low angle to reveal toe box, sidewall, and sole thickness",
+            support_elements: "use low plinths, sculptural blocks, shadow slices, or foreground blur to anchor the shoe",
+            background_surface: "combine hard commercial surfaces with a layered wall plane to create spatial depth",
+            background_elements: "preserve foreground slices, the shoe mid-plane, and a readable background instead of a flat ad board",
+            decorative_elements: "only low-density accents tied to material, motion, or lifestyle may appear",
+            lighting_setup: "use a side-front key light with rim support to reveal upper texture, sole thickness, and volume",
+            lens_hint: "70mm-85mm commercial lens at f/5.6-f/8 for crisp shape and material readability",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "footwear variation image",
+            hero_focus: `dynamic stance, side lines, and outsole detail for ${summaryCue}`,
+            product_ratio: "product occupies roughly 44%-56% of the frame",
+            layout_method: "use high/low camera shifts, diagonals, or dual supports to add tension",
+            subject_angle: "light overhead, low-angle, or partial overlap views may be used to intensify motion or structure",
+            support_elements: "add restrained blocks, reflective planes, or shadow slices to strengthen spatial relations",
+            background_surface: "the backdrop must retain layered walls or floor-line separation instead of a flat plane",
+            background_elements: "keep at least two readable scene layers and a clear support relationship",
+            decorative_elements: "only laces, material slices, or motion-like shadow accents are allowed",
+            lighting_setup: "use directional key light with side-back edge light so the sidewall and outsole read with more impact",
+            lens_hint: "85mm commercial lens around f/5.6",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "footwear detail close-up",
+            hero_focus: `toe texture, outsole pattern, eyelets, or branding details from ${summaryCue}`,
+            product_ratio: "product occupies roughly 36%-48% of the frame",
+            layout_method: "use a tight close-up or diagonal detail crop to stress construction and material layers",
+            subject_angle: "favor oblique detail angles or close structural viewpoints to increase thickness and texture",
+            support_elements: "use micro reflections, foreground blur, or localized support planes to hold the detail",
+            background_surface: "use close hard, rubber, textile, or matte surfaces as the detail base",
+            background_elements: "keep the background low-density but materially active",
+            decorative_elements: "only micro accents related to footwear material and craft are allowed",
+            lighting_setup: "skim angled light across the upper and sole detail while preserving readable shadows",
+            lens_hint: "90mm-100mm close commercial lens at f/6.3-f/8",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+        ];
+    return applyGenesisRecipeVariation(recipeMap[roleIndex], commercialIntent.archetype, variationIndex, isZh);
+  }
+
+  if (commercialIntent.archetype === "electronics") {
+    const recipeMap = isZh
+      ? [
+          {
+            shot_role: "3C 英雄主图",
+            hero_focus: `${summaryCue} 的结构线、材质反射和关键功能部位`,
+            product_ratio: "主体约占画面 46%-58%",
+            layout_method: "采用结构化偏轴或对角线构图，让产品边线和体块形成明确秩序",
+            subject_angle: "使用前侧 3/4 角度或轻低机位，突出厚度、接口、镜头模组或关键按钮",
+            support_elements: "利用亚克力支撑、金属平台、反射面或阴影切片建立高科技落点",
+            background_surface: "背景使用金属、亚克力、玻璃或微纹理硬面，保持理性科技感",
+            background_elements: "前景反射、中景设备、背景结构光层次必须同时存在",
+            decorative_elements: "仅允许几何光带、微反射或功能相关的弱元素",
+            lighting_setup: "方向性主光配边缘轮廓光和受控反射，突出结构线与材质切面",
+            lens_hint: "70mm-100mm 商业镜头，f/5.6-f/8，避免廉价广角变形",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "3C 角度变化图",
+            hero_focus: `${summaryCue} 的接口、边线、功能区和结构层次`,
+            product_ratio: "主体约占画面 40%-52%",
+            layout_method: "通过错层支撑、对角线推进或局部遮挡制造结构张力",
+            subject_angle: "轻俯拍、斜拍或局部遮挡视角，用于强化体块关系",
+            support_elements: "加入克制的金属台、玻璃面或反射边缘构成空间秩序",
+            background_surface: "背景以理性硬质表面为主，避免软弱生活化道具",
+            background_elements: "背景要有明暗层次和几何节奏，不可单薄空平",
+            decorative_elements: "仅保留科技感光线、几何切片或极轻功能关联元素",
+            lighting_setup: "方向性侧光与受控反射配合，拉出边缘线和材料对比",
+            lens_hint: "85mm 商业镜头，f/5.6 左右",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "3C 细节特写图",
+            hero_focus: `${summaryCue} 的接口、按键、镜头模组或材质切面细节`,
+            product_ratio: "主体约占画面 32%-44%",
+            layout_method: "使用结构化近景或斜切特写，突出工业细节",
+            subject_angle: "优先局部斜切和近距离微观视角，避免平视说明书感",
+            support_elements: "用微反射和局部支撑关系托住细节区域",
+            background_surface: "背景使用近距离金属、玻璃或细纹硬面做衬底",
+            background_elements: "背景低密度但要有反射和暗部层次",
+            decorative_elements: "只允许极少量功能相关质感元素",
+            lighting_setup: "窄幅高光和受控阴影强化工业边线和材质切换",
+            lens_hint: "90mm-100mm 近摄商业镜头，f/7.1-f/9",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+        ]
+      : [
+          {
+            shot_role: "electronics hero image",
+            hero_focus: `the structural lines, material reflections, and key functional zones of ${summaryCue}`,
+            product_ratio: "product occupies roughly 46%-58% of the frame",
+            layout_method: "use structured offset or diagonal framing so the edges and massing create a clear order",
+            subject_angle: "use a front-side three-quarter or subtle low angle to reveal thickness, ports, camera modules, or key controls",
+            support_elements: "use acrylic stands, metal plinths, reflective planes, or shadow slices to create a high-tech stage",
+            background_surface: "use metal, acrylic, glass, or micro-textured hard surfaces to keep the scene rational and technological",
+            background_elements: "foreground reflections, the device mid-plane, and structured background light layers should all be present",
+            decorative_elements: "only geometric light bands, micro reflections, or function-related accents may appear",
+            lighting_setup: "use directional key light with rim separation and controlled reflections to reveal edges and material transitions",
+            lens_hint: "70mm-100mm commercial lens at f/5.6-f/8 with no cheap wide-angle distortion",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "electronics variation image",
+            hero_focus: `ports, edge lines, functional zones, and layered structure for ${summaryCue}`,
+            product_ratio: "product occupies roughly 40%-52% of the frame",
+            layout_method: "use layered supports, diagonal pushes, or partial occlusion to add structural tension",
+            subject_angle: "light overhead, oblique, or partially occluded angles can be used to strengthen block relationships",
+            support_elements: "add restrained metal stands, glass planes, or reflected edges to organize the space",
+            background_surface: "keep the set grounded in hard rational surfaces rather than soft lifestyle props",
+            background_elements: "the background needs tonal separation and geometric rhythm rather than a flat slab",
+            decorative_elements: "only technological light, geometric slices, or minimal function-related accents are allowed",
+            lighting_setup: "combine directional side light with controlled reflections to draw out edges and material contrast",
+            lens_hint: "85mm commercial lens around f/5.6",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "electronics detail close-up",
+            hero_focus: `ports, buttons, camera modules, or material-cut details from ${summaryCue}`,
+            product_ratio: "product occupies roughly 32%-44% of the frame",
+            layout_method: "use a structured close crop or oblique detail composition to stress industrial precision",
+            subject_angle: "favor close oblique technical viewpoints instead of manual-like flat views",
+            support_elements: "use micro reflections and localized supports to hold the detail area",
+            background_surface: "use close metal, glass, or fine hard textures as a detail backdrop",
+            background_elements: "keep the backdrop low-density but still layered in reflection and shadow",
+            decorative_elements: "only very minimal function-related texture accents are allowed",
+            lighting_setup: "use narrow highlight bands and controlled shadow fields to amplify industrial edges and material changes",
+            lens_hint: "90mm-100mm close commercial lens at f/7.1-f/9",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+        ];
+    return applyGenesisRecipeVariation(recipeMap[roleIndex], commercialIntent.archetype, variationIndex, isZh);
+  }
+
+  if (commercialIntent.archetype === "jewelry") {
+    const recipeMap = isZh
+      ? [
+          {
+            shot_role: "珠宝英雄主图",
+            hero_focus: `${summaryCue} 的镶嵌细节、金属光泽和切面反射`,
+            product_ratio: "主体约占画面 28%-40%",
+            layout_method: "采用留白充足的偏轴构图或镜面反射构图，让珠宝显得精致而不拥挤",
+            subject_angle: "轻微前 3/4 角度或低机位展示镶嵌、厚度和边缘切面",
+            support_elements: "利用小尺度镜面台、绒面台、亚克力柱或矿石基座承托珠宝",
+            background_surface: "背景使用绒面、石材、镜面或深浅渐层，突出金属和宝石反射",
+            background_elements: "保持前景反射、中景珠宝、背景柔焦层次三段式空间",
+            decorative_elements: "仅允许宝石碎光、极轻织物、矿石或珠光表面等精致元素",
+            lighting_setup: "点状高光与柔和主光结合，控制金属高光和宝石闪点，不可死亮",
+            lens_hint: "90mm-100mm 微距商业镜头，f/8-f/11，保证珠宝细节完整锐利",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "珠宝角度变化图",
+            hero_focus: `${summaryCue} 的厚度、切面和反射变化`,
+            product_ratio: "主体约占画面 24%-34%",
+            layout_method: "用偏心构图、镜面倒影或层叠支撑制造精巧空间关系",
+            subject_angle: "通过轻俯拍或侧前斜角强调镶嵌层次和边缘抛光",
+            support_elements: "加入小尺度镜面反射或绒面基座，但保持克制",
+            background_surface: "背景需细腻且高端，避免粗糙或生活化道具",
+            background_elements: "背景保留光斑、反射和层次过渡，不得完全空白",
+            decorative_elements: "只允许微弱闪点或极轻材质元素",
+            lighting_setup: "用窄束高光和柔和填充控制切面闪烁与金属过渡",
+            lens_hint: "100mm 商业微距镜头，f/8-f/10",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+          {
+            shot_role: "珠宝细节特写图",
+            hero_focus: `${summaryCue} 的爪镶、纹理、刻印或局部反射细节`,
+            product_ratio: "主体约占画面 18%-28%",
+            layout_method: "使用微距特写和斜切局部构图，强调工艺精度",
+            subject_angle: "微距近拍或局部斜切视角优先，强化镶嵌和表面工艺",
+            support_elements: "用极少量镜面或绒面衬底托住细节区域",
+            background_surface: "背景使用近距离绒面、镜面或珠光表面",
+            background_elements: "背景低密度但要有层次和反射/暗部关系",
+            decorative_elements: "仅允许最弱的珠光或闪点元素",
+            lighting_setup: "精细点状高光配柔和过渡光，突出爪镶与刻印细节",
+            lens_hint: "100mm 微距镜头，f/10-f/13，保持极高细节稳定性",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join("、"),
+          },
+        ]
+      : [
+          {
+            shot_role: "jewelry hero image",
+            hero_focus: `the setting detail, metal luster, and facet reflections of ${summaryCue}`,
+            product_ratio: "product occupies roughly 28%-40% of the frame",
+            layout_method: "use offset balance or reflective composition with ample whitespace so the piece feels precise and elevated",
+            subject_angle: "use a slight front three-quarter or low angle to reveal setting depth, thickness, and polished edges",
+            support_elements: "use micro mirrors, suede plinths, acrylic columns, or mineral bases to stage the jewelry",
+            background_surface: "use suede, stone, mirror, or tonal gradients that amplify metal and gemstone reflections",
+            background_elements: "keep a three-layer space with foreground reflection, mid-plane jewelry, and a soft-focus background",
+            decorative_elements: "only refined accents such as gem sparkles, delicate textiles, minerals, or pearl surfaces are allowed",
+            lighting_setup: "combine point highlights with a soft key light so metal edges and gemstone flashes stay controlled rather than blown out",
+            lens_hint: "90mm-100mm macro commercial lens at f/8-f/11 for full jewelry detail sharpness",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "jewelry variation image",
+            hero_focus: `thickness, faceting, and reflection shifts for ${summaryCue}`,
+            product_ratio: "product occupies roughly 24%-34% of the frame",
+            layout_method: "use eccentric balance, mirrored echoes, or layered supports to create a precise spatial relationship",
+            subject_angle: "use light overhead or front-oblique angles to reveal setting layers and polished edges",
+            support_elements: "add restrained mirror or suede bases without crowding the piece",
+            background_surface: "the set must stay refined and elevated with no rough or lifestyle props",
+            background_elements: "background light falloff, reflection, and layered tonal transitions should remain visible",
+            decorative_elements: "only the lightest sparkle or texture accents are allowed",
+            lighting_setup: "use narrow highlight accents and soft fill to control gemstone sparkle and metal transition",
+            lens_hint: "100mm macro commercial lens at f/8-f/10",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+          {
+            shot_role: "jewelry detail close-up",
+            hero_focus: `prongs, engravings, texture, or local reflections from ${summaryCue}`,
+            product_ratio: "product occupies roughly 18%-28% of the frame",
+            layout_method: "use macro close-ups and oblique detail crops to stress craft precision",
+            subject_angle: "favor macro or partial oblique detail views to reveal setting and surface craft",
+            support_elements: "use minimal mirror or suede support to hold the detail zone",
+            background_surface: "use close suede, mirror, or pearl surfaces as the macro backdrop",
+            background_elements: "the background should stay low-density yet layered in tone and reflection",
+            decorative_elements: "only the faintest pearl or sparkle accent is allowed",
+            lighting_setup: "use precise point highlights and smooth transition light to reveal prongs and engraving detail",
+            lens_hint: "100mm macro lens at f/10-f/13 for extremely stable fine detail",
+            text_zone: copyZone,
+            mood_keywords: commercialIntent.mood_keywords.join(", "),
+          },
+        ];
+    return applyGenesisRecipeVariation(recipeMap[roleIndex], commercialIntent.archetype, variationIndex, isZh);
+  }
+
+  const genericRecipe = isZh
+    ? [
+        {
+          shot_role: genericRole,
+          hero_focus: `${summaryCue} 的第一眼识别与核心卖点`,
+          product_ratio: "主体约占画面 58%-68%",
+          layout_method: `${commercialIntent.composition_bias}，构图必须有明确主次和呼吸区`,
+          subject_angle: "使用轻微倾角、结构化机位变化或前景遮挡，避免僵直正摆",
+          support_elements: "使用与商品相关的克制支撑面、反射、折射或前景元素建立落点",
+          background_surface: `${commercialIntent.set_treatment}`,
+          background_elements: "背景必须有可读材质与层次，不得是空白单层底",
+          decorative_elements: "装饰元素只允许服务商品卖点，不得喧宾夺主",
+          lighting_setup: `${commercialIntent.lighting_bias}`,
+          lens_hint: "70mm-100mm 商业镜头，f/5.6-f/8，强调主体识别和层次控制",
+          text_zone: copyZone,
+          mood_keywords: commercialIntent.mood_keywords.join("、"),
+        },
+        {
+          shot_role: genericRole,
+          hero_focus: `${summaryCue} 的角度变化与层次张力`,
+          product_ratio: "主体约占画面 52%-62%",
+          layout_method: "采用三分法、对角线或高低机位建立空间张力",
+          subject_angle: "用轻俯拍、轻仰拍或前景遮挡制造动态感",
+          support_elements: "加入弱支撑和前景过渡元素，增强空间关系",
+          background_surface: `${commercialIntent.set_treatment}`,
+          background_elements: "保证前景、中景、背景至少两个层级可读",
+          decorative_elements: "仅保留与核心卖点呼应的低密度装饰",
+          lighting_setup: `${commercialIntent.lighting_bias}`,
+          lens_hint: "85mm 商业镜头，f/5.6 左右",
+          text_zone: copyZone,
+          mood_keywords: commercialIntent.mood_keywords.join("、"),
+        },
+        {
+          shot_role: genericRole,
+          hero_focus: `${summaryCue} 的材质、结构或高价值细节`,
+          product_ratio: "主体约占画面 45%-55%",
+          layout_method: "使用细节近景或局部斜切构图，但保留场景背景层次",
+          subject_angle: "局部切入、微距或斜角视角优先",
+          support_elements: "用近景虚化、反射面或材质切片拉开层次",
+          background_surface: `${commercialIntent.set_treatment}`,
+          background_elements: "背景低密度但必须有材质和阴影关系",
+          decorative_elements: "只允许强化细节质感的弱元素",
+          lighting_setup: `${commercialIntent.lighting_bias}`,
+          lens_hint: "90mm-100mm 近摄商业镜头，f/6.3-f/8",
+          text_zone: copyZone,
+          mood_keywords: commercialIntent.mood_keywords.join("、"),
+        },
+      ]
+    : [
+        {
+          shot_role: genericRole,
+          hero_focus: `instant recognition and the core selling point of ${summaryCue}`,
+          product_ratio: "product occupies roughly 58%-68% of the frame",
+          layout_method: `${commercialIntent.composition_bias}, with a clear hero zone and breathing room`,
+          subject_angle: "use a subtle tilt, structured camera variation, or foreground overlap instead of rigid straight-on placement",
+          support_elements: "use restrained product-relevant support planes, reflections, refractions, or foreground accents to ground the subject",
+          background_surface: commercialIntent.set_treatment,
+          background_elements: "the background must have readable material and depth instead of a single blank layer",
+          decorative_elements: "supporting elements may only reinforce the product story and cannot overpower the hero subject",
+          lighting_setup: commercialIntent.lighting_bias,
+          lens_hint: "70mm-100mm commercial lens, f/5.6-f/8, with controlled depth and clear subject hierarchy",
+          text_zone: copyZone,
+          mood_keywords: commercialIntent.mood_keywords.join(", "),
+        },
+        {
+          shot_role: genericRole,
+          hero_focus: `angle variation and spatial tension for ${summaryCue}`,
+          product_ratio: "product occupies roughly 52%-62% of the frame",
+          layout_method: "build depth with rule-of-thirds balance, diagonal flow, or restrained high/low camera variation",
+          subject_angle: "use a light high angle, low angle, or foreground overlap to increase dynamism",
+          support_elements: "add restrained support planes and transition accents so the scene feels intentional",
+          background_surface: commercialIntent.set_treatment,
+          background_elements: "keep at least two readable scene layers across foreground, subject plane, and backdrop",
+          decorative_elements: "only low-density product-relevant accents are allowed",
+          lighting_setup: commercialIntent.lighting_bias,
+          lens_hint: "85mm commercial lens around f/5.6",
+          text_zone: copyZone,
+          mood_keywords: commercialIntent.mood_keywords.join(", "),
+        },
+        {
+          shot_role: genericRole,
+          hero_focus: `material, structure, or high-value detail from ${summaryCue}`,
+          product_ratio: "product occupies roughly 45%-55% of the frame",
+          layout_method: "use a tighter detail crop or diagonal close framing while preserving some scene depth",
+          subject_angle: "favor a detail-driven close view, macro crop, or oblique angle",
+          support_elements: "use foreground blur, reflective surfaces, or material slices to build depth",
+          background_surface: commercialIntent.set_treatment,
+          background_elements: "the background should stay low-density but still show material and shadow relationships",
+          decorative_elements: "only restrained detail-supporting accents may appear",
+          lighting_setup: commercialIntent.lighting_bias,
+          lens_hint: "90mm-100mm close commercial lens, f/6.3-f/8",
+          text_zone: copyZone,
+          mood_keywords: commercialIntent.mood_keywords.join(", "),
+        },
+      ];
+
+  return applyGenesisRecipeVariation(genericRecipe[roleIndex], commercialIntent.archetype, variationIndex, isZh);
+}
+
+type GenesisTemplateSectionKey =
+  | "colorSystem"
+  | "typographyCopySystem"
+  | "visualLanguage"
+  | "photographyStyle"
+  | "qualityRequirements";
+
+type GenesisSectionRequirement = {
+  label: string;
+  line: string;
+};
+
+function shortGenesisCue(value: string, isZh: boolean, fallback: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return fallback;
+  const chars = Array.from(normalized);
+  return chars.slice(0, isZh ? 30 : 72).join("").trim() || fallback;
+}
+
+function compactGenesisPlanLine(value: string): string {
+  return sanitizeString(value, "").replace(/\s+/g, " ").trim();
+}
+
+function stripGenesisPlanBulletPrefix(value: string): string {
+  return compactGenesisPlanLine(value)
+    .replace(/^[-*+]\s*/, "")
+    .replace(/^\d+\.\s*/, "")
+    .trim();
+}
+
+function normalizeGenesisPlanSectionLabel(value: string): string {
+  const raw = compactGenesisPlanLine(value);
+  if (!raw) return "";
+
+  const zhCompact = raw.replace(/\s+/g, "");
+  switch (zhCompact) {
+    case "设计目标":
+      return "design_goal";
+    case "产品外观":
+    case "商品外观":
+      return "product_appearance";
+    case "画内元素":
+      return "in_graphic_elements";
+    case "构图规划":
+      return "composition_plan";
+    case "内容元素":
+      return "content_elements";
+    case "文字内容":
+      return "text_content";
+    case "氛围营造":
+      return "atmosphere_creation";
+    case "商品占比":
+      return "product_proportion";
+    case "布局方式":
+      return "layout_method";
+    case "主体角度":
+    case "机位角度":
+      return "subject_angle";
+    case "文字区域":
+      return "text_area";
+    case "展示重点":
+      return "focus_of_display";
+    case "核心卖点":
+      return "key_selling_points";
+    case "背景元素":
+      return "background_elements";
+    case "装饰元素":
+      return "decorative_elements";
+    case "主标题":
+      return "main_title";
+    case "副标题":
+      return "subtitle";
+    case "描述文案":
+    case "说明文字":
+      return "description_text";
+    case "排版说明":
+      return "layout_guidance";
+    case "氛围关键词":
+    case "情绪关键词":
+      return "mood_keywords";
+    case "光影效果":
+      return "light_and_shadow_effects";
+    case "镜头/光圈参考":
+    case "镜头光圈参考":
+    case "相机参数参考":
+      return "camera_parameter_reference";
+    default:
+      break;
+  }
+
+  const ascii = raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  switch (ascii) {
+    case "design_goal":
+    case "product_appearance":
+    case "in_graphic_elements":
+    case "composition_plan":
+    case "content_elements":
+    case "text_content":
+    case "atmosphere_creation":
+    case "product_proportion":
+    case "layout_method":
+    case "subject_angle":
+    case "text_area":
+    case "focus_of_display":
+    case "key_selling_points":
+    case "background_elements":
+    case "decorative_elements":
+    case "main_title":
+    case "subtitle":
+    case "description_text":
+    case "layout_guidance":
+    case "mood_keywords":
+    case "light_and_shadow_effects":
+    case "camera_parameter_reference":
+      return ascii;
+    case "lens_aperture_reference":
+    case "camera_reference":
+      return "camera_parameter_reference";
+    default:
+      return ascii;
+  }
+}
+
+function detectGenesisPlanSectionKey(value: string): GenesisPlanSectionKey | null {
+  switch (normalizeGenesisPlanSectionLabel(value)) {
+    case "design_goal":
+      return "designGoal";
+    case "product_appearance":
+      return "productAppearance";
+    case "in_graphic_elements":
+      return "inGraphicElements";
+    case "composition_plan":
+      return "compositionPlan";
+    case "content_elements":
+      return "contentElements";
+    case "text_content":
+      return "textContent";
+    case "atmosphere_creation":
+      return "atmosphereCreation";
+    default:
+      return null;
+  }
+}
+
+function extractGenesisPlanSections(value: string): Partial<Record<GenesisPlanSectionKey, string[]>> {
+  const sections: Partial<Record<GenesisPlanSectionKey, string[]>> = {};
+  let activeKey: GenesisPlanSectionKey | null = null;
+
+  for (const rawLine of value.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("## ")) continue;
+
+    const headingMatch = line.match(/^\*\*(.+?)\*\*(?:\s*(?:\([^)]+\)|（[^）]+）))?\s*[：:]\s*(.*)$/);
+    if (headingMatch) {
+      activeKey = detectGenesisPlanSectionKey(headingMatch[1]);
+      if (!activeKey) continue;
+      const rest = compactGenesisPlanLine(headingMatch[2] ?? "");
+      if (rest) {
+        sections[activeKey] = [...(sections[activeKey] ?? []), rest];
+      } else if (!sections[activeKey]) {
+        sections[activeKey] = [];
+      }
+      continue;
+    }
+
+    if (!activeKey) continue;
+    const cleaned = stripGenesisPlanBulletPrefix(line);
+    if (!cleaned) continue;
+    sections[activeKey] = [...(sections[activeKey] ?? []), cleaned];
+  }
+
+  return sections;
+}
+
+function cleanGenesisSectionLines(lines: string[] | undefined): string[] {
+  if (!Array.isArray(lines)) return [];
+  return lines.map((line) => stripGenesisPlanBulletPrefix(line)).filter(Boolean);
+}
+
+function extractGenesisLineLabel(line: string): string {
+  const clean = stripGenesisPlanBulletPrefix(line);
+  const separatorIndex = clean.search(/[：:]/);
+  if (separatorIndex === -1) return "";
+  return normalizeGenesisPlanSectionLabel(clean.slice(0, separatorIndex));
+}
+
+function mergeGenesisNarrativeSection(
+  existingLines: string[] | undefined,
+  fallback: string,
+  options?: { appendIdentityLock?: boolean },
+): string[] {
+  const cleaned = cleanGenesisSectionLines(existingLines);
+  if (cleaned.length === 0) return [fallback];
+  if (options?.appendIdentityLock) {
+    const hasIdentityLock = cleaned.some((line) => /(same sku|same product|同一sku|同一商品)/i.test(line));
+    if (!hasIdentityLock) return [...cleaned, fallback];
+  }
+  return cleaned;
+}
+
+function mergeGenesisLabeledSection(existingLines: string[] | undefined, defaults: string[]): string[] {
+  const cleanedExisting = cleanGenesisSectionLines(existingLines);
+  if (cleanedExisting.length === 0) return defaults;
+
+  const existingLabels = new Set(
+    cleanedExisting.map((line) => extractGenesisLineLabel(line)).filter(Boolean),
+  );
+  const merged = [...cleanedExisting];
+  for (const line of defaults) {
+    const normalizedLine = stripGenesisPlanBulletPrefix(line);
+    const label = extractGenesisLineLabel(line);
+    if (!label) {
+      if (!cleanedExisting.includes(normalizedLine)) merged.push(line);
+      continue;
+    }
+    if (!existingLabels.has(label)) merged.push(line);
+  }
+  return merged;
+}
+
+function preferGenesisLabeledSection(defaults: string[], existingLines: string[] | undefined): string[] {
+  const cleanedExisting = cleanGenesisSectionLines(existingLines);
+  if (cleanedExisting.length === 0) return defaults;
+
+  const defaultLabels = new Set(defaults.map((line) => extractGenesisLineLabel(line)).filter(Boolean));
+  const extras = cleanedExisting.filter((line) => {
+    const label = extractGenesisLineLabel(line);
+    return !label || !defaultLabels.has(label);
+  });
+
+  return [...defaults, ...extras.filter((line) => !defaults.includes(line))];
+}
+
+const GENESIS_APPAREL_RE = /\b(shirt|t-?shirt|tee|blouse|jacket|coat|dress|skirt|hoodie|sweater|cardigan|pants|trousers|jeans|denim|garment|apparel|outerwear|top|shirting)\b|衬衫|衬衣|上衣|外套|夹克|连衣裙|裙装|半裙|裤子|长裤|牛仔|卫衣|毛衣|针织|服装/i;
+const GENESIS_WHITE_BG_PLAN_RE = /\b(clean\s*packshot|packshot|pure white|white background|white backdrop|seamless white)\b|白底|纯白背景|白色背景/i;
+const GENESIS_APPAREL_RESTRICTED_SCENE_RE = /\b(hanger|white hanger|mannequin|hang separately|floating garment|blank white backdrop|empty white background|flat lay)\b|衣架|白色衣架|人台|悬挂|挂拍|纯白背景|空白背景|平铺/i;
+const GENESIS_APPAREL_STATIC_LAYOUT_RE = /\b(strictly centered|centered symmetric|symmetrical centered|front vertical|front-on vertical|flat front|dead-center|straight-on|zero-degree front|centered placement|centered display)\b|严格居中对称|居中对称|中心对称|绝对居中|正面垂直|正面平视|垂直居中|画面正中央|位于画面正中央|正中央|0度正拍|零度正拍|正拍|文字居中排列|居中摆放|居中陈列|居中位置|居中正拍|顶部居中/i;
+const GENESIS_APPAREL_BLAND_SET_RE = /\b(matte gray|plain gray background|clean plain background|no distracting elements?|linen background|neutral textile background|support elements?: none|decorative elements?: none)\b|浅灰.*磨砂|磨砂质感|无干扰元素|低饱和度.*背景|浅灰磨砂|浅灰.*亚麻|亚麻布材质|亚麻布背景|中性布面背景|浅灰渐变背景|布纹纹理|无辅助道具|辅助道具：无|装饰元素：无|无繁杂装饰/i;
+
+function isLikelyGenesisApparelProduct(productSummary: string, identity?: ProductVisualIdentity): boolean {
+  const haystack = [
+    productSummary,
+    identity?.material ?? "",
+    ...(identity?.key_features ?? []),
+  ].join(" ");
+  return GENESIS_APPAREL_RE.test(haystack);
+}
+
+function isGenesisWhiteBackgroundPlan(plan: BlueprintImagePlan, rawSupplement: string): boolean {
+  const haystack = [plan.type ?? "", plan.title, plan.description, rawSupplement].join(" ");
+  return GENESIS_WHITE_BG_PLAN_RE.test(haystack);
+}
+
+function shouldUseGenesisApparelHeroGuard(
+  productSummary: string,
+  identity: ProductVisualIdentity | undefined,
+  plan: BlueprintImagePlan,
+  rawSupplement: string,
+): boolean {
+  return isLikelyGenesisApparelProduct(productSummary, identity) && !isGenesisWhiteBackgroundPlan(plan, rawSupplement);
+}
+
+function sanitizeGenesisProductVisualIdentity(
+  productSummary: string,
+  identity: ProductVisualIdentity | undefined,
+): ProductVisualIdentity | undefined {
+  if (!identity) return identity;
+  if (!isLikelyGenesisApparelProduct(productSummary, identity)) return identity;
+
+  const stripSupportArtifacts = (value: string) =>
+    !/\b(hanger|white hanger|mannequin)\b|衣架|白色衣架|木质衣架|人台|挂拍/i.test(value);
+
+  return {
+    ...identity,
+    secondary_colors: (identity.secondary_colors ?? []).filter(stripSupportArtifacts),
+    key_features: (identity.key_features ?? []).filter(stripSupportArtifacts),
+  };
+}
+
+function filterGenesisRestrictedApparelLines(lines: string[] | undefined, apparelHeroGuard: boolean): string[] {
+  const cleaned = cleanGenesisSectionLines(lines);
+  if (!apparelHeroGuard) return cleaned;
+  return cleaned.filter((line) =>
+    !GENESIS_APPAREL_RESTRICTED_SCENE_RE.test(line) &&
+    !GENESIS_APPAREL_STATIC_LAYOUT_RE.test(line) &&
+    !GENESIS_APPAREL_BLAND_SET_RE.test(line)
+  );
+}
+
+function selectedGenesisStyleLabelsFromDirections(directions?: GenesisStyleDirectionGroup[]): string[] {
+  return (directions ?? [])
+    .map((group) => group.recommended ?? group.options[0] ?? "")
+    .map((value) => value.trim())
+    .filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index);
+}
+
+function buildGenesisIdentityLockLines(
+  productSummary: string,
+  identity: ProductVisualIdentity | undefined,
+  isZh: boolean,
+): string[] {
+  const primaryColor = identity?.primary_color?.trim();
+  const material = identity?.material?.trim();
+  const keyFeatures = (identity?.key_features ?? []).map((item) => item.trim()).filter(Boolean);
+  const summary = productSummary.trim();
+
+  return [
+    summary
+      ? (isZh ? `- 商品锚定：${summary}` : `- Product anchor: ${summary}`)
+      : (isZh ? "- 商品锚定：保持上传商品本体与核心卖点一致。" : "- Product anchor: keep the uploaded product identity and hero selling points intact."),
+    primaryColor
+      ? (isZh ? `- 主色锚定：${primaryColor}` : `- Color anchor: ${primaryColor}`)
+      : (isZh ? "- 主色锚定：严格保持产品图真实主色，不得错色。" : "- Color anchor: keep the true product color from the reference images, no recoloring."),
+    material
+      ? (isZh ? `- 材质锚定：${material}` : `- Material anchor: ${material}`)
+      : (isZh ? "- 材质锚定：严格保持原始材质，不得替换材质。" : "- Material anchor: preserve the original material, no material swap."),
+    keyFeatures.length > 0
+      ? (isZh ? `- 关键特征：${keyFeatures.join("、")}` : `- Key features: ${keyFeatures.join(", ")}`)
+      : (isZh ? "- 关键特征：保留产品图中可见的 logo、五金、纹理、车线、轮廓与结构。" : "- Key features: preserve the visible logo, hardware, texture, stitching, silhouette, and structure from the reference images."),
+    isZh
+      ? "- 硬约束：必须是同一 SKU、同一商品，不得改色、改材质、改 logo、改五金、改纹理、改版型、改结构。"
+      : "- Hard lock: exact same SKU and same product. Do not change color, material, logo, hardware, texture, silhouette, proportions, or structure.",
+  ];
+}
+
+function normalizeGenesisTemplateHeadingLabel(value: string): string {
+  return value
+    .replace(/^#+\s*/, "")
+    .replace(/[*`]/g, "")
+    .replace(/[：:]/g, "")
+    .replace(/[()（）]/g, "")
+    .replace(/\//g, "")
+    .replace(/-/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+function detectGenesisTemplateSectionKey(heading: string): GenesisTemplateSectionKey | null {
+  const label = normalizeGenesisTemplateHeadingLabel(heading);
+  if (label.includes("色彩系统") || label.includes("colorsystem")) return "colorSystem";
+  if (
+    label.includes("字体系统文案系统") ||
+    label.includes("字体文案系统") ||
+    (label.includes("typography") && label.includes("copy")) ||
+    (label.includes("font") && label.includes("copy"))
+  ) {
+    return "typographyCopySystem";
+  }
+  if (label.includes("视觉语言") || label.includes("visuallanguage")) return "visualLanguage";
+  if (label.includes("摄影风格") || label.includes("photographystyle")) return "photographyStyle";
+  if (label.includes("品质要求") || label.includes("qualityrequirements")) return "qualityRequirements";
+  return null;
+}
+
+function extractGenesisTemplateSections(raw: string): {
+  sections: Partial<Record<GenesisTemplateSectionKey, string[]>>;
+  extras: string[];
+} {
+  const sections: Partial<Record<GenesisTemplateSectionKey, string[]>> = {};
+  const extras: string[] = [];
+  let currentSection: GenesisTemplateSectionKey | "extras" | null = null;
+
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (currentSection && currentSection !== "extras") {
+        sections[currentSection] = [...(sections[currentSection] ?? []), ""];
+      } else if (currentSection === "extras" && extras.length > 0 && extras[extras.length - 1] !== "") {
+        extras.push("");
+      }
+      continue;
+    }
+
+    if (/^#\s+/.test(trimmed) || /^>\s*/.test(trimmed)) continue;
+
+    const headingMatch = trimmed.match(/^##+\s*(.+)$/);
+    if (headingMatch) {
+      const key = detectGenesisTemplateSectionKey(headingMatch[1]);
+      currentSection = key ?? "extras";
+      if (!key) extras.push(trimmed.replace(/^##+\s*/, ""));
+      continue;
+    }
+
+    if (currentSection && currentSection !== "extras") {
+      sections[currentSection] = [...(sections[currentSection] ?? []), line];
+    } else {
+      extras.push(line);
+    }
+  }
+
+  return { sections, extras };
+}
+
+function hasGenesisTemplateLabel(lines: string[], label: string): boolean {
+  const normalizedLabel = normalizeGenesisTemplateHeadingLabel(label);
+  return lines.some((line) => {
+    const cleaned = normalizeGenesisTemplateHeadingLabel(line.replace(/^-+\s*/, ""));
+    return cleaned.includes(normalizedLabel);
+  });
+}
+
+function normalizeGenesisExtraLines(extraLines: string[], isZh: boolean): string[] {
+  return extraLines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      if (line.startsWith("-")) return line;
+      return isZh ? `- 补充说明：${line}` : `- Additional note: ${line}`;
+    });
+}
+
+function composeGenesisTemplateSection(
+  rawLines: string[],
+  requirements: GenesisSectionRequirement[],
+  extraLines: string[] = [],
+): string {
+  const cleanedRaw = rawLines
+    .map((line) => line.trimEnd())
+    .filter((line, index, arr) => !(line.length === 0 && arr[index - 1]?.length === 0));
+  const merged = [...cleanedRaw];
+
+  for (const item of requirements) {
+    if (!hasGenesisTemplateLabel(cleanedRaw, item.label)) {
+      merged.push(item.line);
+    }
+  }
+
+  for (const line of extraLines) {
+    if (!merged.includes(line)) merged.push(line);
+  }
+
+  return merged
+    .filter((line, index, arr) => !(line.length === 0 && arr[index - 1]?.length === 0))
+    .join("\n")
+    .trim();
+}
+
+function buildGenesisColorRequirements(params: {
+  isZh: boolean;
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+}): GenesisSectionRequirement[] {
+  const { isZh, productSummary, identity } = params;
+  const primaryColor = identity?.primary_color?.trim();
+  const secondaryColors = (identity?.secondary_colors ?? []).map((item) => item.trim()).filter(Boolean);
+  const material = identity?.material?.trim();
+
+  return isZh
+    ? [
+        {
+          label: "主色调",
+          line: primaryColor
+            ? `- 主色调：锁定商品真实主色 ${primaryColor}，围绕主体延展主画面色锚，不得偏色。`
+            : `- 主色调：围绕商品真实主色建立商业主画面色锚，确保 ${shortGenesisCue(productSummary, true, "商品主体")} 识别稳定。`,
+        },
+        {
+          label: "辅助色",
+          line: secondaryColors.length > 0
+            ? `- 辅助色：从 ${secondaryColors.join("、")} 与材质反光中提炼点缀色，强化层次但不抢主体。`
+            : "- 辅助色：从品牌调性、材质反光与卖点信息中提炼点缀色，控制对比度与商业质感。",
+        },
+        {
+          label: "背景色",
+          line: material
+            ? `- 背景色：选择与 ${material} 质感兼容的商业背景色，保证商品边缘、阴影和高光层次清晰。`
+            : "- 背景色：使用与商品卖点匹配的商业背景色和表面材质，保证主体轮廓与留白区清晰。",
+        },
+      ]
+    : [
+        {
+          label: "Primary Color",
+          line: primaryColor
+            ? `- Primary Color: lock the product's true dominant color ${primaryColor} as the hero palette anchor with no color drift.`
+            : `- Primary Color: build the hero palette around the product's true dominant color so ${shortGenesisCue(productSummary, false, "the product")} stays instantly recognizable.`,
+        },
+        {
+          label: "Secondary Color",
+          line: secondaryColors.length > 0
+            ? `- Secondary Color: extract accents from ${secondaryColors.join(", ")} and material reflections without stealing focus from the product.`
+            : "- Secondary Color: derive restrained accents from brand tone, material reflections, and selling points to add depth without noise.",
+        },
+        {
+          label: "Background Color",
+          line: material
+            ? `- Background Color: choose a commercial background palette and surface treatment that matches the ${material} finish and keeps product edges readable.`
+            : "- Background Color: use a product-appropriate commercial backdrop and surface tone that keeps silhouette, shadow, and whitespace separation clear.",
+        },
+      ];
+}
+
+function buildGenesisTypographyRequirements(params: {
+  isZh: boolean;
+  outputLanguage: string;
+  wantsVisibleCopy: boolean;
+}): GenesisSectionRequirement[] {
+  const { isZh, outputLanguage, wantsVisibleCopy } = params;
+  const copyRule = !wantsVisibleCopy
+    ? (isZh
+      ? "默认按纯视觉商业主图处理，不添加任何文字叠加，依靠构图、光影与材质表达卖点。"
+      : "This set is visual-only. Add no typography overlays and communicate the selling points through composition, lighting, and material tactility.")
+    : (isZh
+      ? "所有可见文案都必须分别写在各图片方案的“文字内容”里；文字必须放在安全留白区，不得遮挡商品主体。"
+      : "All visible copy must be defined inside each image plan's Text Content block, with typography placed in safe whitespace and never covering the product.");
+
+  return isZh
+    ? [
+        {
+          label: "标题字体",
+          line: "- 标题字体：选择与商品气质一致的商业展示标题字形，确保标题有明确视觉主次但不压过商品主体。",
+        },
+        {
+          label: "正文字体",
+          line: "- 正文字体：使用清晰易读的辅助字形支撑信息层级，避免说明文堆砌和密集排版。",
+        },
+        {
+          label: "字号层级",
+          line: "- 字号层级：大标题:副标题:正文 = 3:1.8:1，默认每张图不超过 2 组文字区。",
+        },
+        {
+          label: "文案规则",
+          line: `- 文案规则：${copyRule} 主标题 <= 12 个中文字符，辅助短句 <= 18 个中文字符，标签 <= 8 个中文字符。`,
+        },
+      ]
+    : [
+        {
+          label: "Heading Font",
+          line: "- Heading Font: choose a commercial display face that matches the product mood and keeps the headline visually strong without overpowering the product.",
+        },
+        {
+          label: "Body Font",
+          line: "- Body Font: use a clear supporting face for secondary information and avoid dense paragraph-style blocks.",
+        },
+        {
+          label: "Hierarchy",
+          line: "- Hierarchy: headline:support:body = 3:1.8:1, with no more than 2 text groups per image by default.",
+        },
+        {
+          label: "Copy Rules",
+          line: `- Copy Rules: ${copyRule} Keep headlines compact, support lines short, and labels minimal.`,
+        },
+      ];
+}
+
+function buildGenesisVisualRequirements(params: {
+  isZh: boolean;
+  productSummary: string;
+  styleLabels: string[];
+}): GenesisSectionRequirement[] {
+  const { isZh, productSummary, styleLabels } = params;
+  const styleNote = styleLabels.length > 0
+    ? (isZh ? ` 统一风格方向：${styleLabels.join(" / ")}` : ` Unified style direction: ${styleLabels.join(" / ")}`)
+    : "";
+
+  return isZh
+    ? [
+        {
+          label: "装饰元素",
+          line: `- 装饰元素：围绕 ${shortGenesisCue(productSummary, true, "商品卖点")} 选择相关表面、道具、材质肌理或结构化背景，不引入无关品类元素。${styleNote}`,
+        },
+        {
+          label: "图标风格",
+          line: "- 图标风格：默认使用极简线条或不使用图标，所有辅助元素都必须弱于商品主体。",
+        },
+        {
+          label: "留白原则",
+          line: "- 留白原则：保持约 30%-40% 可用留白，商品区、文字区与背景层次要清晰分离。",
+        },
+      ]
+    : [
+        {
+          label: "Decorative Elements",
+          line: `- Decorative Elements: choose surfaces, props, texture cues, or structured backgrounds that directly support ${shortGenesisCue(productSummary, false, "the product story")} and avoid irrelevant category language.${styleNote}`,
+        },
+        {
+          label: "Icon Style",
+          line: "- Icon Style: default to minimal line icons or no icons at all so every supporting element stays weaker than the product.",
+        },
+        {
+          label: "Whitespace Principle",
+          line: "- Whitespace Principle: keep roughly 30%-40% usable negative space with clear separation between product zone, text zone, and background depth.",
+        },
+      ];
+}
+
+function buildGenesisPhotographyRequirements(params: {
+  isZh: boolean;
+  identity?: ProductVisualIdentity;
+}): GenesisSectionRequirement[] {
+  const { isZh, identity } = params;
+  const material = identity?.material?.trim();
+
+  return isZh
+    ? [
+        {
+          label: "光线",
+          line: material
+            ? `- 光线：根据 ${material} 的表面反光与体积感设计主光、轮廓光和补光，突出边缘、阴影与材质层次。`
+            : "- 光线：采用能拉开主体层次的商业主光、轮廓光与补光组合，避免把商品拍平。",
+        },
+        {
+          label: "景深",
+          line: "- 景深：优先中浅景深，保持商品主体绝对清晰，背景适度虚化并保留空间层次。",
+        },
+        {
+          label: "相机参数参考",
+          line: "- 相机参数参考：优先使用 85mm 商业产品镜头或适合类目的稳定机位，避免广角畸变与廉价视角。",
+        },
+      ]
+    : [
+        {
+          label: "Lighting",
+          line: material
+            ? `- Lighting: design key light, rim light, and fill light around the reflective and volumetric behavior of the ${material} surface.`
+            : "- Lighting: use a commercial key/rim/fill setup that gives the product real volume, edge definition, and texture separation.",
+        },
+        {
+          label: "Depth of Field",
+          line: "- Depth of Field: prefer medium-to-shallow depth so the product stays tack sharp while the background remains controlled and layered.",
+        },
+        {
+          label: "Camera Reference",
+          line: "- Camera Reference: favor an 85mm product-photography lens or another category-appropriate commercial angle with no cheap wide-angle distortion.",
+        },
+      ];
+}
+
+function buildGenesisQualityRequirements(isZh: boolean): GenesisSectionRequirement[] {
+  return isZh
+    ? [
+        { label: "分辨率", line: "- 分辨率：8K" },
+        { label: "风格", line: "- 风格：高端商业主图摄影 / 电商广告级视觉" },
+        { label: "真实感", line: "- 真实感：超写实 / 准确材质物理表现 / 照片级细节" },
+      ]
+    : [
+        { label: "Resolution", line: "- Resolution: 8K" },
+        { label: "Style", line: "- Style: high-end commercial hero photography / e-commerce advertising grade" },
+        { label: "Realism", line: "- Realism: hyper-realistic with accurate material physics and photo-grade detail" },
+      ];
+}
+
+function normalizeGenesisDesignSpecsTemplate(params: {
+  rawDesignSpecs: string;
+  isZh: boolean;
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+  outputLanguage: string;
+  styleLabels: string[];
+  wantsVisibleCopy: boolean;
+}): string {
+  const { rawDesignSpecs, isZh, productSummary, identity, outputLanguage, styleLabels, wantsVisibleCopy } = params;
+  const { sections, extras } = extractGenesisTemplateSections(rawDesignSpecs);
+  const normalizedExtras = normalizeGenesisExtraLines(extras, isZh);
+
+  const composedSections: Record<GenesisTemplateSectionKey, string> = {
+    colorSystem: composeGenesisTemplateSection(
+      sections.colorSystem ?? [],
+      buildGenesisColorRequirements({ isZh, productSummary, identity }),
+    ),
+    typographyCopySystem: composeGenesisTemplateSection(
+      sections.typographyCopySystem ?? [],
+      buildGenesisTypographyRequirements({ isZh, outputLanguage, wantsVisibleCopy }),
+    ),
+    visualLanguage: composeGenesisTemplateSection(
+      sections.visualLanguage ?? [],
+      buildGenesisVisualRequirements({ isZh, productSummary, styleLabels }),
+    ),
+    photographyStyle: composeGenesisTemplateSection(
+      sections.photographyStyle ?? [],
+      buildGenesisPhotographyRequirements({ isZh, identity }),
+    ),
+    qualityRequirements: composeGenesisTemplateSection(
+      sections.qualityRequirements ?? [],
+      buildGenesisQualityRequirements(isZh),
+      normalizedExtras,
+    ),
+  };
+
+  return [
+    isZh ? "# 整体设计规范" : "# Overall Design Specifications",
+    isZh
+      ? "> 所有图片必须遵循以下统一规范，确保视觉连贯性"
+      : "> All images must follow the unified specifications below to ensure visual consistency",
+    "",
+    isZh ? "## 色彩系统" : "## Color System",
+    composedSections.colorSystem,
+    "",
+    isZh ? "## 字体系统/文案系统" : "## Font System",
+    composedSections.typographyCopySystem,
+    "",
+    isZh ? "## 视觉语言" : "## Visual Language",
+    composedSections.visualLanguage,
+    "",
+    isZh ? "## 摄影风格" : "## Photography Style",
+    composedSections.photographyStyle,
+    "",
+    isZh ? "## 品质要求" : "## Quality Requirements",
+    composedSections.qualityRequirements,
+  ].join("\n").trim();
+}
+
+function buildGenesisPlanProductAppearance(params: {
+  isZh: boolean;
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+}): string {
+  const { isZh, productSummary, identity } = params;
+  const primaryColor = identity?.primary_color?.trim();
+  const material = identity?.material?.trim();
+  const keyFeatures = (identity?.key_features ?? []).map((item) => item.trim()).filter(Boolean);
+  const summary = shortGenesisCue(productSummary, isZh, isZh ? "上传商品主体" : "the uploaded product");
+  const features = keyFeatures.length > 0
+    ? (isZh ? `关键特征包括 ${keyFeatures.join("、")}` : `Key features include ${keyFeatures.join(", ")}`)
+    : (isZh ? "保留原图可见的 logo、五金、纹理与结构细节" : "Preserve the visible logo, hardware, texture, and structural details");
+
+  return isZh
+    ? `必须严格保持与参考图同一 SKU、同一商品。主体表现为 ${summary}；${primaryColor ? `真实主色为 ${primaryColor}；` : ""}${material ? `材质为 ${material}；` : ""}${features}。`
+    : `The subject in this image must stay strictly consistent with the same SKU and product from the reference image. The product appearance should match ${summary}; ${primaryColor ? `the true dominant color is ${primaryColor}; ` : ""}${material ? `the material is ${material}; ` : ""}${features}.`;
+}
+
+function buildGenesisPlanGraphicElements(params: {
+  isZh: boolean;
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+  styleLabels: string[];
+  apparelHeroGuard: boolean;
+}): string[] {
+  const { isZh, productSummary, identity, styleLabels, apparelHeroGuard } = params;
+  const summaryCue = shortGenesisCue(productSummary, isZh, isZh ? "商品卖点" : "the hero selling point");
+  const styleCue = styleLabels.length > 0 ? styleLabels.join(" / ") : (isZh ? "统一商业风格" : "a coherent commercial direction");
+  const material = identity?.material?.trim();
+
+  if (apparelHeroGuard) {
+    return isZh
+      ? [
+          `- Product：以 ${shortGenesisCue(productSummary, true, "服装主体")} 为绝对主角，完整保留轮廓、缝线、门襟/领口/袖口等可见关键结构与材质识别。`,
+          `- Support Elements：使用折叠布片、局部材质切面、克制支撑面、前景虚化或阴影带来强化 ${summaryCue}${material ? ` 与 ${material} 触感` : ""}，禁止衣架、人台和空白挂拍语义。`,
+          `- Background：背景与承托表面采用 ${styleCue} 的商业静物语境，可使用布面、哑光石材、微纹理墙面或柔和渐层背景，至少形成前中后景层次。`,
+        ]
+      : [
+          `- Product: keep ${shortGenesisCue(productSummary, false, "the garment")} as the absolute hero subject with silhouette, seam work, placket/collar/cuff structure, and material identity fully intact.`,
+          `- Support Elements: use folded fabric echoes, restrained support planes, foreground blur, material slices, or shaped shadows that reinforce ${summaryCue}${material ? ` and the ${material} tactility` : ""}, with no hanger, mannequin, or empty hanging-display language.`,
+          `- Background: place the garment inside a layered editorial still-life set using textile sweeps, matte stone, micro-textured walls, or soft gradient surfaces within ${styleCue}.`,
+        ];
+  }
+
+  return [
+    isZh
+      ? `- Product：以 ${shortGenesisCue(productSummary, true, "商品主体")} 为画面主角，完整保留标签、结构与材质识别。`
+      : `- Product: keep ${shortGenesisCue(productSummary, false, "the product")} as the clear primary subject, with label, structure, and material identity intact.`,
+    isZh
+      ? `- Support Elements：仅允许与 ${summaryCue} 相关的手部、材质切片、反射、折射或轻道具点缀${material ? `，强化 ${material} 触感` : ""}，禁止喧宾夺主。`
+      : `- Support Elements: allow only hands, material slices, reflections, refractions, or light props that support ${summaryCue}${material ? ` and reinforce the ${material} tactility` : ""}, without overpowering the product.`,
+    isZh
+      ? `- Background：背景与表面统一为 ${styleCue} 的商业摄影语境，保留约 30%-40% 安全留白，不得压迫主体。`
+      : `- Background: keep the backdrop and surface treatment inside ${styleCue}, with roughly 30%-40% safe whitespace and no crowding around the product.`,
+  ];
+}
+
+function buildGenesisPlanCompositionLines(index: number, isZh: boolean, apparelHeroGuard: boolean): string[] {
+  if (apparelHeroGuard) {
+    if (isZh) {
+      if (index === 0) {
+        return [
+          "- 商品占比：主体约占画面 58%-68%",
+          "- 布局方式：采用偏轴主视觉或轻微对角线构图，避免呆板正中挂拍",
+          "- 主体角度：保持正面识别的同时引入 5°-15° 轻微倾角或结构化前 3/4 角度",
+          "- 文字区域：优先预留侧边安全留白区，文字不得覆盖服装主体",
+        ];
+      }
+      if (index === 1) {
+        return [
+          "- 商品占比：主体约占画面 52%-62%",
+          "- 布局方式：用三分法、对角线或高低机位制造层次感，保持轮廓不变",
+          "- 主体角度：通过轻俯拍、轻仰拍或前景遮挡建立服装体积感，禁止平面正挂",
+          "- 文字区域：只允许一个轻量标题或标签区，依附边缘留白排布",
+        ];
+      }
+      return [
+        "- 商品占比：主体约占画面 45%-55%",
+        "- 布局方式：收紧景别，围绕面料、结构或裁片细节组织近景构图",
+        "- 主体角度：优先局部斜切、细节切入或局部堆叠视角，强化材质与结构深度",
+        "- 文字区域：如需文字，仅在边缘安全区使用短标签，不得压住服装主体",
+      ];
+    }
+
+    if (index === 0) {
+      return [
+        "- Product Proportion: garment occupies roughly 58%-68% of the frame",
+        "- Layout Method: use an offset hero composition or restrained diagonal flow rather than a flat centered hanging display",
+        "- Subject Angle: keep the garment readable while introducing a subtle 5-15 degree tilt or structured front three-quarter stance",
+        "- Text Area: reserve the side safe zone in the negative space and never let copy touch the garment",
+      ];
+    }
+    if (index === 1) {
+      return [
+        "- Product Proportion: garment occupies roughly 52%-62% of the frame",
+        "- Layout Method: build depth with rule-of-thirds balance, diagonal layering, or a restrained high/low camera variation",
+        "- Subject Angle: use a light high angle, low angle, or foreground overlap to add volume without changing silhouette",
+        "- Text Area: allow only one light headline or label zone in the edge whitespace",
+      ];
+    }
+    return [
+      "- Product Proportion: garment occupies roughly 45%-55% of the frame",
+      "- Layout Method: tighten the crop around fabric, tailoring, or construction details while keeping readable scene depth",
+      "- Subject Angle: favor a partial diagonal crop, detail cut-in, or layered overlap that emphasizes structure and tactility",
+      "- Text Area: if typography is used, keep it as a short edge-safe label with the garment fully unobstructed",
+    ];
+  }
+
+  if (isZh) {
+    if (index === 0) {
+      return [
+        "- 商品占比：主体约占画面 60%-70%",
+        "- 布局方式：采用偏轴主视觉或轻微对角线构图，避免呆板正中摆放",
+        "- 主体角度：保持主体识别度的同时加入轻微倾角或结构化机位变化",
+        "- 文字区域：优先预留右上或左上安全区，文字不得遮挡商品主体",
+      ];
+    }
+    if (index === 1) {
+      return [
+        "- 商品占比：主体约占画面 55%-65%",
+        "- 布局方式：通过三分法、对角线或景别变化建立层次感，但轮廓与比例保持不变",
+        "- 主体角度：使用轻微高低机位或前景遮挡制造动态深度",
+        "- 文字区域：只允许一个轻量标题或标签区，保持留白",
+      ];
+    }
+    return [
+      "- 商品占比：主体约占画面 50%-60%",
+      "- 布局方式：收紧景别，突出材质、工艺或卖点细节，同时保留背景层次",
+      "- 主体角度：优先用局部斜切或细节视角增强体积感与焦点控制",
+      "- 文字区域：如需文字，仅使用边缘安全区并保持商品无遮挡",
+    ];
+  }
+
+  if (index === 0) {
+    return [
+      "- Product Proportion: product occupies roughly 60%-70% of the frame",
+      "- Layout Method: use an offset hero composition or restrained diagonal flow instead of a static centered display",
+      "- Subject Angle: keep the product highly legible while introducing a subtle tilt or structured camera shift",
+      "- Text Area: reserve a top-left or top-right safe zone and never let text cover the product",
+    ];
+  }
+  if (index === 1) {
+    return [
+      "- Product Proportion: product occupies roughly 55%-65% of the frame",
+      "- Layout Method: introduce rule-of-thirds balance, diagonal tension, or a restrained angle shift while keeping silhouette identical",
+      "- Subject Angle: use a light high/low angle or foreground overlap to create layered depth without redesigning the product",
+      "- Text Area: allow only one light headline or label zone with generous whitespace",
+    ];
+  }
+  return [
+    "- Product Proportion: product occupies roughly 50%-60% of the frame",
+    "- Layout Method: tighter framing to emphasize material, craft, or hero feature detail while keeping some scene depth",
+    "- Subject Angle: favor a detail-driven crop or diagonal close framing that preserves the true structure",
+    "- Text Area: if typography is used, keep it in the edge safe zone without touching the product",
+  ];
+}
+
+function buildGenesisPlanContentLines(params: {
+  index: number;
+  isZh: boolean;
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+  styleLabels: string[];
+  apparelHeroGuard: boolean;
+}): string[] {
+  const { index, isZh, productSummary, identity, styleLabels, apparelHeroGuard } = params;
+  const material = identity?.material?.trim();
+  const primaryColor = identity?.primary_color?.trim();
+  const keyFeatures = (identity?.key_features ?? []).map((item) => item.trim()).filter(Boolean);
+  const styleCue = styleLabels.length > 0 ? styleLabels.join(" / ") : (isZh ? "统一商业风格" : "a coherent commercial direction");
+  const focus = index === 0
+    ? (isZh ? "第一眼商品识别与核心卖点" : "instant product recognition and the core selling point")
+    : index === 1
+    ? (isZh ? "轮廓、角度和层次变化" : "silhouette, angle, and layered depth")
+    : (isZh ? "材质、工艺或关键卖点细节" : "material, craft, or key selling-point detail");
+
+  if (apparelHeroGuard) {
+    return isZh
+      ? [
+          `- 展示重点：${focus}`,
+          `- 核心卖点：围绕 ${shortGenesisCue(productSummary, true, "服装卖点")} 展开，${material ? `强化 ${material} 的垂坠、纹理与体积感，` : ""}${primaryColor ? `稳住 ${primaryColor} 的色锚，` : ""}不得改款、改色或改变服装结构。`,
+          "- 背景元素：使用布面、石材、墙面渐层、局部阴影或前景虚化建立商业静物层次，禁止空白白底和单层挂拍背景。",
+          `- 装饰元素：${keyFeatures.length > 0 ? `仅允许呼应 ${keyFeatures.join("、")} 的折叠布片、裁片细节、材质切面或克制支撑元素` : "仅允许与服装材质和剪裁相关的克制辅助元素"}，风格统一为 ${styleCue}，禁止衣架和人台。`,
+        ]
+      : [
+          `- Focus of Display: ${focus}`,
+          `- Key Selling Points: build around ${shortGenesisCue(productSummary, false, "the garment story")}; ${material ? `emphasize the drape, texture, and volume of the ${material}, ` : ""}${primaryColor ? `keep ${primaryColor} as the color anchor, ` : ""}and do not redesign, recolor, or restructure the garment.`,
+          "- Background Elements: use textile sweeps, stone/plaster surfaces, shadow gradients, or foreground blur to create editorial still-life depth instead of a blank white apparel backdrop.",
+          `- Decorative Elements: ${keyFeatures.length > 0 ? `allow only restrained fabric echoes, construction details, material slices, or support elements that relate to ${keyFeatures.join(", ")}` : "allow only restrained garment-relevant supporting elements"} within ${styleCue}, with no hanger or mannequin.`,
+        ];
+  }
+
+  return isZh
+    ? [
+        `- 展示重点：${focus}`,
+        `- 核心卖点：围绕 ${shortGenesisCue(productSummary, true, "商品卖点")} 展开，${material ? `强化 ${material} 的质感，` : ""}${primaryColor ? `稳住 ${primaryColor} 的色锚，` : ""}不得改款或偏色。`,
+        "- 背景元素：使用与商品匹配的商业背景层次、表面材质和阴影结构，保持主体边缘清晰。",
+        `- 装饰元素：${keyFeatures.length > 0 ? `允许弱化呼应 ${keyFeatures.join("、")} 的视觉元素` : "允许极简商业辅助元素"}，风格统一为 ${styleCue}。`,
+      ]
+    : [
+        `- Focus of Display: ${focus}`,
+        `- Key Selling Points: build around ${shortGenesisCue(productSummary, false, "the product story")}; ${material ? `reinforce the ${material} texture, ` : ""}${primaryColor ? `keep ${primaryColor} as the color anchor, ` : ""}and do not redesign or recolor the product.`,
+        "- Background Elements: use a commercial backdrop, surface treatment, and shadow structure that keep the product edge clean and readable.",
+        `- Decorative Elements: ${keyFeatures.length > 0 ? `allow subtle supporting elements that echo ${keyFeatures.join(", ")}` : "allow only restrained supporting elements"} within ${styleCue}.`,
+      ];
+}
+
+function buildGenesisTextContentLines(params: {
+  isZh: boolean;
+  outputLanguage: string;
+  title: string;
+  description: string;
+  productSummary: string;
+  existingText: GenesisPlanTextContent;
+  wantsVisibleCopy: boolean;
+}): string[] {
+  const { isZh, outputLanguage, title, description, productSummary, existingText, wantsVisibleCopy } = params;
+  if (outputLanguage === "none" || !wantsVisibleCopy) {
+    return [
+      isZh ? "- 主标题：无" : "- Main Title: None",
+      isZh ? "- 副标题：无" : "- Subtitle: None",
+      isZh ? "- 描述文案：无" : "- Description Text: None",
+    ];
+  }
+
+  const isTargetZh = outputLanguage === "zh";
+  const mainFallback = isTargetZh
+    ? clipGenesisTextLine(title || "主打卖点", 12)
+    : clipGenesisTextLine(
+      /[a-z]/i.test(title) ? title : (/[a-z]/i.test(productSummary) ? productSummary : "Hero Product Highlight"),
+      40,
+    );
+  const subtitleFallback = isTargetZh
+    ? clipGenesisTextLine(description.replace(/[。.!?].*$/, "") || "突出核心卖点", 18)
+    : clipGenesisTextLine(
+      /[a-z]/i.test(description) ? description.replace(/[.?!].*$/, "") : "Designed around the core selling point",
+      64,
+    );
+  const descriptionFallback = isTargetZh
+    ? "使用短版商业文案，放在安全留白区，文字不得遮挡商品主体。"
+    : "Use concise commercial copy in the safe whitespace zone and keep the product unobstructed.";
+
+  const main = existingText.mainTitle || mainFallback;
+  const subtitle = existingText.subtitle || subtitleFallback;
+  const descriptionText = existingText.descriptionText || descriptionFallback;
+
+  return [
+    isZh ? `- 主标题：${main || "无"}` : `- Main Title: ${main || "None"}`,
+    isZh ? `- 副标题：${subtitle || "无"}` : `- Subtitle: ${subtitle || "None"}`,
+    isZh ? `- 描述文案：${descriptionText}` : `- Description Text: ${descriptionText}`,
+  ];
+}
+
+function extractGenesisExistingTextContent(raw: string, isZh: boolean): GenesisPlanTextContent {
+  const fallback: GenesisPlanTextContent = { mainTitle: "", subtitle: "", descriptionText: "" };
+  const normalized = raw.trim();
+  if (!normalized) return fallback;
+
+  const mainMatch = normalized.match(isZh ? /-\s*主标题\s*[：:]\s*(.+)/i : /-\s*Main Title\s*:\s*(.+)/i);
+  const subtitleMatch = normalized.match(isZh ? /-\s*副标题\s*[：:]\s*(.+)/i : /-\s*Subtitle\s*:\s*(.+)/i);
+  const descriptionMatch = normalized.match(
+    isZh ? /-\s*(?:描述文案|说明文字)\s*[：:]\s*(.+)/i : /-\s*Description Text\s*:\s*(.+)/i,
+  );
+
+  return {
+    mainTitle: sanitizeString(mainMatch?.[1], "").trim(),
+    subtitle: sanitizeString(subtitleMatch?.[1], "").trim(),
+    descriptionText: sanitizeString(descriptionMatch?.[1], "").trim(),
+  };
+}
+
+function defaultGenesisPerImageTextGuidance(index: number, outputLanguage: string, isZh: boolean, wantsVisibleCopy: boolean): string {
+  if (outputLanguage === "none" || !wantsVisibleCopy) {
+    return isZh
+      ? "纯视觉构图，无新增文字，依靠光影、材质和构图表达商业感。"
+      : "Visual-only composition with no added text. Let lighting, material, and framing carry the commercial mood.";
+  }
+  if (index === 0) {
+    return isZh
+      ? "主标题配副标题，放在安全留白区，层级清晰，文字不得遮挡商品主体。"
+      : "Use a headline with one subtitle in a safe whitespace zone. Keep the hierarchy clear and never let text cover the product.";
+  }
+  if (index === 1) {
+    return isZh
+      ? "使用短标题或轻量标签，排版弱于商品主体，保持留白与可读性。"
+      : "Use a short headline or light label. Keep the typography weaker than the product and preserve whitespace and readability.";
+  }
+  return isZh
+    ? "优先使用短标签或一句简短描述文案，放在边缘留白区，避免压住商品。"
+    : "Prefer a short label or compact description line in the edge whitespace area and avoid sitting on top of the product.";
+}
+
+function buildGenesisAtmosphereLines(params: {
+  isZh: boolean;
+  identity?: ProductVisualIdentity;
+  styleLabels: string[];
+  title: string;
+  apparelHeroGuard: boolean;
+}): string[] {
+  const { isZh, identity, styleLabels, title, apparelHeroGuard } = params;
+  const material = identity?.material?.trim();
+  const mood = styleLabels.length > 0 ? styleLabels.join(", ") : (isZh ? "高级商业感、真实材质、清晰焦点" : "premium commercial mood, real material tactility, clear visual focus");
+
+  if (apparelHeroGuard) {
+    return isZh
+      ? [
+          `- 氛围关键词：${mood}，围绕“${title}”建立服装商业大片记忆点`,
+          `- 光影效果：${material ? `以侧上方定向主光塑造 ${material} 的纹理、褶皱与边缘高光，再用轮廓光和环境补光拉开服装层次` : "用侧上方主光、轮廓光与柔和环境补光塑造服装体积感"}，阴影要真实可读，避免平打光。`,
+          "- 镜头/光圈参考：70mm-100mm 商业镜头，f/5.6-f/8，控制服装结构清晰度并保留前中后景层次。",
+        ]
+      : [
+          `- Mood Keywords: ${mood}, built around the garment-memory cue of "${title}"`,
+          `- Light and Shadow Effects: ${material ? `use a directional side-top key light to shape the texture, folds, and edge highlights of the ${material}, then separate the garment with rim light and ambient lift` : "use a directional side-top key light with rim support and soft ambient fill to build garment volume"}, keeping the shadows readable instead of flat front lighting.`,
+          "- Lens / Aperture Reference: 70mm-100mm commercial lens, f/5.6-f/8, with controlled depth that keeps garment structure crisp while preserving scene layering.",
+        ];
+  }
+
+  return isZh
+    ? [
+        `- 氛围关键词：${mood}，围绕“${title}”建立镜头记忆点`,
+        `- 光影效果：${material ? `根据 ${material} 的反光与体积感控制主光、轮廓光与高光层次` : "使用商业主光、轮廓光与补光"}，保留中浅景深与真实阴影过渡。`,
+        "- 镜头/光圈参考：70mm-100mm 商业镜头，f/5.6-f/8，避免廉价广角感并保持主体层次。",
+      ]
+    : [
+        `- Mood Keywords: ${mood}, built around the shot memory of "${title}"`,
+        `- Light and Shadow Effects: ${material ? `tune the key light, rim light, and highlight roll-off to the ${material} surface` : "use a commercial key light, rim light, and fill light setup"}, while keeping medium-shallow depth and realistic shadow falloff.`,
+      "- Lens / Aperture Reference: 70mm-100mm commercial lens, f/5.6-f/8, with controlled depth and no cheap wide-angle distortion.",
+    ];
+}
+
+function buildGenesisRecipeGraphicLines(sceneRecipe: GenesisSceneRecipe, isZh: boolean): string[] {
+  return isZh
+    ? [
+        `- Product：${sceneRecipe.product_ratio}，重点表现 ${sceneRecipe.hero_focus}。`,
+        `- Support Elements：${sceneRecipe.support_elements}。`,
+        `- Background：${sceneRecipe.background_surface}。`,
+      ]
+    : [
+        `- Product: ${sceneRecipe.product_ratio}, with focus on ${sceneRecipe.hero_focus}.`,
+        `- Support Elements: ${sceneRecipe.support_elements}.`,
+        `- Background: ${sceneRecipe.background_surface}.`,
+      ];
+}
+
+function buildGenesisRecipeProductAppearanceLines(params: {
+  sceneRecipe: GenesisSceneRecipe;
+  isZh: boolean;
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+}): string[] {
+  const { sceneRecipe, isZh, productSummary, identity } = params;
+  const layoutCue = sceneRecipe.layout_method.replace(/^(采用|使用)\s*/u, "");
+  const visibilityCue = isZh
+    ? `${sceneRecipe.shot_role}采用 ${layoutCue}，${sceneRecipe.subject_angle}，重点呈现 ${sceneRecipe.hero_focus}。`
+    : `${sceneRecipe.shot_role} uses ${sceneRecipe.layout_method}, ${sceneRecipe.subject_angle}, and prioritizes ${sceneRecipe.hero_focus}.`;
+  const identityLock = buildGenesisPlanProductAppearance({ isZh, productSummary, identity });
+  return [visibilityCue, identityLock];
+}
+
+function buildGenesisSellingPointSummary(params: {
+  isZh: boolean;
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+  commercialIntent: GenesisCommercialIntent;
+}): string {
+  const { isZh, productSummary, identity, commercialIntent } = params;
+  const material = identity?.material?.trim();
+  const keyFeatures = (identity?.key_features ?? []).map((item) => item.trim()).filter(Boolean);
+  const featureCue = keyFeatures.slice(0, 2).join(isZh ? "、" : ", ");
+  const briefCue = shortGenesisCue(commercialIntent.brief_summary, isZh, shortGenesisCue(productSummary, isZh, isZh ? "商品卖点" : "the key selling point"));
+
+  if (isZh) {
+    return [
+      material ? `${material} 的真实舒适触感` : "",
+      featureCue ? `${featureCue} 等经典结构细节` : "",
+      briefCue ? `服务于“${briefCue}”的主图目标` : "",
+    ].filter(Boolean).join("，");
+  }
+
+  return [
+    material ? `the true tactile quality of ${material}` : "",
+    featureCue ? `${featureCue} as the key structural details` : "",
+    briefCue ? `in service of the hero-image goal "${briefCue}"` : "",
+  ].filter(Boolean).join(", ");
+}
+
+function buildGenesisRecipeCompositionLines(sceneRecipe: GenesisSceneRecipe, isZh: boolean): string[] {
+  return [
+    isZh ? `- 商品占比：${sceneRecipe.product_ratio}` : `- Product Proportion: ${sceneRecipe.product_ratio}`,
+    isZh ? `- 布局方式：${sceneRecipe.layout_method}` : `- Layout Method: ${sceneRecipe.layout_method}`,
+    isZh ? `- 主体角度：${sceneRecipe.subject_angle}` : `- Subject Angle: ${sceneRecipe.subject_angle}`,
+    isZh ? `- 文字区域：${sceneRecipe.text_zone}` : `- Text Area: ${sceneRecipe.text_zone}`,
+  ];
+}
+
+function buildGenesisRecipeContentLines(params: {
+  sceneRecipe: GenesisSceneRecipe;
+  isZh: boolean;
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+  commercialIntent: GenesisCommercialIntent;
+}): string[] {
+  const { sceneRecipe, isZh, productSummary, identity, commercialIntent } = params;
+  const sellingPointSummary = buildGenesisSellingPointSummary({ isZh, productSummary, identity, commercialIntent });
+  return [
+    isZh ? `- 展示重点：${sceneRecipe.hero_focus}` : `- Focus of Display: ${sceneRecipe.hero_focus}`,
+    isZh ? `- 核心卖点：${sellingPointSummary}` : `- Key Selling Points: ${sellingPointSummary}`,
+    isZh ? `- 背景元素：${sceneRecipe.background_elements}` : `- Background Elements: ${sceneRecipe.background_elements}`,
+    isZh ? `- 装饰元素：${sceneRecipe.decorative_elements}` : `- Decorative Elements: ${sceneRecipe.decorative_elements}`,
+  ];
+}
+
+function buildGenesisRecipeAtmosphereLines(sceneRecipe: GenesisSceneRecipe, isZh: boolean): string[] {
+  return [
+    isZh ? `- 情绪关键词：${sceneRecipe.mood_keywords}` : `- Mood Keywords: ${sceneRecipe.mood_keywords}`,
+    isZh ? `- 光影效果：${sceneRecipe.lighting_setup}` : `- Light and Shadow Effects: ${sceneRecipe.lighting_setup}`,
+    isZh ? `- 镜头/光圈参考：${sceneRecipe.lens_hint}` : `- Lens / Aperture Reference: ${sceneRecipe.lens_hint}`,
+  ];
+}
+
+function normalizeGenesisImagePlanTemplate(params: {
+  index: number;
+  plan: BlueprintImagePlan;
+  isZh: boolean;
+  productSummary: string;
+  identity?: ProductVisualIdentity;
+  outputLanguage: string;
+  commercialIntent: GenesisCommercialIntent;
+  totalImages: number;
+  wantsVisibleCopy: boolean;
+}): BlueprintImagePlan {
+  const {
+    index,
+    plan,
+    isZh,
+    productSummary,
+    identity,
+    outputLanguage,
+    commercialIntent,
+    totalImages,
+    wantsVisibleCopy,
+  } = params;
+  const roleIndex = index + 1;
+  const title = sanitizeString(plan.title, isZh ? `图片方案 ${roleIndex}` : `Image Plan ${roleIndex}`).trim();
+  const rawSupplement = sanitizeString(plan.design_content, "").trim();
+  const apparelHeroGuard = shouldUseGenesisApparelHeroGuard(productSummary, identity, plan, rawSupplement);
+  const parsedSections = extractGenesisPlanSections(rawSupplement);
+  const fallbackDescription = apparelHeroGuard
+    ? (isZh
+      ? "以商业服装静物大片方式展示主体版型、层次与面料质感，避免平面挂拍。"
+      : "Show the garment as a premium editorial still life with structure, depth, and fabric tactility rather than a flat hanging display.")
+    : (isZh ? "请编辑该图片方案的描述。" : "Edit this image plan description.");
+  const rawDescription = sanitizeString(plan.description, fallbackDescription).trim();
+  const description = apparelHeroGuard && GENESIS_APPAREL_RESTRICTED_SCENE_RE.test(rawDescription)
+    ? fallbackDescription
+    : rawDescription;
+  const sceneRecipe = buildGenesisSceneRecipe({
+    index,
+    productSummary,
+    identity,
+    commercialIntent,
+    outputLanguage,
+    isZh,
+    totalImages,
+  });
+  const existingText = extractGenesisExistingTextContent(rawSupplement, isZh);
+  const productAppearanceLines = buildGenesisRecipeProductAppearanceLines({
+    sceneRecipe,
+    isZh,
+    productSummary,
+    identity,
+  });
+  const graphicDefaults = buildGenesisRecipeGraphicLines(sceneRecipe, isZh);
+  const compositionDefaults = buildGenesisRecipeCompositionLines(sceneRecipe, isZh);
+  const contentDefaults = buildGenesisRecipeContentLines({
+    sceneRecipe,
+    isZh,
+    productSummary,
+    identity,
+    commercialIntent,
+  });
+  const defaultTextLines = [
+    ...buildGenesisTextContentLines({ isZh, outputLanguage, title, description, productSummary, existingText, wantsVisibleCopy }),
+    outputLanguage === "none" || !wantsVisibleCopy
+      ? (isZh ? "- 排版说明：无新增文字，保留纯视觉留白。" : "- Layout Guidance: no added text; preserve pure visual whitespace.")
+      : (isZh
+        ? `- 排版说明：${defaultGenesisPerImageTextGuidance(index, outputLanguage, true, wantsVisibleCopy)}`
+        : `- Layout Guidance: ${defaultGenesisPerImageTextGuidance(index, outputLanguage, false, wantsVisibleCopy)}`),
+  ];
+  const textLines = wantsVisibleCopy
+    ? mergeGenesisLabeledSection(parsedSections.textContent, defaultTextLines)
+    : defaultTextLines;
+  const atmosphereDefaults = buildGenesisRecipeAtmosphereLines(sceneRecipe, isZh);
+  const graphicLines = preferGenesisLabeledSection(
+    graphicDefaults,
+    filterGenesisRestrictedApparelLines(parsedSections.inGraphicElements, apparelHeroGuard),
+  );
+  const compositionLines = preferGenesisLabeledSection(
+    compositionDefaults,
+    filterGenesisRestrictedApparelLines(parsedSections.compositionPlan, apparelHeroGuard),
+  );
+  const contentLines = preferGenesisLabeledSection(
+    contentDefaults,
+    filterGenesisRestrictedApparelLines(parsedSections.contentElements, apparelHeroGuard),
+  );
+  const atmosphereLines = preferGenesisLabeledSection(
+    atmosphereDefaults,
+    filterGenesisRestrictedApparelLines(parsedSections.atmosphereCreation, apparelHeroGuard),
+  );
+  const designGoalLines = mergeGenesisNarrativeSection(
+    filterGenesisRestrictedApparelLines(parsedSections.designGoal, apparelHeroGuard),
+    description,
+  );
+
+  const parts = [
+    isZh ? `## 图片 [${roleIndex}]：${title}` : `## Image [${roleIndex}]: ${title}`,
+    isZh ? `**设计目标**：${designGoalLines[0] ?? description}` : `**Design Goal**: ${designGoalLines[0] ?? description}`,
+    ...designGoalLines.slice(1),
+    isZh
+      ? `**商品外观**：${productAppearanceLines[0] ?? buildGenesisPlanProductAppearance({ isZh: true, productSummary, identity })}`
+      : `**Product Appearance**: ${productAppearanceLines[0] ?? buildGenesisPlanProductAppearance({ isZh: false, productSummary, identity })}`,
+    ...productAppearanceLines.slice(1),
+    isZh ? "**画内元素**：" : "**In-Graphic Elements**:",
+    ...graphicLines,
+    "",
+    isZh ? "**构图规划**：" : "**Composition Plan**:",
+    ...compositionLines,
+    "",
+    isZh ? "**内容元素**：" : "**Content Elements**:",
+    ...contentLines,
+    "",
+    isZh ? `**文字内容**（使用 ${outputLanguage === "none" ? "纯视觉" : outputLanguageLabel(outputLanguage)}）：` : `**Text Content** (Using ${outputLanguage === "none" ? "Visual Only" : outputLanguageLabel(outputLanguage)}):`,
+    ...textLines,
+    "",
+    isZh ? "**氛围营造**：" : "**Atmosphere Creation**:",
+    ...atmosphereLines,
+  ];
+
+  return {
+    ...plan,
+    title,
+    description,
+    design_content: parts.join("\n\n"),
+    scene_recipe: sceneRecipe,
+  };
+}
+
+export function normalizeGenesisBlueprintTemplate(
+  blueprint: AnalysisBlueprint,
+  outputLanguage: string,
+  uiLanguage: string,
+  requirements: string,
+): AnalysisBlueprint {
+  const isZh = uiLanguage.startsWith("zh");
+  const wantsVisibleCopy = genesisRequestsVisibleCopy(requirements, outputLanguage);
+  const productSummary = sanitizeString(
+    blueprint.product_summary,
+    sanitizeString(blueprint.copy_analysis?.product_summary, requirements),
+  ).trim();
+  const styleLabels = selectedGenesisStyleLabelsFromDirections(blueprint.style_directions);
+  const commercialIntent = buildGenesisCommercialIntent({
+    productSummary,
+    identity: blueprint.product_visual_identity,
+    requirements,
+    outputLanguage,
+    isZh,
+    styleLabels,
+    wantsVisibleCopy,
+  });
+  const normalizedImages = blueprint.images.map((plan, index) => {
+    return normalizeGenesisImagePlanTemplate({
+      index,
+      plan,
+      isZh,
+      productSummary,
+      identity: blueprint.product_visual_identity,
+      outputLanguage,
+      commercialIntent,
+      totalImages: blueprint.images.length,
+      wantsVisibleCopy,
+    });
+  });
+
+  return {
+    ...blueprint,
+    images: normalizedImages,
+    design_specs: normalizeGenesisDesignSpecsTemplate({
+      rawDesignSpecs: sanitizeString(blueprint.design_specs, ""),
+      isZh,
+      productSummary,
+      identity: blueprint.product_visual_identity,
+      outputLanguage,
+      styleLabels,
+      wantsVisibleCopy,
+    }),
+    copy_analysis: blueprint.copy_analysis
+      ? {
+          ...blueprint.copy_analysis,
+          mode: wantsVisibleCopy
+            ? (blueprint.copy_analysis.mode === "visual-only" ? "product-inferred" : blueprint.copy_analysis.mode)
+            : "visual-only",
+          shared_copy: "",
+          resolved_output_language: outputLanguage,
+          product_summary: productSummary,
+          per_plan_adaptations: normalizedImages.map((_, index) => {
+            const existing = blueprint.copy_analysis?.per_plan_adaptations?.[index];
+            return {
+              plan_index: index,
+              plan_type: existing?.plan_type ?? (index === 0 ? "hero" : index === 1 ? "angle" : "feature"),
+              copy_role: outputLanguage === "none" || !wantsVisibleCopy ? "none" : "headline+support",
+              adaptation_summary: existing?.adaptation_summary ?? defaultGenesisPerImageTextGuidance(index, outputLanguage, isZh, wantsVisibleCopy),
+            };
+          }),
+        }
+      : blueprint.copy_analysis,
+    product_summary: productSummary,
+    commercial_intent: commercialIntent,
+  };
+}
+
+export function normalizeGenesisAnalysis(
   parsed: Record<string, unknown>,
   outputLanguage: string,
   uiLanguage: string,
   requirements: string,
 ): GenesisAnalysisResult {
   const isZh = uiLanguage.startsWith("zh");
+  const wantsVisibleCopy = genesisRequestsVisibleCopy(requirements, outputLanguage);
   const fallbackSummary = requirements
     || (isZh
       ? "根据产品图分析产品特征，并围绕核心卖点生成主图。"
@@ -651,7 +3119,7 @@ function normalizeGenesisAnalysis(
   const fallbackCopyPlan = buildGenesisCopyFallback(requirements, outputLanguage, uiLanguage);
 
   const rawIdentity = (parsed.product_visual_identity ?? parsed.productVisualIdentity) as Record<string, unknown> | undefined;
-  const productVisualIdentity: ProductVisualIdentity | undefined = rawIdentity && typeof rawIdentity === "object"
+  const unsanitizedIdentity: ProductVisualIdentity | undefined = rawIdentity && typeof rawIdentity === "object"
     ? {
         primary_color: sanitizeString(rawIdentity.primary_color ?? rawIdentity.primaryColor, ""),
         secondary_colors: Array.isArray(rawIdentity.secondary_colors ?? rawIdentity.secondaryColors)
@@ -663,19 +3131,24 @@ function normalizeGenesisAnalysis(
           : [],
       }
     : undefined;
+  const productSummary = sanitizeString(
+    parsed.product_summary ?? parsed.productSummary,
+    fallbackSummary,
+  );
+  const productVisualIdentity = sanitizeGenesisProductVisualIdentity(productSummary, unsanitizedIdentity);
 
   return {
-    product_summary: sanitizeString(
-      parsed.product_summary ?? parsed.productSummary,
-      fallbackSummary,
-    ),
+    product_summary: productSummary,
     product_visual_identity: productVisualIdentity,
     style_directions: normalizeGenesisStyleDirections(parsed, uiLanguage),
-    copy_plan: outputLanguage === "none"
+    copy_plan: outputLanguage === "none" || !wantsVisibleCopy
       ? ""
-      : rawCopyPlan && copyPlanMatchesBrief(rawCopyPlan, requirements, uiLanguage)
-        ? rawCopyPlan
-        : fallbackCopyPlan,
+      : clipGenesisTextLine(
+        rawCopyPlan && copyPlanMatchesBrief(rawCopyPlan, requirements, uiLanguage)
+          ? rawCopyPlan
+          : fallbackCopyPlan,
+        isZh ? 36 : 96,
+      ),
     _ai_meta: {},
   };
 }
@@ -1197,6 +3670,8 @@ function styleReplicateErrorCode(error: unknown): string {
   if (message.includes("STYLE_REFERENCE_IMAGE_MISSING")) return "STYLE_REFERENCE_IMAGE_MISSING";
   if (message.includes("STYLE_PRODUCT_IMAGE_MISSING")) return "STYLE_PRODUCT_IMAGE_MISSING";
   if (message.includes("SOURCE_IMAGE_FETCH_FAILED")) return "IMAGE_INPUT_SOURCE_MISSING";
+  if (message.includes("SOURCE_IMAGE_FETCH_TIMEOUT")) return "IMAGE_INPUT_SOURCE_TIMEOUT";
+  if (message.includes("STYLE_REPLICATE_TIMEOUT")) return "STYLE_REPLICATE_TIMEOUT";
   if (message.includes("INSUFFICIENT_CREDITS")) return "INSUFFICIENT_CREDITS";
   return "UPSTREAM_ERROR";
 }
@@ -1207,6 +3682,8 @@ function isFatalStyleReplicateError(error: unknown): boolean {
     code === "STYLE_PRODUCT_IMAGE_MISSING" ||
     code === "REFINEMENT_PRODUCT_IMAGES_REQUIRED" ||
     code === "REFINEMENT_BACKGROUND_MODE_INVALID" ||
+    code === "IMAGE_INPUT_SOURCE_MISSING" ||
+    code === "IMAGE_INPUT_SOURCE_TIMEOUT" ||
     code === "INSUFFICIENT_CREDITS";
 }
 
@@ -1301,10 +3778,21 @@ function isFatalImageGenError(error: unknown): boolean {
     code === "UPSTREAM_REJECTED";
 }
 
+function isFatalAnalysisError(error: unknown): boolean {
+  const message = String(error ?? "");
+  // Image source gone (e.g. temp upload expired) — retrying won't help
+  if (message.includes("SOURCE_IMAGE_FETCH_FAILED")) return true;
+  // Input validation errors — retrying with same payload will always fail
+  if (message.includes("ANALYSIS_INPUT_IMAGE_MISSING")) return true;
+  if (message.includes("ANALYSIS_MODEL_IMAGE_MISSING")) return true;
+  return false;
+}
+
 function isTaskRetryable(taskType: TaskRow["task_type"], attempts: number, error: unknown): boolean {
   if (attempts >= TASK_MAX_ATTEMPTS) return false;
   if (taskType === "STYLE_REPLICATE") return !isFatalStyleReplicateError(error);
   if (taskType === "IMAGE_GEN") return !isFatalImageGenError(error);
+  if (taskType === "ANALYSIS") return !isFatalAnalysisError(error);
   return true;
 }
 
@@ -1367,24 +3855,24 @@ function buildIdentityLockPromptParts(params: {
 }): string[] {
   const { identity, heroPlanTitle, heroPlanDescription } = params;
   const parts: string[] = [];
-  if (heroPlanTitle) parts.push(`Hero plan title: ${heroPlanTitle}.`);
-  if (heroPlanDescription) parts.push(`Hero plan objective: ${heroPlanDescription}.`);
+  if (heroPlanTitle) parts.push(`Hero direction: ${heroPlanTitle}.`);
+  if (heroPlanDescription) parts.push(`Shot objective: ${heroPlanDescription}.`);
   if (identity?.primary_color) {
-    parts.push(`Exact color anchor: ${identity.primary_color}. Keep this true product color unchanged.`);
+    parts.push(`Keep the exact color anchor as ${identity.primary_color}.`);
   } else {
-    parts.push("Exact color anchor: keep the real product color from the uploaded reference images unchanged.");
+    parts.push("Keep the real product color from the uploaded reference images unchanged.");
   }
   if (identity?.material) {
-    parts.push(`Exact material anchor: ${identity.material}. Do not replace or restyle the material.`);
+    parts.push(`Keep the exact material anchor as ${identity.material}.`);
   } else {
-    parts.push("Exact material anchor: preserve the original material from the uploaded reference images.");
+    parts.push("Preserve the original material from the uploaded reference images.");
   }
   if (identity && identity.key_features.length > 0) {
-    parts.push(`Immutable product features: ${identity.key_features.join(", ")}.`);
+    parts.push(`Preserve these immutable product features: ${identity.key_features.join(", ")}.`);
   } else {
-    parts.push("Immutable product features: preserve the visible logo, hardware, texture, stitching, silhouette, proportions, and structure from the uploaded reference images.");
+    parts.push("Preserve the visible logo, hardware, texture, stitching, silhouette, proportions, and structure from the uploaded reference images.");
   }
-  parts.push("Hard identity lock: exact same SKU, exact same product, exact same design. Do not recolor, redesign, simplify, replace, remove logo, change hardware, alter texture, adjust silhouette, distort proportions, or modify structure.");
+  parts.push("Hard identity lock: exact same SKU and exact same design. No recolor, redesign, missing logo, hardware swap, texture loss, silhouette drift, or structural change.");
   return parts;
 }
 
@@ -1491,16 +3979,70 @@ Return valid JSON only (no markdown, no explanation):
   }
 }
 
+/** Strip base64 image data from chat messages before storing to avoid DB statement timeout. */
+function stripBase64FromMessages(messages: unknown[]): unknown[] {
+  return messages.map((msg) => {
+    const m = msg as Record<string, unknown>;
+    if (!Array.isArray(m.content)) return msg;
+    return {
+      ...m,
+      content: (m.content as unknown[]).map((part) => {
+        const p = part as Record<string, unknown>;
+        if (p.type === "image_url") {
+          const url = (p.image_url as Record<string, unknown>)?.url;
+          if (typeof url === "string" && url.startsWith("data:")) {
+            return { type: "image_url", image_url: { url: "[base64_stripped]" } };
+          }
+        }
+        return part;
+      }),
+    };
+  });
+}
+
+const ANALYSIS_TIMEOUT_MS = clampInt(
+  Deno.env.get("ANALYSIS_TIMEOUT_MS") ?? 270_000,
+  30_000,
+  600_000,
+  270_000,
+);
+
+const STYLE_REPLICATE_TIMEOUT_MS = clampInt(
+  Deno.env.get("STYLE_REPLICATE_TIMEOUT_MS") ?? 120_000,
+  30_000,
+  300_000,
+  120_000,
+);
+
 async function processAnalysisJob(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
+  taskLease?: TaskLease,
 ): Promise<void> {
   // Route OCR tasks to dedicated handler
   if (job.payload?.task === "ocr") {
     return processOcrJob(supabase, job);
   }
 
+  const pulse = taskLease?.pulse ?? (async () => {});
+
   const startedAt = Date.now();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error("ANALYSIS_TIMEOUT")), ANALYSIS_TIMEOUT_MS);
+  });
+
+  await Promise.race([
+    _processAnalysisJobInner(supabase, job, pulse, startedAt),
+    timeoutPromise,
+  ]);
+}
+
+async function _processAnalysisJobInner(
+  supabase: ReturnType<typeof createServiceClient>,
+  job: GenerationJobRow,
+  pulse: () => Promise<void>,
+  startedAt: number,
+): Promise<void> {
   const payload = job.payload ?? {};
   const uiLanguage = String(payload.uiLanguage ?? payload.targetLanguage ?? "en");
   const outputLanguage = String(payload.outputLanguage ?? payload.targetLanguage ?? uiLanguage ?? "en");
@@ -1533,6 +4075,7 @@ async function processAnalysisJob(
 
   const imageDataUrls = await Promise.all(productImages.map((path) => toDataUrl(path)));
   const modelImageDataUrl = modelImage ? await toDataUrl(modelImage) : null;
+  await pulse(); // heartbeat after image fetch (can be slow for large/multiple images)
 
   const textContentRule = outputLanguage === "none"
     ? "For Text Content fields, always output Main Title/SubTitle/Description as 'None'."
@@ -1586,30 +4129,48 @@ async function processAnalysisJob(
   if (isGenesisStudio) {
     const isZhGenesis = uiLanguage.startsWith("zh");
     const genesisSystemPrompt = isZhGenesis
-      ? `你是顶级电商主图策划专家。请基于产品图和用户填写的主图要求，输出一个紧凑的 JSON 分析结果，用于后续主图生成。
+      ? `你是顶级电商主图创意总监与商业视觉策划专家。请基于产品图和用户填写的主图要求，直接输出一份可执行的主图商业蓝图 JSON，用于后续 prompt 生成与前端编辑。
 
 强规则：
-1. 用户填写的”组图要求/主图要求”优先级高于产品图分析。
-2. 只输出风格方向与共享文案，不要输出图片规划，不要输出整体设计规范。
-3. 风格方向只保留三个维度：sceneStyle、lighting、composition。
-4. 每个维度返回 1 到 3 个中文动态标签，每个标签不超过 5 个字。
-5. 每个维度必须给出一个 recommended 标签，且 recommended 必须来自 options。
-6. 如果输出语言不是纯视觉，copy_plan 必须是一段可直接用于电商主图的共享文案，必须明确吸收用户填写的商品名称和主要卖点，不能泛化，不能忽略卖点关键词。
-7. 如果输出语言为纯视觉，copy_plan 才能返回空字符串。
-8. 所有输出必须是合法 JSON，不要 Markdown，不要解释。
-9. 【颜色提取——最高优先级】product_visual_identity.primary_color 必须准确反映产品图中产品的真实主色调。仔细观察产品图片的实际颜色，不要受背景色、光影或个人偏见影响。粉色就写粉色，白色就写白色，绝对不能把浅色产品识别为深色。`
-      : `You are a top-tier e-commerce hero image strategist. Based on the product images and the user's hero-image brief, return a compact JSON analysis result for downstream hero image generation.
+1. 用户填写的主图要求优先级高于产品图分析。
+2. 输出必须是完整蓝图，而不是紧凑摘要。必须同时输出 product_summary、product_visual_identity、style_directions、copy_analysis、design_specs、images。
+3. 所有图片都必须锁定为同一 SKU、同一商品，不得改色、改材质、改 logo、改五金、改纹理、改结构。
+4. design_specs 必须使用固定五段模板，章节名和顺序必须严格为：# 整体设计规范 -> ## 色彩系统 -> ## 字体系统/文案系统 -> ## 视觉语言 -> ## 摄影风格 -> ## 品质要求。每章都要写实质内容，不得缺章。
+5. images 数组必须输出正好 ${imageCount} 个方案，每个方案都要给出不同的画面职责与镜头变化，但风格系统统一。
+6. 文案必须是短版式而不是大段说明文：主标题不超过 12 个中文字符，辅助短句不超过 18 个中文字符，角标/标签不超过 8 个中文字符；单张主图默认最多 2 组文字区。
+7. 输出语言直接决定是否加字：如果 outputLanguage=none，则整组图必须纯视觉无字；如果 outputLanguage 不是 none，则每张图都必须生成对应语言的短版主标题/副标题/描述文案，并写入 design_content 的“文字内容”。
+8. copy_analysis 仅作为兼容字段保留：shared_copy 必须始终为空字符串；per_plan_adaptations 只需要说明该图是纯视觉布局还是有独立文字内容、文字位置、层级、留白和“不得遮挡商品主体”。
+9. style_directions 仍只保留三个维度：sceneStyle、lighting、composition。每个维度返回 1 到 3 个中文动态标签，每个标签不超过 5 个字，且必须给出 recommended。
+10. 【颜色提取——最高优先级】product_visual_identity.primary_color 必须准确反映产品图中产品的真实主色调，并附近似十六进制色值。
+11. 所有类目都必须沿用同一模板骨架，内容按商品与卖点自适应填充。可以分析适合该类目的商业摄影语言，但禁止硬套与商品无关的装饰、材质、背景或道具。
+12. 如果商品是衬衫、上衣、裙装、裤装等服装单品主图，除非用户明确要求白底、挂拍、人台或平铺，否则禁止默认输出白色衣架、纯白空背景、挂拍悬挂或人台展示语义；应优先设计有层次的商业服装静物场景，用布面、石材、墙面、阴影、折叠面或克制支撑面建立体积感。
+13. images[].design_content 必须严格使用固定主图蓝图章节顺序：设计目标 -> 产品外观 -> 画内元素 -> 构图规划 -> 内容元素 -> 文字内容 -> 氛围营造。
+14. 每个方案都必须写出可执行的具体摄影参数，而不是抽象气质词。至少明确：商品占比百分比、布局方式、主体倾斜或机位角度、主光方向/角度、前景/中景/背景层次、背景表面材质、装饰元素、镜头或光圈参考。
+15. 除白底精修型方案外，禁止空白背景或单层纯色背景。默认至少做出 2 层可读景深，并使用有方向性的主光与轮廓/环境补光。
+16. 不要让所有方案都正摆正拍。至少部分方案需要通过微倾斜、对角线、三分法、高低机位或前景遮挡制造动态感。
+17. 文字内容必须固定输出三行：主标题 / 副标题 / 描述文案；默认输出“无”。只有用户明确要求图上加字时，这三行里的文案值才跟随目标输出语言，其余结构字段按当前 UI 语言输出。
+18. 所有输出必须是合法 JSON，不要 Markdown，不要解释。`
+      : `You are a top-tier e-commerce hero-image creative director and commercial visual strategist. Based on the product images and the user's hero-image brief, return a fully executable hero-image blueprint JSON for downstream prompt generation and UI editing.
 
 Hard rules:
 1. The user's brief has higher priority than inferred product-image analysis.
-2. Output only style directions and shared copy. Do not output image plans. Do not output design specs.
-3. Style directions must contain only sceneStyle, lighting, and composition.
-4. Each dimension returns 1 to 3 dynamic tags.
-5. Each dimension must provide one recommended tag from its own options.
-6. If the output is not visual-only, copy_plan must be a usable e-commerce hero-image copy block that directly reflects the product description and key selling points from the user's brief.
-7. copy_plan may be empty only in visual-only mode.
-8. Return valid JSON only. No markdown. No explanations.
-9. [COLOR EXTRACTION — HIGHEST PRIORITY] product_visual_identity.primary_color must accurately reflect the true dominant color of the product as seen in the uploaded images. Carefully observe the actual product color — do not confuse it with the background, lighting, or shadows. If the product is pink, write pink. Never misidentify a light-colored product as dark.`;
+2. The output must be a complete blueprint, not a compact summary. Always return product_summary, product_visual_identity, style_directions, copy_analysis, design_specs, and images.
+3. Every image must stay locked to the exact same SKU and product. Do not change color, material, logo, hardware, texture, or construction.
+4. design_specs must use one fixed five-section template in this exact order: # Overall Design Specifications -> ## Color System -> ## Typography / Copy System -> ## Visual Language -> ## Photography Style -> ## Quality Requirements. Every section must contain real execution detail.
+5. The images array must contain exactly ${imageCount} plans. Each plan needs a different shot responsibility and camera/composition variation while keeping one coherent visual system.
+6. Copy must be short-form layout copy, not paragraphs: headline max 12 Chinese characters worth of density, support line max 18, badge/label max 8, and by default no more than 2 text groups per image unless the plan explicitly needs an information-heavy layout.
+7. Output language controls text behavior directly: if outputLanguage=none, the full set must stay visual-only with no added copy; otherwise every image must include short visible copy in the selected output language inside Text Content.
+8. Keep copy_analysis only as compatibility metadata: shared_copy must always be an empty string, and per_plan_adaptations should only describe whether the image stays visual-only or uses per-image text, plus placement, hierarchy, whitespace, and non-occlusion.
+9. style_directions should still contain only sceneStyle, lighting, and composition, with 1 to 3 dynamic tags per dimension and one recommended tag from its own options.
+10. [COLOR EXTRACTION — HIGHEST PRIORITY] product_visual_identity.primary_color must reflect the true dominant product color from the uploaded images, with an approximate hex value.
+11. Keep the template structure identical for every category. Adapt the contents to the product and selling points, but do not force irrelevant props, surfaces, backgrounds, or decorative language from another category.
+12. If the product is an apparel item such as a shirt, top, dress, or trousers, do not default to white hanger display, mannequin display, flat lay, or a blank white backdrop unless the user explicitly requests white background, mannequin, hanger, or packshot treatment. Prefer a layered commercial garment still life with surfaces, shadow shaping, folds, walls, or restrained support planes that preserve the exact garment.
+13. Each images[].design_content must follow this fixed hero-blueprint section order exactly: Design Goal -> Product Appearance -> In-Graphic Elements -> Composition Plan -> Content Elements -> Text Content -> Atmosphere Creation.
+14. Every plan must include executable commercial-photo parameters rather than vague taste words. Explicitly specify at least: product-to-frame ratio, layout method, subject tilt or camera angle, key-light direction/angle, foreground-midground-background layering, background surface material, decorative elements, and lens/aperture guidance.
+15. Except for clean packshot / white-background plans, do not return an empty backdrop or a single flat background layer. Default to at least two readable scene layers plus directional key lighting with contour or ambient support.
+16. Do not make every plan front-on and centered. At least some plans should create motion through subtle tilt, diagonal composition, rule-of-thirds placement, high/low angle, or foreground overlap.
+17. Text Content must always contain exactly three lines in this order: Main Title, Subtitle, Description Text. When outputLanguage=none, all three values must be "None". Otherwise they must be usable short-form copy in the selected output language. All structural section labels should stay in the current UI language.
+18. Return valid JSON only. No markdown. No explanations.`;
 
     const genesisUserPrompt = isZhGenesis
       ? `请严格输出如下 JSON：
@@ -1626,7 +4187,32 @@ Hard rules:
     "lighting": { "options": ["标签1","标签2","标签3"], "recommended": "标签1" },
     "composition": { "options": ["标签1","标签2","标签3"], "recommended": "标签1" }
   },
-  "copy_plan": "一段共享文案，非纯视觉模式下必须直接体现商品名称和主要卖点"
+  "copy_analysis": {
+    "mode": "user-brief | product-inferred | visual-only",
+    "source_brief": "用户原始要求，没有则空字符串",
+    "brief_summary": "一句话总结文案意图",
+    "product_summary": "一句话总结商品身份、材质、颜色、轮廓与关键结构",
+    "resolved_output_language": "${outputLanguage}",
+    "shared_copy": "",
+    "can_clear_to_visual_only": true,
+    "per_plan_adaptations": [
+      {
+        "plan_index": 0,
+        "plan_type": "hero | angle | feature | lifestyle | comparison | premium-closeup | clean-packshot",
+        "copy_role": "headline+support | label | none",
+        "adaptation_summary": "说明这张图是否使用独立文字内容、文字位置、层级、留白区，以及文字不得遮挡商品主体"
+      }
+    ]
+  },
+  "design_specs": "# 整体设计规范\\n> 所有图片必须遵循以下统一规范，确保视觉连贯性\\n\\n## 色彩系统\\n- 主色调：...\\n- 辅助色：...\\n- 背景色：...\\n\\n## 字体系统/文案系统\\n- 标题字体：...\\n- 正文字体：...\\n- 字号层级：...\\n- 文案规则：...\\n\\n## 视觉语言\\n- 装饰元素：...\\n- 图标风格：...\\n- 留白原则：...\\n\\n## 摄影风格\\n- 光线：...\\n- 景深：...\\n- 相机参数参考：...\\n\\n## 品质要求\\n- 分辨率：...\\n- 风格：...\\n- 真实感：...",
+  "images": [
+    {
+      "title": "4-8 字中文标题",
+      "description": "1-2 句中文定位描述",
+      "type": "hero | angle | feature | lifestyle | comparison | premium-closeup | clean-packshot",
+      "design_content": "## 图片 [N]：...\\n\\n**设计目标**：...\\n\\n**产品外观**：说明主体展示角度、可见面、标签与结构信息，并明确主体是否微倾斜、俯拍或仰拍。\\n\\n**画内元素**：\\n- Product：主体形态、位置、占比、展示重点\\n- Support Elements：前景/中景辅助元素，如手部、材质切片、丝绸、水滴、反射、轻道具等\\n- Background：背景表面材质、空间层次、留白比例，以及前景/中景/背景的关系\\n\\n**构图规划**：\\n- 商品占比：必须给具体百分比\\n- 布局方式：必须写清楚居中/三分法/对角线/黄金分割等\\n- 主体角度：必须写清楚产品倾斜角度或机位角度\\n- 文字区域：...\\n\\n**内容元素**：\\n- 展示重点：...\\n- 核心卖点：...\\n- 背景元素：...\\n- 装饰元素：必须写清楚材质/数量/位置，且与商品品类相关\\n\\n**文字内容**（使用 ${outputLanguageLabel(outputLanguage)}）：\\n- 主标题：...\\n- 副标题：...\\n- 描述文案：...\\n\\n**氛围营造**：\\n- 情绪关键词：...\\n- 光影效果：必须写主光方向、轮廓光/逆光/环境光和阴影特征\\n- 镜头/光圈参考：必须写焦段、光圈范围与景深描述"
+    }
+  ]
 }
 
 强制视觉身份提取规则：
@@ -1639,8 +4225,22 @@ Hard rules:
 - 再结合产品图补足真实材质、结构、拍摄角度与商业表现方式。
 - 用户要求与图片冲突时，优先遵循用户要求。
 - 输出语言：${outputLanguageLabel(outputLanguage)}
-- 如果输出语言不是无文字（纯视觉），copy_plan 必须是电商可用文案，直接覆盖用户填写的商品和卖点，不要写空话套话。
-- 如果输出语言为无文字（纯视觉），copy_plan 可以为空；但风格方向仍要正常输出。
+- 输出语言直接决定是否加字：如果 outputLanguage=none，则整组图纯视觉无字；如果 outputLanguage 不是 none，则每张图都必须生成对应语言的可见文案。
+- 当 outputLanguage 不是 none 时，copy_analysis.mode 不得为 visual-only，shared_copy 仍为空，但 images[].design_content 必须写出对应语言的文字内容与排版说明。
+- design_specs 必须严格使用固定五段模板，且每章都要写出可执行内容，不能用“高级感”“商业感”这类空词糊弄。
+- images 数组必须正好 ${imageCount} 个对象，每张图方案都不同，且每张图都要严格使用固定主图蓝图章节，写清楚画面职责、构图、场景/道具/材质、光影和逐图文字内容。
+- 每张图都必须明确写出：商品占比百分比、布局方式、主体角度、主光方向、前景/中景/背景层次、背景表面材质、装饰元素、镜头/光圈参考。
+- 禁止只写“高级感”“柔光”“商业感”这类抽象词，必须转成可执行的构图、表面、灯光和场景描述。
+- 除白底精修型方案外，不允许空白背景或单层纯色背景；默认至少 2 层场景深度，并且要有方向性主光。
+- 如果当前商品是衬衫、上衣、裙装、裤装等服装单品主图，除非用户明确要求白底、挂拍、人台或平铺，否则不要写“白色衣架、纯白背景、无道具”的服装挂拍方案；应写有层次的商业服装静物场景。
+- 不要让所有方案都方正正拍；至少部分方案必须有轻微倾斜、对角线、三分法、高低机位或前景遮挡。
+- 所有类目都走同一模板骨架，只是章节内容按商品自适应填充；禁止把别的品类的道具、材质或背景机械套到当前商品上。
+- 文案长度控制：
+  - 主标题 <= 12 个中文字符
+  - 辅助短句 <= 18 个中文字符
+  - 标签/角标 <= 8 个中文字符
+  - 默认最多 2 组文字区
+- 只要不是纯视觉，每张图都必须明确写“文字不得遮挡商品主体”。
 
 用户要求：
 ${requirements || "（用户未填写额外要求，仅根据产品图分析）"}
@@ -1659,7 +4259,32 @@ ${requirements || "（用户未填写额外要求，仅根据产品图分析）"
     "lighting": { "options": ["tag1","tag2","tag3"], "recommended": "tag1" },
     "composition": { "options": ["tag1","tag2","tag3"], "recommended": "tag1" }
   },
-  "copy_plan": "One shared copy block that must directly reflect the product and key selling points unless this is visual-only mode"
+  "copy_analysis": {
+    "mode": "user-brief | product-inferred | visual-only",
+    "source_brief": "Original user brief or empty string",
+    "brief_summary": "One-line summary of the copy intent",
+    "product_summary": "One-line summary of locked product identity, material, color, silhouette, and key structure",
+    "resolved_output_language": "${outputLanguage}",
+    "shared_copy": "",
+    "can_clear_to_visual_only": true,
+    "per_plan_adaptations": [
+      {
+        "plan_index": 0,
+        "plan_type": "hero | angle | feature | lifestyle | comparison | premium-closeup | clean-packshot",
+        "copy_role": "headline+support | label | none",
+        "adaptation_summary": "Explain whether this shot uses per-image text, where the text sits, its hierarchy, whitespace, and that it must not cover the product"
+      }
+    ]
+  },
+  "design_specs": "# Overall Design Specifications\\n\\n## Color System\\n...\\n## Typography / Copy System\\n...\\n## Visual Language\\n...\\n## Photography Style\\n...\\n## Quality Requirements\\n...",
+  "images": [
+    {
+      "title": "4-8 word title",
+      "description": "1-2 sentence positioning",
+      "type": "hero | angle | feature | lifestyle | comparison | premium-closeup | clean-packshot",
+      "design_content": "## Image [N]: ...\\n\\n**Design Goal**: ...\\n\\n**Product Appearance**: explain the visible angle, face, label, and structural information, and explicitly state whether the product is subtly tilted, shot from above, or shot from below.\\n\\n**In-Graphic Elements**:\\n- Product: subject form, position, percentage of frame, and what must be shown\\n- Support Elements: foreground/midground support elements such as hands, material slices, silk, droplets, reflections, light props, or other restrained aids\\n- Background: background surface material, spatial depth, whitespace ratio, and the relationship between foreground, midground, and background\\n\\n**Composition Plan**:\\n- Product Proportion: must be a concrete percentage\\n- Layout Method: must specify centered / rule of thirds / diagonal / golden ratio / etc.\\n- Subject Angle: must specify product tilt or camera angle\\n- Text Area: ...\\n\\n**Content Elements**:\\n- Focus of Display: ...\\n- Key Selling Points: ...\\n- Background Elements: ...\\n- Decorative Elements: must describe material, count, and position, and they must fit the product category\\n\\n**Text Content** (Using ${outputLanguageLabel(outputLanguage)}):\\n- Main Title: ...\\n- Subtitle: ...\\n- Description Text: ...\\n\\n**Atmosphere Creation**:\\n- Mood Keywords: ...\\n- Light and Shadow Effects: must specify key-light direction, rim/back/ambient support, and shadow behavior\\n- Lens / Aperture Reference: must specify focal length, aperture range, and depth-of-field intent"
+    }
+  ]
 }
 
 Mandatory visual identity extraction rules:
@@ -1672,8 +4297,22 @@ Analysis rules:
 - Use the product images only to refine real product traits, structure, angle cues, and commercial presentation.
 - If the brief conflicts with the images, the brief wins.
 - Output language: ${outputLanguageLabel(outputLanguage)}
-- If output language is not visual-only, copy_plan must be usable e-commerce copy that explicitly reflects the product and selling points from the user's brief.
-- If output language is visual-only, copy_plan may be empty, but style directions must still be returned.
+- The output language directly controls text presence: if outputLanguage=none, keep the set visual-only; otherwise every image must generate visible copy in the selected language.
+- When outputLanguage is not none, copy_analysis.mode must not be visual-only, shared_copy stays empty, and images[].design_content must include the corresponding language copy plus placement guidance.
+- design_specs must strictly follow the fixed five-section template and each section must contain execution-ready detail instead of generic adjectives like "premium" or "commercial."
+- The images array must contain exactly ${imageCount} differentiated plans, and every plan must follow the fixed hero-blueprint section order with its own Text Content block.
+- Every image plan must explicitly specify: product-to-frame ratio, layout method, subject angle, key-light direction, foreground/midground/background layering, background surface material, decorative elements, and lens/aperture guidance.
+- Do not use vague adjectives such as "premium", "commercial", or "soft light" without turning them into executable composition, surface, lighting, and set-design instructions.
+- Except for clean packshot / white-background plans, do not allow a blank background or a single flat backdrop. Default to at least two readable scene layers with directional key lighting.
+- If the current product is an apparel item such as a shirt, top, dress, or trousers, do not write a generic "white hanger / pure white background / no props" apparel display unless the user explicitly requests white background, mannequin, hanger, or packshot treatment. Write a layered commercial garment still life instead.
+- Do not make every plan square and straight-on; require at least some tilt, diagonal framing, rule-of-thirds placement, high/low angle, or foreground overlap.
+- Keep the same fixed template for every category. Only adapt the contents to the product itself, and do not import irrelevant props, materials, or backgrounds from another category.
+- Copy density rules:
+  - headline <= 12 Chinese-character-equivalent density
+  - support line <= 18
+  - badge/label <= 8
+  - max 2 text groups per image by default
+- Whenever copy exists, every image must explicitly state that text cannot cover the product.
 
 User brief:
 ${requirements || "(No extra brief provided. Analyze from product images only.)"}
@@ -1703,12 +4342,13 @@ ${requirements || "(No extra brief provided. Analyze from product images only.)"
 
     const chatConfig = getQnChatConfig();
     const analysisTimeoutMs = Math.max(chatConfig.timeoutMs, 90_000);
+    await pulse(); // heartbeat before chat request
     let genesisChatResponse: Record<string, unknown>;
     try {
       genesisChatResponse = await callQnChatAPI({
         model: chatConfig.model,
         messages: genesisMessages,
-        maxTokens: 900,
+        maxTokens: 2400,
         timeoutMsOverride: analysisTimeoutMs,
       });
     } catch (primaryErr) {
@@ -1717,18 +4357,38 @@ ${requirements || "(No extra brief provided. Analyze from product images only.)"
       genesisChatResponse = await callQnChatAPI({
         model: fallbackModel,
         messages: genesisMessages,
-        maxTokens: 900,
+        maxTokens: 2400,
         timeoutMsOverride: analysisTimeoutMs,
       });
     }
+    await pulse(); // heartbeat after chat response
 
     const content = String((genesisChatResponse as Record<string, unknown>)?.choices?.[0]?.message?.content ?? "");
     const parsed = parseJsonFromContent(content);
     const parseFailed = parsed.__parse_failed === true;
     const parseRawPreview = typeof parsed.__raw_preview === "string" ? parsed.__raw_preview : null;
-    const genesisResult = normalizeGenesisAnalysis(parsed, outputLanguage, uiLanguage, requirements);
+    const genesisCompact = normalizeGenesisAnalysis(parsed, outputLanguage, uiLanguage, requirements);
+    const genesisBlueprint = normalizeBlueprint(parsed, imageCount, outputLanguage, requirements, uiLanguage);
 
-    genesisResult._ai_meta = {
+    if (genesisBlueprint.copy_analysis) {
+      genesisBlueprint.copy_analysis.shared_copy = "";
+    }
+
+    const genesisResult = {
+      ...genesisBlueprint,
+      product_summary: genesisCompact.product_summary,
+      product_visual_identity: genesisCompact.product_visual_identity,
+      style_directions: genesisCompact.style_directions,
+    };
+
+    const normalizedGenesisResult = normalizeGenesisBlueprintTemplate(
+      genesisResult,
+      outputLanguage,
+      uiLanguage,
+      requirements,
+    );
+
+    normalizedGenesisResult._ai_meta = {
       model: String((genesisChatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
       usage: ((genesisChatResponse as Record<string, unknown>)?.usage as Record<string, unknown>) ?? {},
       provider: "qnaigc",
@@ -1743,8 +4403,8 @@ ${requirements || "(No extra brief provided. Analyze from product images only.)"
 
     const aiRequest = {
       model: String((genesisChatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
-      messages: genesisMessages,
-      max_tokens: 900,
+      messages: stripBase64FromMessages(genesisMessages),
+      max_tokens: 2400,
     };
 
     const { error: genesisUpdateError } = await supabase
@@ -1752,7 +4412,7 @@ ${requirements || "(No extra brief provided. Analyze from product images only.)"
       .update({
         status: "success",
         payload: { ...payload, ai_request: aiRequest },
-        result_data: genesisResult,
+        result_data: normalizedGenesisResult,
         result_url: null,
         error_code: null,
         error_message: null,
@@ -1902,6 +4562,7 @@ ${requirements || "(No extra brief provided. Infer the plan from the references 
 
     const chatConfig = getQnChatConfig();
     const analysisTimeoutMs = Math.max(chatConfig.timeoutMs, 90_000);
+    await pulse(); // heartbeat before chat request
     let detailChatResponse: Record<string, unknown>;
     try {
       detailChatResponse = await callQnChatAPI({
@@ -1920,6 +4581,7 @@ ${requirements || "(No extra brief provided. Infer the plan from the references 
         timeoutMsOverride: analysisTimeoutMs,
       });
     }
+    await pulse(); // heartbeat after chat response
 
     const content = String((detailChatResponse as Record<string, unknown>)?.choices?.[0]?.message?.content ?? "");
     const parsed = parseJsonFromContent(content);
@@ -1943,7 +4605,7 @@ ${requirements || "(No extra brief provided. Infer the plan from the references 
 
     const aiRequest = {
       model: String((detailChatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
-      messages: detailMessages,
+      messages: stripBase64FromMessages(detailMessages),
       max_tokens: 2048,
     };
 
@@ -2363,6 +5025,7 @@ ${requirements || "(no extra brief provided)"}
   const chatConfig = getQnChatConfig();
   // Analysis may need to generate many detailed plans — allow more time than the default 30s
   const analysisTimeoutMs = Math.max(chatConfig.timeoutMs, 90_000);
+  await pulse(); // heartbeat before chat request
   let chatResponse: Record<string, unknown>;
   try {
     chatResponse = await callQnChatAPI({
@@ -2381,6 +5044,7 @@ ${requirements || "(no extra brief provided)"}
       timeoutMsOverride: analysisTimeoutMs,
     });
   }
+  await pulse(); // heartbeat after chat response
 
   const content = String((chatResponse as Record<string, unknown>)?.choices?.[0]?.message?.content ?? "");
   const parsed = parseJsonFromContent(content);
@@ -2407,7 +5071,7 @@ ${requirements || "(no extra brief provided)"}
 
   const aiRequest = {
     model: String((chatResponse as Record<string, unknown>)?.model ?? chatConfig.model),
-    messages,
+    messages: stripBase64FromMessages(messages),
     max_tokens: 4096,
   };
 
@@ -2565,12 +5229,9 @@ async function processImageGenJob(
       }
     } else {
       // Standard mode: e-commerce photography prefix
-      const ecomPrefix = "Professional e-commerce product photography. High-end commercial catalog quality. " +
-        "Clean, premium aesthetic. Product is the hero — sharp focus, realistic materials and textures. " +
-        "Use the uploaded product images as hard references for the exact same SKU. " +
-        "Preserve the exact same product identity, colorway, material, texture, silhouette, proportions, logo, print, hardware, stitching, trims, and all key design details. " +
-        "Do not recolor, redesign, simplify, replace, or invent new product features. " +
-        "Only scene, composition, camera angle, crop, lighting, and background styling may change. " +
+      const ecomPrefix = "Cinematic commercial product photography with layered scene depth, purposeful lighting, tactile materials, and magazine-quality polish. " +
+        "Build a visually striking hero image with restrained foreground accents, textured surfaces, and an atmospheric background that keeps the product dominant in frame. " +
+        "Use the uploaded product images as hard references while elevating the product in a premium advertising setting. " +
         "4K ultra-detailed rendering. ";
       const identityLockPrompt = buildIdentityLockPromptParts({
         identity: productIdentity,
@@ -2713,6 +5374,21 @@ async function generateRefinementPrompt(
 }
 
 async function processStyleReplicateJob(
+  supabase: ReturnType<typeof createServiceClient>,
+  job: GenerationJobRow,
+  taskAttempts = 1,
+  taskLease?: TaskLease,
+): Promise<void> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error("STYLE_REPLICATE_TIMEOUT")), STYLE_REPLICATE_TIMEOUT_MS);
+  });
+  await Promise.race([
+    _processStyleReplicateJobInner(supabase, job, taskAttempts, taskLease),
+    timeoutPromise,
+  ]);
+}
+
+async function _processStyleReplicateJobInner(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
   taskAttempts = 1,
@@ -3184,7 +5860,7 @@ async function processStyleReplicateJob(
   }
 }
 
-Deno.serve(async (req) => {
+export async function handleProcessGenerationJobRequest(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return options();
   if (req.method !== "POST") return err("BAD_REQUEST", "Method not allowed", 405);
 
@@ -3212,13 +5888,15 @@ Deno.serve(async (req) => {
     p_job_id: job.id,
   });
   if (claimError) return err("TASK_CLAIM_FAILED", "Failed to claim task", 500, claimError);
-  if (!claimed) return ok({ ok: true, status: "no_available_task", job_id: job.id });
+  if (!claimed || !claimed.id || !claimed.task_type) {
+    return ok({ ok: true, status: "no_available_task", job_id: job.id });
+  }
 
   const task = claimed as TaskRow;
   const heartbeat = startTaskHeartbeat(supabase, task.id);
   try {
     if (task.task_type === "ANALYSIS") {
-      await processAnalysisJob(supabase, job as GenerationJobRow);
+      await processAnalysisJob(supabase, job as GenerationJobRow, heartbeat);
     } else if (task.task_type === "IMAGE_GEN") {
       await processImageGenJob(supabase, job as GenerationJobRow, heartbeat);
     } else if (task.task_type === "STYLE_REPLICATE") {
@@ -3262,7 +5940,12 @@ Deno.serve(async (req) => {
       let errorCode = "UPSTREAM_ERROR";
       let errorMessage = String(e);
       if (task.task_type === "ANALYSIS") {
-        errorCode = "ANALYSIS_FAILED";
+        const msg = String(e ?? "");
+        errorCode = msg.includes("SOURCE_IMAGE_FETCH_FAILED") ? "IMAGE_INPUT_SOURCE_MISSING"
+          : msg.includes("ANALYSIS_INPUT_IMAGE_MISSING") ? "IMAGE_INPUT_SOURCE_MISSING"
+          : msg.includes("ANALYSIS_MODEL_IMAGE_MISSING") ? "IMAGE_INPUT_SOURCE_MISSING"
+          : msg.includes("ANALYSIS_TIMEOUT") ? "ANALYSIS_TIMEOUT"
+          : "ANALYSIS_FAILED";
       } else if (task.task_type === "IMAGE_GEN") {
         errorCode = imageGenErrorCodeFromError(e);
       } else if (task.task_type === "STYLE_REPLICATE") {
@@ -3307,4 +5990,8 @@ Deno.serve(async (req) => {
       error: String(e),
     });
   }
-});
+}
+
+if (import.meta.main) {
+  Deno.serve(handleProcessGenerationJobRequest);
+}

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { TabsList, TabsTrigger, Tabs } from '@/components/ui/tabs'
 import { CorePageShell } from '@/components/studio/CorePageShell'
+import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ModelTryOnTab } from './ModelTryOnTab'
 import { BasicPhotoSetTab } from './BasicPhotoSetTab'
 import type { ClothingTab, ClothingPhase } from './types'
@@ -35,20 +36,20 @@ function StepIndicator({ currentPhase, steps }: { currentPhase: ClothingPhase; s
           <div key={step.phase} className="flex shrink-0 items-center">
             <div className="flex items-center gap-2">
               {isCurrent ? (
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#191b22] text-xs font-semibold text-white">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white">
                   {spinning ? <Loader2 className="h-4 w-4 animate-spin" /> : step.num}
                 </span>
               ) : (
-                <span className={`w-4 text-center text-sm ${isDone ? 'font-medium text-[#202227]' : 'text-[#6f7380]'}`}>
+                <span className={`w-4 text-center text-sm ${isDone ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
                   {step.num}
                 </span>
               )}
-              <span className={`text-sm ${isPastOrCurrent ? 'font-medium text-[#202227]' : 'text-[#6f7380]'}`}>
+              <span className={`text-sm ${isPastOrCurrent ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
                 {step.label}
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div className="mx-3 h-px w-8 bg-[#d8dbe1] sm:mx-5 sm:w-12" />
+              <div className="mx-3 h-px w-8 bg-border sm:mx-5 sm:w-12" />
             )}
           </div>
         )
@@ -93,36 +94,25 @@ export function ClothingStudioForm() {
   return (
     <CorePageShell maxWidthClass="max-w-[1360px]">
       <div className="mx-auto w-full">
-        <div className="flex flex-col items-center justify-center pb-11 pt-1">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-4 py-1.5 text-xs font-medium text-[#202227]">
-            <svg
-              className="h-4 w-4 text-[#202227]"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 3v18M3 12h18M5 5l14 14M5 19L19 5" className="origin-center scale-[0.6] opacity-0" />
-              <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
-            <span className="text-xs font-medium text-[#202227]">{t('badge')}</span>
-            <span className="rounded-full bg-[#3f424a] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-              BETA
-            </span>
+        <div className="mb-7">
+          <div className="flex items-start gap-3">
+            <SectionIcon icon={Shirt} className="mt-1" />
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold text-foreground">{t('pageTitle')}</h1>
+                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400">
+                  {t('badge')}
+                </span>
+              </div>
+              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                {t('pageDescriptionLine1')}
+                <br />
+                {t('pageDescriptionLine2')}
+              </p>
+            </div>
           </div>
 
-          <h1 className="mb-4 text-center text-3xl font-semibold tracking-tight text-[#17181d] sm:text-4xl">
-            {t('pageTitle')}
-          </h1>
-          <p className="text-center text-sm leading-relaxed text-[#70727a] sm:text-base">
-            {t('pageDescriptionLine1')}
-            <br />
-            {t('pageDescriptionLine2')}
-          </p>
-
-          <div className="mt-12 w-full">
+          <div className="mt-10 w-full">
             <StepIndicator currentPhase={current.phase} steps={phaseSteps} />
           </div>
         </div>
@@ -134,7 +124,7 @@ export function ClothingStudioForm() {
                 <TabsTrigger
                   value="model-tryon"
                   disabled={tabLocked}
-                  className="h-11 rounded-full border border-transparent bg-transparent text-sm font-medium text-[#5a5f6b] shadow-none transition-none data-[state=active]:border-[#0f1118] data-[state=active]:bg-[#11131a] data-[state=active]:text-white"
+                  className="h-11 rounded-full border border-transparent bg-transparent text-sm font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-white"
                 >
                   <Shirt className="mr-1.5 h-4 w-4" />
                   {t('tabModelTryOn')}
@@ -142,7 +132,7 @@ export function ClothingStudioForm() {
                 <TabsTrigger
                   value="basic-photo-set"
                   disabled={tabLocked}
-                  className="h-11 rounded-full border border-transparent bg-transparent text-sm font-medium text-[#5a5f6b] shadow-none transition-none data-[state=active]:border-[#0f1118] data-[state=active]:bg-[#11131a] data-[state=active]:text-white"
+                  className="h-11 rounded-full border border-transparent bg-transparent text-sm font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-white"
                 >
                   <GalleryVerticalEnd className="mr-1.5 h-4 w-4" />
                   {t('tabBasicPhotoSet')}
@@ -155,9 +145,9 @@ export function ClothingStudioForm() {
             </div>
           </div>
 
-          <div className="flex min-h-[760px] flex-col rounded-[30px] border border-[#d0d4dc] bg-white p-6 sm:p-8">
+          <div className="flex min-h-[760px] flex-col rounded-2xl border border-border bg-background p-6 sm:p-8">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 <svg
                   className="h-5 w-5"
                   viewBox="0 0 24 24"
@@ -171,8 +161,8 @@ export function ClothingStudioForm() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-[15px] font-semibold text-[#1a1d24]">{rightPanelTitle}</h3>
-                <p className="mt-0.5 text-[13px] text-[#7d818d]">{rightPanelSubtitle}</p>
+                <h3 className="text-[15px] font-semibold text-foreground">{rightPanelTitle}</h3>
+                <p className="mt-0.5 text-[13px] text-muted-foreground">{rightPanelSubtitle}</p>
               </div>
             </div>
             <div className="flex-1">

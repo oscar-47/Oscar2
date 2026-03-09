@@ -21,6 +21,7 @@ import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/
 import { refreshCredits } from '@/lib/hooks/useCredits'
 import { createClient } from '@/lib/supabase/client'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
+import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
 import type {
   GenerationModel,
   AspectRatio,
@@ -41,6 +42,8 @@ import { friendlyError } from '@/lib/utils'
 function uid() {
   return crypto.randomUUID()
 }
+
+type ClothingTranslation = (key: string, values?: Record<string, string | number>) => string
 
 function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> {
   return new Promise((resolve, reject) => {
@@ -351,75 +354,75 @@ function normalizeCopyAnalysis(
   }
 }
 
-function buildDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[] {
+function buildDefaultPlans(typeState: BasicPhotoTypeState, t: ClothingTranslation): BlueprintImagePlan[] {
   const plans: BlueprintImagePlan[] = []
   if (typeState.whiteBgRetouched.front) {
     plans.push({
-      title: '白底精修图（正面）',
-      description: '展示服装正面版型与颜色细节',
-      design_content: '白底平铺或模特正面展示，重点表现服装轮廓、主色和做工细节。',
+      title: t('defaultPlans.whiteBg.front.title'),
+      description: t('defaultPlans.whiteBg.front.description'),
+      design_content: t('defaultPlans.whiteBg.front.designContent'),
       type: 'refined',
     })
   }
   if (typeState.whiteBgRetouched.back) {
     plans.push({
-      title: '白底精修图（背面）',
-      description: '展示服装背面版型与工艺细节',
-      design_content: '白底背面展示，清晰呈现后背剪裁与结构。',
+      title: t('defaultPlans.whiteBg.back.title'),
+      description: t('defaultPlans.whiteBg.back.description'),
+      design_content: t('defaultPlans.whiteBg.back.designContent'),
       type: 'refined',
     })
   }
   if (typeState.threeDEffect.enabled) {
     plans.push(
       {
-        title: '3D立体效果图（正面）',
-        description: '模特正面穿着展示，突出服装正面版型与立体感',
-        design_content: '模特正面站姿穿着展示，通过光影表现服装正面体积感与版型轮廓，保留材质纹理，统一背景与风格。',
+        title: t('defaultPlans.threeD.front.title'),
+        description: t('defaultPlans.threeD.front.description'),
+        design_content: t('defaultPlans.threeD.front.designContent'),
         type: '3d',
       },
       {
-        title: '3D立体效果图（背面）',
-        description: '模特背面穿着展示，呈现背部剪裁与结构',
-        design_content: '模特背面站姿穿着展示，清晰呈现后背剪裁、缝线与结构细节，保留材质纹理，与正面图保持统一模特、风格与背景。',
+        title: t('defaultPlans.threeD.back.title'),
+        description: t('defaultPlans.threeD.back.description'),
+        design_content: t('defaultPlans.threeD.back.designContent'),
         type: '3d',
       },
       {
-        title: '3D立体效果图（侧面）',
-        description: '模特侧面穿着展示，展现服装侧面层次',
-        design_content: '模特侧面站姿穿着展示，通过侧面角度表现服装层次感与廓形，保留材质纹理，与正面图保持统一模特、风格与背景。',
+        title: t('defaultPlans.threeD.side.title'),
+        description: t('defaultPlans.threeD.side.description'),
+        design_content: t('defaultPlans.threeD.side.designContent'),
         type: '3d',
       }
     )
   }
   if (typeState.mannequin.enabled) {
     plans.push({
-      title: '人台展示图',
-      description: '人台/模特架展示，严格保留衣服原始材质与外观',
-      design_content: '人台或模特架展示服装，严格保留衣服的原始材质和外观：颜色、款式、剪裁、纹理、面料质感不做任何改变。模拟摄影棚或自然光下的真实光影效果，包括高光、阴影和面料反光。本质是换场景/换人台展示，不是重新设计衣服。',
+      title: t('defaultPlans.mannequin.title'),
+      description: t('defaultPlans.mannequin.description'),
+      design_content: t('defaultPlans.mannequin.designContent'),
       type: 'mannequin',
     })
   }
   for (let i = 0; i < typeState.detailCloseup.count; i += 1) {
     plans.push({
-      title: `细节特写图 ${i + 1}`,
-      description: '放大展示面料与工艺细节',
-      design_content: '聚焦领口、袖口、印花或走线，保证细节清晰度和质感。',
+      title: t('defaultPlans.detail.title', { index: i + 1 }),
+      description: t('defaultPlans.detail.description'),
+      design_content: t('defaultPlans.detail.designContent'),
       type: 'detail',
     })
   }
   for (let i = 0; i < typeState.sellingPoint.count; i += 1) {
     plans.push({
-      title: `卖点展示图 ${i + 1}`,
-      description: '突出产品核心卖点',
-      design_content: '围绕核心卖点构图，强化视觉层级与记忆点。',
+      title: t('defaultPlans.sellingPoint.title', { index: i + 1 }),
+      description: t('defaultPlans.sellingPoint.description'),
+      design_content: t('defaultPlans.sellingPoint.designContent'),
       type: 'selling_point',
     })
   }
   if (plans.length === 0) {
     plans.push({
-      title: '图片方案 1',
-      description: '请编辑该图片方案的标题和描述',
-      design_content: '请基于产品特征补充该图片方案内容。',
+      title: t('defaultPlans.fallback.title'),
+      description: t('defaultPlans.fallback.description'),
+      design_content: t('defaultPlans.fallback.designContent'),
       type: 'refined',
     })
   }
@@ -437,7 +440,11 @@ function planMatchesOrientation(plan: BlueprintImagePlan, orientation: 'front' |
  * Enforce that front/back white-bg plans exist when both are selected.
  * AI might merge them into a single plan or omit one — we inject defaults.
  */
-function enforceWhiteBgPlans(plans: BlueprintImagePlan[], typeState: BasicPhotoTypeState): BlueprintImagePlan[] {
+function enforceWhiteBgPlans(
+  plans: BlueprintImagePlan[],
+  typeState: BasicPhotoTypeState,
+  t: ClothingTranslation,
+): BlueprintImagePlan[] {
   const needFront = typeState.whiteBgRetouched.front
   const needBack = typeState.whiteBgRetouched.back
   if (!needFront || !needBack) return plans
@@ -449,9 +456,9 @@ function enforceWhiteBgPlans(plans: BlueprintImagePlan[], typeState: BasicPhotoT
   const result = [...plans]
   if (!hasFront) {
     result.unshift({
-      title: '白底精修图（正面）',
-      description: '展示服装正面版型与颜色细节',
-      design_content: '白底平铺或模特正面展示，重点表现服装轮廓、主色和做工细节。',
+      title: t('defaultPlans.whiteBg.front.title'),
+      description: t('defaultPlans.whiteBg.front.description'),
+      design_content: t('defaultPlans.whiteBg.front.designContent'),
       type: 'refined',
     })
   }
@@ -459,9 +466,9 @@ function enforceWhiteBgPlans(plans: BlueprintImagePlan[], typeState: BasicPhotoT
     // Insert after front plan
     const frontIdx = result.findIndex((p) => planMatchesOrientation(p, 'front'))
     result.splice(frontIdx + 1, 0, {
-      title: '白底精修图（背面）',
-      description: '展示服装背面版型与工艺细节',
-      design_content: '白底背面展示，清晰呈现后背剪裁与结构。',
+      title: t('defaultPlans.whiteBg.back.title'),
+      description: t('defaultPlans.whiteBg.back.description'),
+      design_content: t('defaultPlans.whiteBg.back.designContent'),
       type: 'refined',
     })
   }
@@ -474,10 +481,11 @@ function normalizeBlueprint(
   requirements: string,
   outputLanguage: OutputLanguage,
   isZh: boolean,
+  t: ClothingTranslation,
 ): AnalysisBlueprint {
   if (isAnalysisBlueprint(resultData)) {
-    let plans = resultData.images.length > 0 ? resultData.images.map(normalizePlan) : buildDefaultPlans(typeState)
-    plans = enforceWhiteBgPlans(plans, typeState)
+    let plans = resultData.images.length > 0 ? resultData.images.map(normalizePlan) : buildDefaultPlans(typeState, t)
+    plans = enforceWhiteBgPlans(plans, typeState, t)
     const resultRecord = resultData as unknown as Record<string, unknown>
     return {
       ...resultData,
@@ -492,10 +500,10 @@ function normalizeBlueprint(
     }
   }
 
-  const fallbackPlans = buildDefaultPlans(typeState)
+  const fallbackPlans = buildDefaultPlans(typeState, t)
   return {
     images: fallbackPlans,
-    design_specs: '所有图片须保持统一的服装电商视觉规范，强调材质、版型与细节展示。',
+    design_specs: t('defaultPlans.designSpecs'),
     _ai_meta: {
       model: 'unknown',
       usage: {},
@@ -691,40 +699,46 @@ function appendSharedCopyGuardrail(params: {
 function CopyAnalysisCard({
   sharedCopy,
   onSharedCopyChange,
+  isZh,
   t,
 }: {
   sharedCopy: string
   onSharedCopyChange: (value: string) => void
+  isZh: boolean
   t: (key: string, values?: Record<string, string | number>) => string
 }) {
   return (
-    <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+    <div className="rounded-[28px] border border-border bg-white p-5 sm:p-6">
       <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
           <Sparkles className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[15px] font-semibold text-[#1a1d24]">{t('analysisAndCopy')}</h3>
-          <p className="text-[13px] text-[#7d818d]">
+          <h3 className="text-[15px] font-semibold text-foreground">{t('analysisAndCopy')}</h3>
+          <p className="text-[13px] text-muted-foreground">
             {t('analysisAndCopyDesc')}
           </p>
         </div>
       </div>
 
-      <div className="mt-4 rounded-[24px] border border-[#e0e3e8] bg-[#fbfbfc] p-4">
+      <div className="mt-4 rounded-2xl border border-border bg-surface p-4">
         <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="text-[13px] font-medium text-[#3b3f49]">{t('sharedMasterCopy')}</p>
-          <span className="text-[12px] text-[#7d818d]">
+          <p className="text-[13px] font-medium text-foreground">{t('sharedMasterCopy')}</p>
+          <span className="text-[12px] text-muted-foreground">
             {t('clearForVisualOnly')}
           </span>
         </div>
         <Textarea
           value={sharedCopy}
-          onChange={(e) => onSharedCopyChange(e.target.value)}
+          onChange={(e) => onSharedCopyChange(clampText(e.target.value, TEXT_LIMITS.sharedCopy))}
           rows={5}
-          className="min-h-[152px] resize-none rounded-2xl border-[#d0d4dc] bg-white text-[14px] leading-6"
+          maxLength={TEXT_LIMITS.sharedCopy}
+          className="min-h-[152px] resize-none rounded-2xl border-border bg-white text-[14px] leading-6"
           placeholder={t('sharedCopyPlaceholder')}
         />
+        <p className="mt-2 text-xs text-muted-foreground">
+          {formatTextCounter(sharedCopy, TEXT_LIMITS.sharedCopy, isZh)}
+        </p>
       </div>
     </div>
   )
@@ -843,6 +857,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
         requirements,
         language as OutputLanguage,
         isZh,
+        t,
       )
       setAnalysisBlueprint(blueprint)
       setEditableDesignSpecs(blueprint.design_specs)
@@ -1039,14 +1054,14 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const leftPanel = (
     <>
       <fieldset disabled={isProcessing} className="space-y-4">
-        <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+        <div className="rounded-[28px] border border-border bg-white p-5 sm:p-6">
           <div className="mb-4 flex items-center gap-3">
             <SectionIcon icon={ImageIcon} />
             <div className="flex-1">
-              <h3 className="text-[15px] font-semibold text-[#1a1d24]">{t('productImageTitle')}</h3>
-              <p className="text-[13px] text-[#7d818d]">{t('productImageDesc')}</p>
+              <h3 className="text-[15px] font-semibold text-foreground">{t('productImageTitle')}</h3>
+              <p className="text-[13px] text-muted-foreground">{t('productImageDesc')}</p>
             </div>
-            <span className="text-[13px] text-[#6f7380]">{productImages.length}/6</span>
+            <span className="text-[13px] text-muted-foreground">{productImages.length}/6</span>
           </div>
 
           <MultiImageUploader
@@ -1067,9 +1082,9 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
             showIndexBadge
             label={t('dragOrClickUpload')}
             hideDefaultFooter
-            dropzoneClassName="min-h-[190px] rounded-[20px] border-[#d0d4dc] bg-[#f1f3f6] px-6 py-8 hover:border-[#bcc2ce] hover:bg-[#eceff4]"
-            labelClassName="text-base font-medium text-[#5f6471]"
-            footerClassName="text-sm text-[#8b8f99]"
+            dropzoneClassName="min-h-[190px] rounded-2xl border-border bg-secondary px-6 py-8 hover:border-muted-foreground hover:bg-muted"
+            labelClassName="text-base font-medium text-muted-foreground"
+            footerClassName="text-sm text-muted-foreground"
           />
         </div>
 
@@ -1099,35 +1114,35 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
           <Button
             onClick={handleAnalyze}
             disabled={!canStart}
-            className="h-14 w-full rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#111318] disabled:bg-[#9a9ca3] disabled:text-white"
+            className="h-14 w-full rounded-2xl bg-primary text-base font-semibold text-white hover:bg-primary disabled:bg-text-tertiary disabled:text-white"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
             {t('analyzeProduct')}
           </Button>
         )}
         {phase === 'analyzing' && (
-          <Button variant="outline" onClick={handleCancel} className="h-14 w-full rounded-2xl border-[#cbced6] bg-white text-[#202227]">
+          <Button variant="outline" onClick={handleCancel} className="h-14 w-full rounded-2xl border-border bg-background text-foreground">
             {t('cancelAnalysis')}
           </Button>
         )}
         {phase === 'preview' && (
           <div className="flex gap-3">
-            <Button variant="outline" onClick={handleReset} className="h-14 flex-1 rounded-2xl border-[#cbced6] bg-white text-[#202227]">
+            <Button variant="outline" onClick={handleReset} className="h-14 flex-1 rounded-2xl border-border bg-background text-foreground">
               {t('restart')}
             </Button>
-            <Button onClick={handleGenerate} className="h-14 flex-1 rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#111318]">
+            <Button onClick={handleGenerate} className="h-14 flex-1 rounded-2xl bg-primary text-base font-semibold text-white hover:bg-primary">
               <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
               {t('generateImages')}
             </Button>
           </div>
         )}
         {phase === 'generating' && (
-          <Button variant="outline" onClick={handleCancel} className="h-14 w-full rounded-2xl border-[#cbced6] bg-white text-[#202227]">
+          <Button variant="outline" onClick={handleCancel} className="h-14 w-full rounded-2xl border-border bg-background text-foreground">
             {t('cancelGeneration')}
           </Button>
         )}
         {phase === 'complete' && (
-          <Button variant="outline" onClick={handleReset} className="h-14 w-full rounded-2xl border-[#cbced6] bg-white text-[#202227]">
+          <Button variant="outline" onClick={handleReset} className="h-14 w-full rounded-2xl border-border bg-background text-foreground">
             {t('regenerate')}
           </Button>
         )}
@@ -1151,8 +1166,8 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
     if (phase === 'input') {
       if (persistedHistoryGallery) return <div className="space-y-4">{persistedHistoryGallery}</div>
       return (
-        <div className="flex min-h-[700px] flex-col items-center justify-center text-center text-[#7f838f]">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#eceef2] text-[#717682]">
+        <div className="flex min-h-[700px] flex-col items-center justify-center text-center text-muted-foreground">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <svg
               className="h-8 w-8"
               viewBox="0 0 24 24"
@@ -1181,6 +1196,7 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
             <CopyAnalysisCard
               sharedCopy={editableSharedCopy}
               onSharedCopyChange={setEditableSharedCopy}
+              isZh={isZh}
               t={t}
             />
           )}

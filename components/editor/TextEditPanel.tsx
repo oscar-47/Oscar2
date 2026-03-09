@@ -1,17 +1,20 @@
 'use client'
 
 import { useEffect, useCallback } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { X, Sparkles, Loader2, Type } from 'lucide-react'
 import { useEditorStore } from '@/lib/stores/editor-store'
 import { detectImageText, generateImage } from '@/lib/api/edge-functions'
 import { useWaitForJob } from '@/lib/hooks/useWaitForJob'
+import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
 import { cn } from '@/lib/utils'
 import type { OcrTextItem } from '@/lib/api/edge-functions'
-import type { GenerationJob } from '@/types'
+import { getGenerationCreditCost, type GenerationJob } from '@/types'
 
 export function TextEditPanel() {
   const t = useTranslations('studio.editor')
+  const locale = useLocale()
+  const isZh = locale.startsWith('zh')
   const textEdit = useEditorStore((s) => s.textEdit)
   const closeTextEdit = useEditorStore((s) => s.closeTextEdit)
   const setTextEditItems = useEditorStore((s) => s.setTextEditItems)
@@ -150,20 +153,20 @@ export function TextEditPanel() {
   if (!textEdit.open) return null
 
   const hasChanges = textEdit.items.some((item) => item.edited !== item.original)
-  const cost = 5
+  const cost = getGenerationCreditCost('gpt-image', '1K')
 
   return (
-    <div className="absolute right-4 top-16 z-[10000] w-[340px] rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl">
+    <div className="absolute right-4 top-16 z-[10000] w-[340px] rounded-2xl border border-border bg-white shadow-2xl">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#f3f4f6] px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <Type className="h-4 w-4 text-[#6366f1]" />
-          <h3 className="text-sm font-semibold text-[#111827]">{t('textEditTitle')}</h3>
+          <Type className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">{t('textEditTitle')}</h3>
         </div>
         <button
           type="button"
           onClick={closeTextEdit}
-          className="rounded-md p-1 text-[#9ca3af] hover:text-[#6b7280] transition-colors"
+          className="rounded-md p-1 text-text-tertiary hover:text-muted-foreground transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
@@ -172,7 +175,7 @@ export function TextEditPanel() {
       <div className="space-y-4 p-4">
         {/* Detecting state */}
         {textEdit.isDetecting && (
-          <div className="flex items-center justify-center gap-2 py-8 text-sm text-[#6b7280]">
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             {t('textEditDetecting')}
           </div>
@@ -181,11 +184,11 @@ export function TextEditPanel() {
         {/* No text detected */}
         {!textEdit.isDetecting && textEdit.items.length === 0 && (
           <div className="space-y-3 py-6 text-center">
-            <p className="text-sm text-[#6b7280]">{t('textEditNoText')}</p>
+            <p className="text-sm text-muted-foreground">{t('textEditNoText')}</p>
             <button
               type="button"
               onClick={handleJumpToQuickEdit}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#6366f1] px-3 py-1.5 text-sm font-medium text-[#6366f1] hover:bg-[#eef2ff] transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
             >
               {t('textEditOpenQuickEdit')}
             </button>
@@ -203,10 +206,10 @@ export function TextEditPanel() {
                   value={item.edited}
                   onChange={(e) => setEditedText(item.id, e.target.value)}
                   className={cn(
-                    'w-full rounded-lg border bg-[#f9fafb] px-3 py-2 text-sm text-[#111827] focus:outline-none focus:ring-1 focus:ring-[#6366f1] transition-colors',
+                    'w-full rounded-lg border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-colors',
                     item.edited !== item.original
-                      ? 'border-[#6366f1] bg-[#eef2ff]'
-                      : 'border-[#d1d5db]'
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border'
                   )}
                 />
               ))}
@@ -217,7 +220,7 @@ export function TextEditPanel() {
               type="button"
               onClick={() => void handleApply()}
               disabled={!hasChanges || textEdit.isProcessing}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] py-2.5 text-sm font-medium text-white hover:shadow-md disabled:opacity-50 transition-all"
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent py-2.5 text-sm font-medium text-accent-foreground hover:shadow-md disabled:opacity-50 transition-all"
             >
               {textEdit.isProcessing ? (
                 <>

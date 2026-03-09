@@ -2,6 +2,7 @@ import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { assertUserCanQueueJob } from "../_shared/generation-queue.ts";
+import { checkRateLimit, checkAnalysisDailyLimit } from "../_shared/rate-limit.ts";
 import {
   resolvePromptProfile,
   TA_PRO_PROMPT_PROFILE_FLAG,
@@ -39,6 +40,24 @@ Deno.serve(async (req) => {
     ? "batch_analysis_prompt_zh"
     : "batch_analysis_prompt_en";
   const promptConfigKey = withPromptProfileConfigKeySuffix(basePromptConfigKey, promptProfile);
+
+  // Rate limit: per-minute across all job types
+  const rateCheck = await checkRateLimit(authResult.user.id);
+  if (!rateCheck.ok) {
+    return err("RATE_LIMIT_EXCEEDED", "Too many requests. Please slow down.", 429, {
+      count: rateCheck.count,
+      limit: rateCheck.limit,
+    });
+  }
+
+  // Daily ANALYSIS limit
+  const dailyCheck = await checkAnalysisDailyLimit(authResult.user.id);
+  if (!dailyCheck.ok) {
+    return err("DAILY_ANALYSIS_LIMIT_EXCEEDED", "Daily analysis limit reached. Please try again tomorrow.", 429, {
+      count: dailyCheck.count,
+      limit: dailyCheck.limit,
+    });
+  }
 
   const supabase = createServiceClient();
   const queueGate = await assertUserCanQueueJob(authResult.user.id, "ANALYSIS");

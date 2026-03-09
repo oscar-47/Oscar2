@@ -9,7 +9,7 @@ export function SectionIcon({ icon: Icon, className }: SectionIconProps) {
   return (
     <div
       className={cn(
-        'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]',
+        'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground',
         className
       )}
     >

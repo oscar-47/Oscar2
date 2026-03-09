@@ -28,6 +28,7 @@ import { ResultGallery, type ResultImage } from '@/components/generation/ResultG
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
 import { EcomDetailModuleSelector } from '@/components/studio/EcomDetailModuleSelector'
+import { ModelTextHint } from '@/components/studio/ModelTextHint'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
@@ -42,6 +43,7 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { friendlyError } from '@/lib/utils'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
+import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
 import {
   buildEcomDetailAnalysisRequirements,
   ECOM_DETAIL_MODULES,
@@ -306,8 +308,8 @@ export function EcomStudioForm() {
   const defaultRequirements = isZh ? DEFAULT_REQUIREMENTS_ZH : DEFAULT_REQUIREMENTS_EN
   const aspectRatios = isZh ? ASPECT_RATIOS_ZH : ASPECT_RATIOS_EN
   const outputLanguages = isZh ? OUTPUT_LANGUAGES_ZH : OUTPUT_LANGUAGES_EN
-  const panelInputClass = 'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px]'
-  const leftCardClass = 'rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6'
+  const panelInputClass = 'h-11 rounded-2xl border-border bg-secondary text-[14px]'
+  const leftCardClass = 'rounded-[28px] border border-border bg-white p-5 sm:p-6'
 
   const [phase, setPhase] = useState<EcommercePhase>('input')
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
@@ -688,12 +690,12 @@ export function EcomStudioForm() {
         <SectionIcon icon={ShoppingBag} className="mt-1" />
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-[#1a1d24]">{t('title')}</h1>
-            <span className="rounded-full bg-gradient-to-r from-[#1d5fd0] to-[#4c8ef7] px-2.5 py-0.5 text-[11px] font-semibold text-white">
+            <h1 className="text-xl font-bold text-foreground">{t('title')}</h1>
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
               {t('badge')}
             </span>
           </div>
-          <p className="mt-1 text-[13px] text-[#7d818d]">{t('description')}</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">{t('description')}</p>
         </div>
       </div>
 
@@ -708,16 +710,16 @@ export function EcomStudioForm() {
           <fieldset disabled={isProcessing}>
             <div className={`${leftCardClass} ${isProcessing ? 'opacity-70' : ''}`}>
               <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                   <ImageIcon className="h-5 w-5" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-[15px] font-semibold text-[#1a1d24]">{t('productImage')}</h3>
-                  <p className="text-[13px] text-[#7d818d]">
+                  <h3 className="text-[15px] font-semibold text-foreground">{t('productImage')}</h3>
+                  <p className="text-[13px] text-muted-foreground">
                     {isZh ? '可上传多张，但必须是同一个产品。多角度/细节图效果最好。' : 'You can upload multiple images, but they must be the same product. Multiple angles and detail shots work best.'}
                   </p>
                 </div>
-                <span className="text-[13px] text-[#6f7380]">{productImages.length}/6</span>
+                <span className="text-[13px] text-muted-foreground">{productImages.length}/6</span>
               </div>
               <MultiImageUploader
                 images={productImages}
@@ -729,22 +731,22 @@ export function EcomStudioForm() {
                 showIndexBadge
                 label={isZh ? '拖拽或点击上传同款商品参考图' : 'Drop or click to upload same-product reference images'}
                 hideDefaultFooter
-                dropzoneClassName="min-h-[186px] rounded-[20px] border-[#d0d4dc] bg-[#f1f3f6] px-6 py-8 hover:border-[#bcc2ce] hover:bg-[#eef1f4]"
-                labelClassName="text-sm leading-6 text-[#2b2f38]"
+                dropzoneClassName="min-h-[186px] rounded-2xl border-border bg-secondary px-6 py-8 hover:border-muted-foreground hover:bg-muted"
+                labelClassName="text-sm leading-6 text-foreground"
               />
             </div>
           </fieldset>
 
           <div className={leftCardClass}>
             <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eceef2] text-[#4c5059]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 <Settings2 className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-[15px] font-semibold text-[#1a1d24]">
+                <h3 className="text-[15px] font-semibold text-foreground">
                   {isZh ? '组图要求' : 'Detail Page Brief'}
                 </h3>
-                <p className="text-[13px] text-[#7d818d]">
+                <p className="text-[13px] text-muted-foreground">
                   {isZh ? '复用主图生成的最新输入结构，用户要求优先于图片分析。' : 'Uses the latest Genesis-style brief. User requirements override image inference.'}
                 </p>
               </div>
@@ -752,15 +754,19 @@ export function EcomStudioForm() {
 
             <Textarea
               value={requirements}
-              onChange={(event) => setRequirements(event.target.value)}
+              onChange={(event) => setRequirements(clampText(event.target.value, TEXT_LIMITS.brief))}
               rows={5}
+              maxLength={TEXT_LIMITS.brief}
               disabled={isProcessing}
               placeholder={t('descriptionPlaceholder')}
-              className="min-h-[128px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] leading-6"
+              className="min-h-[128px] resize-none rounded-2xl border-border bg-secondary text-[14px] leading-6"
             />
+            <p className="mt-2 text-xs text-muted-foreground">
+              {formatTextCounter(requirements, TEXT_LIMITS.brief, isZh)}
+            </p>
 
             <div className="mt-4 space-y-1.5">
-              <Label className="text-[13px] font-medium text-[#5a5e6b]">
+              <Label className="text-[13px] font-medium text-muted-foreground">
                 {isZh ? '输出语言' : 'Output Language'}
               </Label>
               <Select
@@ -783,7 +789,7 @@ export function EcomStudioForm() {
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('model')}</Label>
+                <Label className="text-[13px] font-medium text-muted-foreground">{tc('model')}</Label>
                 <Select
                   value={model}
                   onValueChange={(value) => {
@@ -804,9 +810,10 @@ export function EcomStudioForm() {
                     ))}
                   </SelectContent>
                 </Select>
+                <ModelTextHint />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[13px] font-medium text-[#5a5e6b]">{tc('aspectRatio')}</Label>
+                <Label className="text-[13px] font-medium text-muted-foreground">{tc('aspectRatio')}</Label>
                 <Select
                   value={aspectRatio}
                   onValueChange={(value) => setAspectRatio(value as AspectRatio)}
@@ -839,7 +846,7 @@ export function EcomStudioForm() {
               size="lg"
               onClick={handleAnalyze}
               disabled={productImages.length === 0 || selectedModules.length === 0}
-              className="h-14 w-full rounded-3xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#13151a] disabled:bg-[#9a9ca3]"
+              className="h-14 w-full rounded-3xl bg-primary text-base font-semibold text-white hover:bg-primary disabled:bg-primary"
             >
               <Sparkles className="mr-2 h-4 w-4" />
               {t('analyzeButton')}
@@ -850,7 +857,7 @@ export function EcomStudioForm() {
             <Button
               size="lg"
               disabled
-              className="h-14 w-full rounded-3xl bg-[#9a9ca3] text-base font-semibold text-white"
+              className="h-14 w-full rounded-3xl bg-primary text-base font-semibold text-white"
             >
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               {isZh ? '正在生成详情页规划方案' : 'Building detail page plan'}
@@ -883,21 +890,21 @@ export function EcomStudioForm() {
                   size="lg"
                   onClick={handleGenerate}
                   disabled={editableImagePlans.length === 0 || insufficientCredits}
-                  className="h-14 w-full rounded-3xl bg-[#171a22] text-[17px] font-semibold text-white hover:bg-[#11131a] disabled:bg-[#9ca1ad]"
+                  className="h-14 w-full rounded-3xl bg-primary text-[17px] font-semibold text-white hover:opacity-90 disabled:bg-muted"
                 >
                   {isZh
                     ? `确认生成 ${editableImagePlans.length} 张图片`
                     : `Generate ${editableImagePlans.length} ${editableImagePlans.length === 1 ? 'image' : 'images'}`}
                 </Button>
               )}
-              <p className="text-center text-[14px] text-[#7b808c]">
+              <p className="text-center text-[14px] text-muted-foreground">
                 {isZh ? `消耗 ${totalCost} 积分` : `Cost ${totalCost} credits`}
               </p>
               <Button
                 variant="outline"
                 size="lg"
                 onClick={handleBackToInput}
-                className="h-14 w-full rounded-3xl border-[#d9dde4] bg-[#f1f3f6] text-[17px] font-semibold text-[#1e2128] hover:bg-[#e8ebf0]"
+                className="h-14 w-full rounded-3xl border-border bg-secondary text-[17px] font-semibold text-foreground hover:bg-muted"
               >
                 <ArrowLeft className="mr-2 h-5 w-5" />
                 {isZh ? '返回编辑' : 'Back to Edit'}
@@ -910,7 +917,7 @@ export function EcomStudioForm() {
               <Button
                 size="lg"
                 disabled
-                className="h-14 w-full rounded-3xl bg-[#8f9199] text-[17px] font-semibold text-white"
+                className="h-14 w-full rounded-3xl bg-primary text-[17px] font-semibold text-white"
               >
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 {isZh ? '正在生成图片' : 'Generating Images'}
@@ -919,7 +926,7 @@ export function EcomStudioForm() {
                 variant="outline"
                 size="lg"
                 onClick={handleStop}
-                className="h-14 w-full rounded-3xl border-[#d9dde4] bg-[#f1f3f6] text-[17px] font-semibold text-[#1e2128] hover:bg-[#e8ebf0]"
+                className="h-14 w-full rounded-3xl border-border bg-secondary text-[17px] font-semibold text-foreground hover:bg-muted"
               >
                 {tc('stop')}
               </Button>
@@ -931,7 +938,7 @@ export function EcomStudioForm() {
               <Button
                 size="lg"
                 onClick={handleNewGeneration}
-                className="h-14 w-full rounded-3xl bg-[#111318] text-[17px] font-semibold text-white hover:bg-[#0a0b10]"
+                className="h-14 w-full rounded-3xl bg-primary text-[17px] font-semibold text-white hover:bg-primary"
               >
                 {isZh ? '新建生成' : 'New Generation'}
               </Button>
@@ -939,7 +946,7 @@ export function EcomStudioForm() {
                 variant="outline"
                 size="lg"
                 onClick={handleBackToPreview}
-                className="h-14 w-full rounded-3xl border-[#d9dde4] bg-[#f1f3f6] text-[17px] font-semibold text-[#1e2128] hover:bg-[#e8ebf0]"
+                className="h-14 w-full rounded-3xl border-border bg-secondary text-[17px] font-semibold text-foreground hover:bg-muted"
               >
                 <ArrowLeft className="mr-2 h-5 w-5" />
                 {isZh ? '返回规划方案' : 'Back to Plan'}
@@ -948,18 +955,18 @@ export function EcomStudioForm() {
           )}
         </div>
 
-        <div className="rounded-[30px] border border-[#e0e2e8] bg-white p-6 xl:p-8">
+        <div className="rounded-[30px] border border-border bg-white p-6 xl:p-8">
           <div className="mb-6">
-            <h2 className="text-[18px] font-semibold text-[#1a1d24]">{rightPanelTitle}</h2>
-            <p className="mt-1 text-[13px] text-[#7d818d]">{rightPanelSubtitle}</p>
+            <h2 className="text-[18px] font-semibold text-foreground">{rightPanelTitle}</h2>
+            <p className="mt-1 text-[13px] text-muted-foreground">{rightPanelSubtitle}</p>
           </div>
 
           {phase === 'input' && !hasPersistedResults && (
             <div className="flex min-h-[620px] flex-col items-center justify-center px-4 text-center">
-              <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#ececef] text-[#7f8390]">
+              <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 <Sparkles className="h-8 w-8" />
               </div>
-              <p className="max-w-[360px] text-base leading-7 text-[#7b808c]">{t('emptyState')}</p>
+              <p className="max-w-[360px] text-base leading-7 text-muted-foreground">{t('emptyState')}</p>
             </div>
           )}
 

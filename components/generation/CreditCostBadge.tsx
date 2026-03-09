@@ -1,5 +1,6 @@
 'use client'
 
+import { useLocale } from 'next-intl'
 import { Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCredits } from '@/lib/hooks/useCredits'
@@ -10,8 +11,10 @@ interface CreditCostBadgeProps {
 }
 
 export function CreditCostBadge({ cost, className }: CreditCostBadgeProps) {
+  const locale = useLocale()
   const { total } = useCredits()
   const insufficient = total !== null && total < cost
+  const isZh = locale.startsWith('zh')
 
   return (
     <span
@@ -24,8 +27,8 @@ export function CreditCostBadge({ cost, className }: CreditCostBadgeProps) {
       )}
     >
       <Zap className="h-3 w-3" />
-      {cost} credits
-      {insufficient && ' (insufficient)'}
+      {isZh ? `${cost} 积分` : `${cost} credits`}
+      {insufficient && (isZh ? '（不足）' : ' (insufficient)')}
     </span>
   )
 }

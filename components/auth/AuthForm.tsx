@@ -106,127 +106,114 @@ export function AuthForm() {
     setLoading(false)
   }
 
+  const inputClass = 'w-full rounded-xl border border-border bg-secondary px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-foreground/40 focus:ring-2 focus:ring-foreground/10 transition-colors'
+  const btnClass = 'w-full rounded-xl bg-foreground py-2.5 text-sm font-semibold text-background hover:bg-foreground/90 disabled:opacity-40 transition-colors press-scale'
+  const labelClass = 'block text-[13px] font-medium text-muted-foreground mb-1.5'
+
   return (
-    <div className="w-full max-w-md rounded-2xl border bg-card p-8 shadow-sm">
+    <div className="w-full max-w-sm">
       {/* Logo */}
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0f172a] text-white shadow-[0_10px_20px_rgba(15,23,42,0.18)]">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
-            <path
-              d="M8 0L9.8 5.2L15.6 5.2L10.9 8.8L12.7 14L8 10.4L3.3 14L5.1 8.8L0.4 5.2L6.2 5.2L8 0Z"
-              fill="currentColor"
-            />
-          </svg>
+        <div className="mb-1 flex items-center justify-center gap-1.5">
+          <span className="font-[var(--font-display)] text-2xl font-extrabold tracking-tight text-foreground">
+            Shopix
+          </span>
+          <span className="text-sm font-medium text-text-tertiary">AI</span>
         </div>
-        <h1 className="text-xl font-semibold">
-          {mode === 'sign-in' ? t('welcome') : t('createAccount')}
-        </h1>
+        <p className="text-[13px] text-muted-foreground">
+          {mode === 'sign-in' ? t('welcome') : mode === 'sign-up' ? t('createAccount') : t('checkEmail')}
+        </p>
       </div>
 
       {/* Sign In */}
       {mode === 'sign-in' && (
-        <form onSubmit={handleSignIn} className="space-y-4">
+        <form onSubmit={handleSignIn} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('email')}</label>
+            <label className={labelClass}>{t('email')}</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
+              autoComplete="email"
+              className={inputClass}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('password')}</label>
+            <label className={labelClass}>{t('password')}</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
+              autoComplete="current-password"
+              className={inputClass}
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-foreground py-2.5 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
-          >
-            {loading ? t('signingIn') : t('signIn')}
-          </button>
-          <p className="text-center text-sm text-muted-foreground">
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="pt-1">
+            <button type="submit" disabled={loading} className={btnClass}>
+              {loading ? t('signingIn') : t('signIn')}
+            </button>
+          </div>
+          <p className="text-center text-[13px] text-muted-foreground pt-1">
             {t('noAccount')}{' '}
-            <button
-              type="button"
-              onClick={() => setMode('sign-up')}
-              className="font-medium text-foreground hover:underline"
-            >
+            <button type="button" onClick={() => { setError(null); setMode('sign-up') }} className="font-medium text-foreground hover:underline">
               {t('signUp')}
             </button>
           </p>
         </form>
       )}
 
-      {/* Sign Up — Step 1: Send OTP */}
+      {/* Sign Up */}
       {mode === 'sign-up' && (
-        <form onSubmit={handleSendOtp} className="space-y-4">
+        <form onSubmit={handleSendOtp} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('email')}</label>
+            <label className={labelClass}>{t('email')}</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
+              autoComplete="email"
+              className={inputClass}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('password')}</label>
+            <label className={labelClass}>{t('password')}</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
+              autoComplete="new-password"
+              className={inputClass}
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-foreground py-2.5 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
-          >
-            {loading ? t('signingUp') : t('sendOtp')}
-          </button>
-          <p className="text-center text-sm text-muted-foreground">
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="pt-1">
+            <button type="submit" disabled={loading} className={btnClass}>
+              {loading ? t('signingUp') : t('sendOtp')}
+            </button>
+          </div>
+          <p className="text-center text-[13px] text-muted-foreground pt-1">
             {t('hasAccount')}{' '}
-            <button
-              type="button"
-              onClick={() => setMode('sign-in')}
-              className="font-medium text-foreground hover:underline"
-            >
+            <button type="button" onClick={() => { setError(null); setMode('sign-in') }} className="font-medium text-foreground hover:underline">
               {t('signIn')}
             </button>
           </p>
         </form>
       )}
 
-      {/* Sign Up — Step 2: Verify OTP */}
+      {/* Verify OTP */}
       {mode === 'verify-otp' && (
-        <form onSubmit={handleVerifyOtp} className="space-y-4">
+        <form onSubmit={handleVerifyOtp} className="space-y-3">
           {message && (
-            <p className="rounded-lg bg-secondary px-4 py-3 text-sm">{message}</p>
+            <p className="rounded-xl bg-secondary px-4 py-3 text-[13px] text-muted-foreground">{message}</p>
           )}
           <div>
-            <label className="block text-sm font-medium mb-1.5">{t('otpCode')}</label>
+            <label className={labelClass}>{t('otpCode')}</label>
             <input
               type="text"
               value={otp}
@@ -234,23 +221,22 @@ export function AuthForm() {
               required
               maxLength={12}
               placeholder={t('otpPlaceholder')}
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground tracking-widest text-center text-lg"
+              autoComplete="one-time-code"
+              className={`${inputClass} tracking-[0.3em] text-center text-base`}
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-foreground py-2.5 text-sm font-medium text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
-          >
-            {loading ? t('signingUp') : t('verifyOtp')}
-          </button>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="pt-1">
+            <button type="submit" disabled={loading} className={btnClass}>
+              {loading ? t('signingUp') : t('verifyOtp')}
+            </button>
+          </div>
           <button
             type="button"
-            onClick={() => setMode('sign-up')}
-            className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => { setError(null); setMode('sign-up') }}
+            className="w-full text-[13px] text-muted-foreground hover:text-foreground transition-colors"
           >
-            ← Back
+            {t('back')}
           </button>
         </form>
       )}

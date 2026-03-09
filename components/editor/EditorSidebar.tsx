@@ -21,7 +21,7 @@ export function EditorSidebar() {
   if (objects.length === 0) return null
 
   return (
-    <aside className="flex w-[160px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-[#e5e7eb] bg-[#fafbfc] p-3">
+    <aside className="flex w-[160px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-surface p-3">
       {objects.map((obj, i) => (
         <button
           key={obj.id}
@@ -30,8 +30,8 @@ export function EditorSidebar() {
           className={cn(
             'relative overflow-hidden rounded-lg border-2 transition-colors',
             selectedId === obj.id
-              ? 'border-[#3b82f6] ring-1 ring-[#3b82f6]/30'
-              : 'border-transparent hover:border-[#d1d5db]'
+              ? 'border-accent ring-1 ring-accent/30'
+              : 'border-transparent hover:border-border'
           )}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}

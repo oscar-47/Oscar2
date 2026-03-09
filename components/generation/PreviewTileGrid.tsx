@@ -32,11 +32,11 @@ export function PreviewTileGrid({
         {items.map((_, index) => (
           <div
             key={`preview-tile-${index}`}
-            className="relative w-[220px] max-w-full overflow-hidden rounded-2xl border border-[#d0d4dc] bg-[#f5f6f8]"
+            className="relative w-[220px] max-w-full overflow-hidden rounded-2xl border border-border bg-secondary"
             style={{ aspectRatio: cssAspectRatio }}
           >
-            <div className="absolute inset-0 m-3 rounded-xl border border-dashed border-[#d8dde5]" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[#8a909c]">
+            <div className="absolute inset-0 m-3 rounded-xl border border-dashed border-border" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
               <ImageIcon className="h-6 w-6" />
               <span className="text-xs font-medium">
                 {labels?.[index] || `预览 ${index + 1}`}

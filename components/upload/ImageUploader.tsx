@@ -55,7 +55,7 @@ export function ImageUploader({
 
   if (previewUrl) {
     return (
-      <div className={cn('group relative overflow-hidden rounded-xl border border-[#d0d4dc] bg-white', className)}>
+      <div className={cn('group relative overflow-hidden rounded-xl border border-border bg-background', className)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={previewUrl}
@@ -82,24 +82,24 @@ export function ImageUploader({
         className={cn(
           'flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 transition-colors',
           isDragActive
-            ? 'border-[#8d94a2] bg-[#e9edf2]'
-            : 'border-[#d0d4dc] bg-[#f1f3f6] hover:border-[#8e96a4] hover:bg-[#eceff4]',
+            ? 'border-muted-foreground bg-muted'
+            : 'border-border bg-secondary hover:border-muted-foreground hover:bg-muted',
           disabled && 'opacity-50 cursor-not-allowed pointer-events-none'
         )}
       >
         <input {...getInputProps()} />
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#e8ebf0]">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
           {isDragActive ? (
-            <ImageIcon className="h-6 w-6 text-[#5e6674]" />
+            <ImageIcon className="h-6 w-6 text-muted-foreground" />
           ) : (
-            <Upload className="h-6 w-6 text-[#707884]" />
+            <Upload className="h-6 w-6 text-muted-foreground" />
           )}
         </div>
         <div className="text-center">
-          <p className="text-sm font-medium text-[#2f333b]">
+          <p className="text-sm font-medium text-foreground">
             {isDragActive ? 'Drop to upload' : label}
           </p>
-          <p className="mt-1 text-xs text-[#7e8592]">{sublabel}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{sublabel}</p>
         </div>
       </div>
       {error && <p className="mt-2 text-xs text-destructive">{error}</p>}

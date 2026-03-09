@@ -85,7 +85,7 @@ export function MultiImageUploader({
           {images.map((img, i) => (
             <div
               key={i}
-              className="relative aspect-square overflow-hidden rounded-xl border border-[#cfd4dc] bg-white group"
+              className="relative aspect-square overflow-hidden rounded-xl border border-border bg-background group"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -116,7 +116,7 @@ export function MultiImageUploader({
             <div
               {...getRootProps()}
               className={cn(
-                'flex aspect-square cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-[#d0d4dc] bg-[#f1f3f6] text-[#6d7280] transition-colors hover:border-[#aeb5c2] hover:bg-[#eceff4]',
+                'flex aspect-square cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-border bg-secondary text-muted-foreground transition-colors hover:border-muted-foreground hover:bg-muted',
                 disabled && 'pointer-events-none opacity-50'
               )}
             >
@@ -167,19 +167,19 @@ export function MultiImageUploader({
           className={cn(
             'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 transition-colors',
             isDragActive
-              ? 'border-[#8d94a2] bg-[#e9edf2]'
-              : 'border-[#d0d4dc] bg-[#f1f3f6] hover:border-[#8e96a4] hover:bg-[#eceff4]',
+              ? 'border-muted-foreground bg-muted'
+              : 'border-border bg-secondary hover:border-muted-foreground hover:bg-muted',
             (disabled || remaining <= 0) && 'opacity-50 cursor-not-allowed pointer-events-none',
             dropzoneClassName
           )}
         >
           <input {...getInputProps()} />
-          <Upload className="h-5 w-5 text-[#707884]" />
-          <p className={cn('text-center text-sm text-[#5f6672]', labelClassName)}>
+          <Upload className="h-5 w-5 text-muted-foreground" />
+          <p className={cn('text-center text-sm text-muted-foreground', labelClassName)}>
             {isDragActive ? 'Drop to upload' : label}
           </p>
           {!hideDefaultFooter && (
-            <p className={cn('text-xs text-[#7e8592]', footerClassName)}>
+            <p className={cn('text-xs text-muted-foreground', footerClassName)}>
               {footerText ?? `${images.length}/${maxImages} images · max ${maxSizeMB} MB each`}
             </p>
           )}

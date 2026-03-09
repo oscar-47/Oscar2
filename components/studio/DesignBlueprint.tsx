@@ -1,19 +1,22 @@
 'use client'
 
 import { useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { ChevronDown, ChevronUp, Pencil, Palette, ImageIcon, Plus } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ImagePlanCard } from './ImagePlanCard'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import type { BlueprintImagePlan, GeneratedPrompt } from '@/types'
+import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
 
 interface DesignBlueprintProps {
   designSpecs: string
   onDesignSpecsChange: (value: string) => void
   imagePlans: BlueprintImagePlan[]
   onImagePlanChange: (index: number, plan: BlueprintImagePlan) => void
+  translationNamespace?: string
+  showDesignSpecs?: boolean
   disabled?: boolean
   aspectRatio?: string
   selectedIds?: Set<string>
@@ -32,6 +35,8 @@ export function DesignBlueprint({
   onDesignSpecsChange,
   imagePlans,
   onImagePlanChange,
+  translationNamespace = 'studio.genesis',
+  showDesignSpecs = true,
   disabled,
   selectedIds,
   onToggleSelect,
@@ -43,22 +48,24 @@ export function DesignBlueprint({
   generatedPrompts,
   onPromptChange,
 }: DesignBlueprintProps) {
-  const t = useTranslations('studio.genesis')
+  const t = useTranslations(translationNamespace)
+  const locale = useLocale()
+  const isZh = locale.startsWith('zh')
   const [specsExpanded, setSpecsExpanded] = useState(false)
 
   return (
     <div className="space-y-6">
-      <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5">
+      <div className="rounded-2xl border border-border bg-background p-5">
         <div className="mb-4 flex items-center gap-3">
           <SectionIcon icon={ImageIcon} />
           <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-semibold text-[#1a1d24]">{t('imagePlan')}</p>
+            <p className="text-[15px] font-semibold text-foreground">{t('imagePlan')}</p>
             {selectedIds ? (
-              <p className="text-[13px] text-[#7d818d]">
+              <p className="text-[13px] text-muted-foreground">
                 {t('selectedCount', { selected: selectedIds.size, total: imagePlans.length })}
               </p>
             ) : (
-              <p className="text-[13px] text-[#7d818d]">
+              <p className="text-[13px] text-muted-foreground">
                 {t('imagePlanCount', { count: imagePlans.length })}
               </p>
             )}
@@ -68,15 +75,15 @@ export function DesignBlueprint({
               <button
                 type="button"
                 onClick={onSelectAll}
-                className="text-[13px] font-medium text-[#191b22] hover:underline"
+                className="text-[13px] font-medium text-foreground hover:underline"
               >
                 {t('selectAll')}
               </button>
-              <span className="text-[13px] text-[#d0d4dc]">/</span>
+              <span className="text-[13px] text-border">/</span>
               <button
                 type="button"
                 onClick={onDeselectAll}
-                className="text-[13px] font-medium text-[#7d818d] hover:underline"
+                className="text-[13px] font-medium text-muted-foreground hover:underline"
               >
                 {t('deselectAll')}
               </button>
@@ -103,7 +110,7 @@ export function DesignBlueprint({
             <button
               type="button"
               onClick={onAddPlan}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#d0d4dc] bg-[#f9fafb] px-4 py-3 text-[13px] font-medium text-[#7d818d] hover:bg-[#f1f3f6] hover:text-[#5a5e6b] transition-colors"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-secondary px-4 py-3 text-[13px] font-medium text-muted-foreground hover:bg-secondary hover:text-muted-foreground transition-colors"
             >
               <Plus className="h-4 w-4" />
               {t('addPlan')}
@@ -113,22 +120,23 @@ export function DesignBlueprint({
       </div>
 
       {/* Design Specifications — collapsible */}
-      <div className="rounded-[28px] border border-[#d0d4dc] bg-white">
+      {showDesignSpecs && (
+      <div className="rounded-2xl border border-border bg-background">
         <button
           type="button"
           onClick={() => setSpecsExpanded(!specsExpanded)}
-          className="flex w-full items-center gap-3 rounded-[28px] p-5 text-left transition-colors hover:bg-[#f0f1f4]"
+          className="flex w-full items-center gap-3 rounded-2xl p-5 text-left transition-colors hover:bg-muted"
         >
           <SectionIcon icon={Palette} />
           <div className="flex-1 min-w-0">
-            <p className="text-[15px] font-semibold text-[#1a1d24]">{t('designSpecs')}</p>
-            <p className="text-[13px] text-[#7d818d]">{t('designSpecsDesc')}</p>
+            <p className="text-[15px] font-semibold text-foreground">{t('designSpecs')}</p>
+            <p className="text-[13px] text-muted-foreground">{t('designSpecsDesc')}</p>
           </div>
-          <Pencil className="h-4 w-4 shrink-0 text-[#7a7f8b]" />
+          <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
           {specsExpanded ? (
-            <ChevronUp className="h-4 w-4 text-[#7a7f8b]" />
+            <ChevronUp className="h-4 w-4 text-muted-foreground" />
           ) : (
-            <ChevronDown className="h-4 w-4 text-[#7a7f8b]" />
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
           )}
         </button>
 
@@ -143,16 +151,21 @@ export function DesignBlueprint({
               <div className="px-5 pb-5">
                 <Textarea
                   value={designSpecs}
-                  onChange={(e) => onDesignSpecsChange(e.target.value)}
+                  onChange={(e) => onDesignSpecsChange(clampText(e.target.value, TEXT_LIMITS.designSpecs))}
                   disabled={disabled}
                   rows={18}
-                  className="min-h-[520px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f5f6f8] px-5 py-4 text-[14px] leading-8 text-[#262a32]"
+                  maxLength={TEXT_LIMITS.designSpecs}
+                  className="min-h-[520px] resize-none rounded-2xl border-border bg-secondary px-5 py-4 text-[14px] leading-8 text-foreground"
                 />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {formatTextCounter(designSpecs, TEXT_LIMITS.designSpecs, isZh)}
+                </p>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+      )}
     </div>
   )
 }

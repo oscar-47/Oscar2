@@ -467,7 +467,10 @@ async function prepareEcom(page: Page, sample: TaProSampleManifest, isZh: boolea
 
 async function prepareAesthetic(page: Page, flowId: TaProFlowId, sample: TaProSampleManifest) {
   if (flowId === 'aesthetic-batch') {
-    await page.getByRole('button', { name: /批量复刻|Batch Replicate/i }).click()
+    const batchToggle = page
+      .getByRole('tab', { name: /批量复刻|Batch Replicate/i })
+      .or(page.getByRole('button', { name: /批量复刻|Batch Replicate/i }))
+    await batchToggle.click()
     await setFileInputFiles(page, 0, ensureArray(sample.referenceImages, 'referenceImages'))
     await setFileInputFiles(page, 1, [sample.productImages[0]])
   } else {

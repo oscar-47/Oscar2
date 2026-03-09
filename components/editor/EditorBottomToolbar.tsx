@@ -16,7 +16,7 @@ export function EditorBottomToolbar() {
   ]
 
   return (
-    <div className="flex shrink-0 items-center justify-center gap-1 border-t border-[#e5e7eb] bg-white px-4 py-2">
+    <div className="flex shrink-0 items-center justify-center gap-1 border-t border-border bg-background px-4 py-2">
       {tools.map(({ key, icon: Icon, label }) => (
         <button
           key={key}
@@ -26,8 +26,8 @@ export function EditorBottomToolbar() {
           className={cn(
             'flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-colors',
             activeTool === key
-              ? 'bg-[#111827] text-white'
-              : 'text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827]'
+              ? 'bg-foreground text-background'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
           <Icon className="h-4 w-4" strokeWidth={1.8} />

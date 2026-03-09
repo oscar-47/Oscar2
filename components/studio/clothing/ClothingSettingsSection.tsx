@@ -1,11 +1,12 @@
 'use client'
 
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Textarea } from '@/components/ui/textarea'
 import { SlidersHorizontal } from 'lucide-react'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { GenerationParametersCard } from '@/components/studio/GenerationParametersCard'
 import type { GenerationModel, AspectRatio, ImageSize, OutputLanguage } from '@/types'
+import { TEXT_LIMITS, formatTextCounter } from '@/lib/input-guard'
 
 interface ClothingSettingsSectionProps {
   requirements: string
@@ -35,18 +36,20 @@ export function ClothingSettingsSection({
   disabled = false,
 }: ClothingSettingsSectionProps) {
   const t = useTranslations('studio.clothingStudio')
+  const locale = useLocale()
+  const isZh = locale.startsWith('zh')
 
   return (
     <div className="space-y-4">
       {/* Requirements textarea — kept separate from the shared card */}
-      <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+      <div className="rounded-2xl border border-border bg-background p-5 sm:p-6">
         <div className="mb-4 flex items-center gap-3">
           <SectionIcon icon={SlidersHorizontal} />
           <div>
-            <h3 className="text-[15px] font-semibold text-[#1a1d24]">
+            <h3 className="text-[15px] font-semibold text-foreground">
               {t('requirementsTitle')}
             </h3>
-            <p className="text-[13px] text-[#7d818d]">
+            <p className="text-[13px] text-muted-foreground">
               {t('requirementsDesc')}
             </p>
           </div>
@@ -58,9 +61,9 @@ export function ClothingSettingsSection({
           placeholder={t('requirementsPlaceholder')}
           disabled={disabled}
           rows={5}
-          className="min-h-[132px] resize-none rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] leading-6 text-[#2b2f38]"
+          className="min-h-[132px] resize-none rounded-2xl border-border bg-secondary text-[14px] leading-6 text-foreground"
         />
-        <p className="mt-3 text-[12px] leading-5 text-[#7d818d]">
+        <p className="mt-3 text-[12px] leading-5 text-muted-foreground">
           {t('requirementsHint')}
         </p>
       </div>

@@ -3,6 +3,7 @@
 import { useLocale } from 'next-intl'
 import { Label } from '@/components/ui/label'
 import { useUserEmail } from '@/lib/hooks/useUserEmail'
+import { ModelTextHint } from '@/components/studio/ModelTextHint'
 import {
   Select,
   SelectContent,
@@ -111,7 +112,7 @@ export function GenerationParametersCard({
   const ratios = aspectRatioOptions ?? DEFAULT_ASPECT_RATIOS
 
   const selectTriggerClass =
-    'h-11 rounded-2xl border-[#d0d4dc] bg-[#f1f3f6] text-[14px] text-[#1b1f26] shadow-none'
+    'h-11 rounded-2xl border-border bg-secondary text-[14px] text-foreground shadow-none'
 
   const showOutputLanguage =
     outputLanguage !== undefined && onOutputLanguageChange !== undefined
@@ -119,15 +120,15 @@ export function GenerationParametersCard({
     showImageCount && imageCount !== undefined && onImageCountChange !== undefined
 
   return (
-    <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+    <div className="rounded-2xl border border-border bg-background p-5 sm:p-6">
       {/* Header */}
       <div className="mb-4 flex items-center gap-3">
         <SectionIcon icon={SlidersHorizontal} />
         <div>
-          <h3 className="text-[15px] font-semibold text-[#1a1d24]">
+          <h3 className="text-[15px] font-semibold text-foreground">
             {isZh ? '生成参数' : 'Generation Parameters'}
           </h3>
-          <p className="text-[13px] text-[#7d818d]">
+          <p className="text-[13px] text-muted-foreground">
             {isZh ? '配置模型、比例和输出选项' : 'Configure model, ratio and output options'}
           </p>
         </div>
@@ -135,7 +136,7 @@ export function GenerationParametersCard({
 
       {/* Model */}
       <div className="space-y-1.5">
-        <Label className="text-[13px] font-medium text-[#5a5e6b]">
+        <Label className="text-[13px] font-medium text-muted-foreground">
           {isZh ? '模型' : 'Model'}
         </Label>
         <Select
@@ -161,11 +162,12 @@ export function GenerationParametersCard({
             ))}
           </SelectContent>
         </Select>
+        <ModelTextHint />
       </div>
 
       {/* Aspect Ratio — button group */}
       <div className="mt-4 space-y-1.5">
-        <Label className="text-[13px] font-medium text-[#5a5e6b]">
+        <Label className="text-[13px] font-medium text-muted-foreground">
           {isZh ? '宽高比' : 'Aspect Ratio'}
         </Label>
         <div className="flex flex-wrap gap-2">
@@ -179,8 +181,8 @@ export function GenerationParametersCard({
                 onClick={() => onAspectRatioChange(r)}
                 className={
                   active
-                    ? 'rounded-full bg-[#191b22] px-3 py-1.5 text-[13px] font-medium text-white transition-colors'
-                    : 'rounded-full border border-[#d0d4dc] bg-[#f1f3f6] px-3 py-1.5 text-[13px] font-medium text-[#5a5e6b] transition-colors hover:border-[#191b22] disabled:opacity-50'
+                    ? 'rounded-full bg-foreground px-3 py-1.5 text-[13px] font-medium text-background transition-colors'
+                    : 'rounded-full border border-border bg-secondary px-3 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:border-foreground disabled:opacity-50'
                 }
               >
                 {ASPECT_RATIO_LABELS[r]?.[isZh ? 'zh' : 'en'] ?? r}
@@ -193,7 +195,7 @@ export function GenerationParametersCard({
       {/* Output Language */}
       {showOutputLanguage && (
         <div className="mt-4 space-y-1.5">
-          <Label className="text-[13px] font-medium text-[#5a5e6b]">
+          <Label className="text-[13px] font-medium text-muted-foreground">
             {isZh ? '输出语言' : 'Output Language'}
           </Label>
           <Select
@@ -222,7 +224,7 @@ export function GenerationParametersCard({
       {/* Image Count */}
       {showImageCountField && (
         <div className="mt-4 space-y-1.5">
-          <Label className="text-[13px] font-medium text-[#5a5e6b]">
+          <Label className="text-[13px] font-medium text-muted-foreground">
             {isZh ? '生成数量' : 'Image Count'}
           </Label>
           <Select

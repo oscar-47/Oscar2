@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { LayoutGrid } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SectionIcon } from '@/components/shared/SectionIcon'
@@ -27,22 +28,25 @@ function ChipToggle({
   label,
   onClick,
   disabled,
+  testId,
 }: {
   active: boolean
   label: string
   onClick: () => void
   disabled?: boolean
+  testId?: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      data-testid={testId}
       className={cn(
         'inline-flex h-8 items-center justify-center rounded-full border px-3 text-xs font-medium transition-colors',
         active
-          ? 'border-[#13151b] bg-[#13151b] text-white'
-          : 'border-[#d6d9e0] bg-[#f0f1f4] text-[#6b707d]',
+          ? 'border-foreground bg-foreground text-background'
+          : 'border-border bg-secondary text-muted-foreground',
         disabled && 'cursor-not-allowed opacity-50'
       )}
     >
@@ -56,11 +60,15 @@ function CountStepper({
   onDecrease,
   onIncrease,
   disabled,
+  decreaseTestId,
+  increaseTestId,
 }: {
   value: number
   onDecrease: () => void
   onIncrease: () => void
   disabled?: boolean
+  decreaseTestId?: string
+  increaseTestId?: string
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -68,16 +76,18 @@ function CountStepper({
         type="button"
         onClick={onDecrease}
         disabled={disabled || value <= 0}
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-[#d8dbe1] bg-[#f1f2f4] text-sm text-[#676c79] disabled:cursor-not-allowed disabled:opacity-40"
+        data-testid={decreaseTestId}
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-secondary text-sm text-muted-foreground disabled:cursor-not-allowed disabled:opacity-40"
       >
         -
       </button>
-      <span className="w-6 text-center text-sm font-semibold text-[#21242c]">{value}</span>
+      <span className="w-6 text-center text-sm font-semibold text-foreground">{value}</span>
       <button
         type="button"
         onClick={onIncrease}
         disabled={disabled || value >= 5}
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-[#d8dbe1] bg-[#f1f2f4] text-sm text-[#676c79] disabled:cursor-not-allowed disabled:opacity-40"
+        data-testid={increaseTestId}
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-secondary text-sm text-muted-foreground disabled:cursor-not-allowed disabled:opacity-40"
       >
         +
       </button>
@@ -90,7 +100,7 @@ function RowIcon({ active, children }: { active?: boolean; children: React.React
     <div
       className={cn(
         'flex h-11 w-11 shrink-0 items-center justify-center rounded-full',
-        active ? 'bg-[#11131a] text-white' : 'bg-[#eceef2] text-[#5b606c]'
+        active ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'
       )}
     >
       {children}
@@ -103,6 +113,7 @@ export function GenerationTypeSelector({
   onTypeStateChange,
   disabled = false,
 }: GenerationTypeSelectorProps) {
+  const t = useTranslations('studio.clothingStudio.generationTypeSelector')
   const totalSelected = countSelectedTypes(typeState)
   const isWhiteBgSelected = typeState.whiteBgRetouched.front || typeState.whiteBgRetouched.back
   const is3DSelected = typeState.threeDEffect.enabled
@@ -113,23 +124,29 @@ export function GenerationTypeSelector({
   const rowClass = (active: boolean) =>
     cn(
       'rounded-2xl border px-4 py-3 transition-colors',
-      active ? 'border-[#11131a] bg-white' : 'border-[#d8dbe2] bg-[#f1f3f6]',
+      active ? 'border-primary bg-background' : 'border-border bg-secondary',
       disabled && 'opacity-70'
     )
 
   return (
-    <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 sm:p-6">
+    <div
+      className="rounded-[28px] border border-border bg-background p-5 sm:p-6"
+      data-testid="clothing-generation-selector"
+    >
       <div className="mb-4 flex items-center gap-3">
         <SectionIcon icon={LayoutGrid} />
         <div className="flex-1">
-          <h3 className="text-sm font-semibold text-[#1f2228]">选择生成类型</h3>
-          <p className="text-xs text-[#7d818d]">选择需要生成的图片类型</p>
+          <h3 className="text-sm font-semibold text-foreground">{t('title')}</h3>
+          <p className="text-xs text-muted-foreground">{t('subtitle')}</p>
         </div>
-        <span className="text-sm font-medium text-[#676c79]">已选 {totalSelected} 项</span>
+        <span className="text-sm font-medium text-muted-foreground" data-testid="clothing-generation-selected-count">
+          {t('selectedCount', { count: totalSelected })}
+        </span>
       </div>
 
       <div className="space-y-2.5">
         <div
+          data-testid="generation-type-white-bg"
           className={rowClass(isWhiteBgSelected)}
           onClick={() => {
             if (disabled) return
@@ -147,14 +164,15 @@ export function GenerationTypeSelector({
               </svg>
             </RowIcon>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-[#1f2228]">白底精修图</h4>
-              <p className="text-xs text-[#787d89]">纯白背景的产品精修展示图</p>
+              <h4 className="text-sm font-semibold text-foreground">{t('whiteBg.title')}</h4>
+              <p className="text-xs text-muted-foreground">{t('whiteBg.description')}</p>
             </div>
             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
               <ChipToggle
                 active={typeState.whiteBgRetouched.front}
-                label="正面"
+                label={t('whiteBg.front')}
                 disabled={disabled}
+                testId="generation-type-white-bg-front"
                 onClick={() =>
                   onTypeStateChange({
                     ...typeState,
@@ -164,8 +182,9 @@ export function GenerationTypeSelector({
               />
               <ChipToggle
                 active={typeState.whiteBgRetouched.back}
-                label="背面"
+                label={t('whiteBg.back')}
                 disabled={disabled}
+                testId="generation-type-white-bg-back"
                 onClick={() =>
                   onTypeStateChange({
                     ...typeState,
@@ -178,6 +197,7 @@ export function GenerationTypeSelector({
         </div>
 
         <div
+          data-testid="generation-type-3d"
           className={rowClass(is3DSelected)}
           onClick={() => {
             if (disabled) return
@@ -191,14 +211,15 @@ export function GenerationTypeSelector({
               </svg>
             </RowIcon>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-[#1f2228]">3D立体效果图</h4>
-              <p className="text-xs text-[#787d89]">具有立体感和层次感的产品展示</p>
+              <h4 className="text-sm font-semibold text-foreground">{t('threeD.title')}</h4>
+              <p className="text-xs text-muted-foreground">{t('threeD.description')}</p>
             </div>
             <div onClick={(e) => e.stopPropagation()}>
               <ChipToggle
                 active={typeState.threeDEffect.whiteBackground}
-                label="白底图"
+                label={t('threeD.whiteBackground')}
                 disabled={disabled || !is3DSelected}
+                testId="generation-type-3d-white-background"
                 onClick={() =>
                   onTypeStateChange({
                     ...typeState,
@@ -214,6 +235,7 @@ export function GenerationTypeSelector({
         </div>
 
         <div
+          data-testid="generation-type-mannequin"
           className={rowClass(isMannequinSelected)}
           onClick={() => {
             if (disabled) return
@@ -227,14 +249,15 @@ export function GenerationTypeSelector({
               </svg>
             </RowIcon>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-[#1f2228]">人台图</h4>
-              <p className="text-xs text-[#787d89]">使用人台展示服装的专业效果图</p>
+              <h4 className="text-sm font-semibold text-foreground">{t('mannequin.title')}</h4>
+              <p className="text-xs text-muted-foreground">{t('mannequin.description')}</p>
             </div>
             <div onClick={(e) => e.stopPropagation()}>
               <ChipToggle
                 active={typeState.mannequin.whiteBackground}
-                label="白底图"
+                label={t('mannequin.whiteBackground')}
                 disabled={disabled || !isMannequinSelected}
+                testId="generation-type-mannequin-white-background"
                 onClick={() =>
                   onTypeStateChange({
                     ...typeState,
@@ -249,7 +272,7 @@ export function GenerationTypeSelector({
           </div>
         </div>
 
-        <div className={rowClass(isDetailSelected)}>
+        <div className={rowClass(isDetailSelected)} data-testid="generation-type-detail">
           <div className="flex items-center gap-3">
             <RowIcon active={isDetailSelected}>
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
@@ -257,12 +280,14 @@ export function GenerationTypeSelector({
               </svg>
             </RowIcon>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-[#1f2228]">细节特写图</h4>
-              <p className="text-xs text-[#787d89]">展示产品细节和材质的特写图</p>
+              <h4 className="text-sm font-semibold text-foreground">{t('detail.title')}</h4>
+              <p className="text-xs text-muted-foreground">{t('detail.description')}</p>
             </div>
             <CountStepper
               value={typeState.detailCloseup.count}
               disabled={disabled}
+              decreaseTestId="generation-type-detail-decrease"
+              increaseTestId="generation-type-detail-increase"
               onDecrease={() =>
                 onTypeStateChange({
                   ...typeState,
@@ -279,7 +304,7 @@ export function GenerationTypeSelector({
           </div>
         </div>
 
-        <div className={rowClass(isSellingPointSelected)}>
+        <div className={rowClass(isSellingPointSelected)} data-testid="generation-type-selling-point">
           <div className="flex items-center gap-3">
             <RowIcon active={isSellingPointSelected}>
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
@@ -287,12 +312,14 @@ export function GenerationTypeSelector({
               </svg>
             </RowIcon>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-[#1f2228]">卖点图</h4>
-              <p className="text-xs text-[#787d89]">突出产品核心卖点的专属展示图</p>
+              <h4 className="text-sm font-semibold text-foreground">{t('sellingPoint.title')}</h4>
+              <p className="text-xs text-muted-foreground">{t('sellingPoint.description')}</p>
             </div>
             <CountStepper
               value={typeState.sellingPoint.count}
               disabled={disabled}
+              decreaseTestId="generation-type-selling-point-decrease"
+              increaseTestId="generation-type-selling-point-increase"
               onDecrease={() =>
                 onTypeStateChange({
                   ...typeState,

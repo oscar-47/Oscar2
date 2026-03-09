@@ -130,6 +130,7 @@ export type GenerationModel =
 export type PromptProfile = 'default' | 'ta-pro'
 
 export type ModelTier = 'high' | 'balanced' | 'fast'
+export type BillingTier = 'fast' | 'balanced' | 'quality'
 export type ModelRolloutStage = 'public' | 'internal_only' | 'disabled'
 
 export interface AvailableModel {
@@ -165,6 +166,20 @@ export function getAvailableModels(email: string | null | undefined): ReadonlyAr
 }
 
 export const DEFAULT_MODEL: GenerationModel = 'or-gemini-3.1-flash'
+
+export const BILLING_TIER_ORDER: BillingTier[] = ['fast', 'balanced', 'quality']
+
+export const BILLING_TIER_COSTS: Record<BillingTier, number> = {
+  fast: 15,
+  balanced: 30,
+  quality: 50,
+}
+
+export const BILLING_TIER_LABELS: Record<BillingTier, { en: string; zh: string }> = {
+  fast: { en: 'Fast', zh: '极速' },
+  balanced: { en: 'Balanced', zh: '均衡' },
+  quality: { en: 'High Quality', zh: '高质' },
+}
 
 export type AspectRatio =
   | '1:1' | '2:3' | '3:2' | '3:4' | '4:3'
@@ -218,13 +233,48 @@ export const MODEL_CAPABILITIES: Partial<Record<GenerationModel, ModelCapability
   },
 }
 
+const MODEL_BILLING_TIERS: Partial<Record<GenerationModel, BillingTier>> = {
+  'azure-flux': 'balanced',
+  'gpt-image': 'quality',
+  'qiniu-gemini-pro': 'quality',
+  'qiniu-gemini-flash': 'balanced',
+  'volc-seedream-4.5': 'quality',
+  'volc-seedream-5.0-lite': 'fast',
+  'flux-kontext-pro': 'quality',
+  'gemini-pro-image': 'quality',
+  'gemini-flash-image': 'balanced',
+  'or-gemini-2.5-flash': 'fast',
+  'or-gemini-3.1-flash': 'balanced',
+  'or-gemini-3-pro': 'quality',
+  'ta-gemini-2.5-flash': 'fast',
+  'ta-gemini-3.1-flash': 'balanced',
+  'ta-gemini-3-pro': 'quality',
+  'midjourney': 'quality',
+  'sd-3.5-ultra': 'quality',
+  'dall-e-4': 'quality',
+  'ideogram-3': 'quality',
+}
+
 export const MODEL_CREDIT_COSTS: Partial<Record<GenerationModel, Partial<Record<ImageSize, number>>>> = {
-  'or-gemini-2.5-flash': { '1K': 3, '2K': 5 },
-  'or-gemini-3.1-flash': { '1K': 5, '2K': 8, '4K': 15 },
-  'or-gemini-3-pro': { '1K': 10 },
-  'ta-gemini-2.5-flash': { '1K': 3 },
-  'ta-gemini-3.1-flash': { '1K': 3 },
-  'ta-gemini-3-pro': { '1K': 5 },
+  'azure-flux': { '1K': 30, '2K': 30, '4K': 30 },
+  'gpt-image': { '1K': 50, '2K': 50, '4K': 50 },
+  'qiniu-gemini-pro': { '1K': 50, '2K': 50, '4K': 50 },
+  'qiniu-gemini-flash': { '1K': 30, '2K': 30, '4K': 30 },
+  'volc-seedream-4.5': { '1K': 50, '2K': 50, '4K': 50 },
+  'volc-seedream-5.0-lite': { '1K': 15, '2K': 15, '4K': 15 },
+  'flux-kontext-pro': { '1K': 50, '2K': 50, '4K': 50 },
+  'gemini-pro-image': { '1K': 50, '2K': 50, '4K': 50 },
+  'gemini-flash-image': { '1K': 30, '2K': 30, '4K': 30 },
+  'or-gemini-2.5-flash': { '1K': 15, '2K': 15, '4K': 15 },
+  'or-gemini-3.1-flash': { '1K': 30, '2K': 30, '4K': 30 },
+  'or-gemini-3-pro': { '1K': 50, '2K': 50, '4K': 50 },
+  'ta-gemini-2.5-flash': { '1K': 15, '2K': 15, '4K': 15 },
+  'ta-gemini-3.1-flash': { '1K': 30, '2K': 30, '4K': 30 },
+  'ta-gemini-3-pro': { '1K': 50, '2K': 50, '4K': 50 },
+  'midjourney': { '1K': 50, '2K': 50, '4K': 50 },
+  'sd-3.5-ultra': { '1K': 50, '2K': 50, '4K': 50 },
+  'dall-e-4': { '1K': 50, '2K': 50, '4K': 50 },
+  'ideogram-3': { '1K': 50, '2K': 50, '4K': 50 },
 }
 
 function knownModelValues(): GenerationModel[] {
@@ -308,7 +358,14 @@ export function getGenerationCreditCost(
   const normalizedModel = normalizeGenerationModel(model)
   const normalizedSize = sanitizeImageSizeForModel(normalizedModel, imageSize, { includeInternal: true })
   const costs = MODEL_CREDIT_COSTS[normalizedModel]
-  return costs?.[normalizedSize] ?? 5
+  return costs?.[normalizedSize] ?? BILLING_TIER_COSTS[getBillingTierForModel(normalizedModel)]
+}
+
+export function getBillingTierForModel(model: GenerationModel | string): BillingTier {
+  const normalizedModel = normalizeGenerationModel(model)
+  const tier = MODEL_BILLING_TIERS[normalizedModel]
+  if (tier) return tier
+  return MODEL_BILLING_TIERS[DEFAULT_MODEL] ?? 'balanced'
 }
 
 export function isValidModel(m: string): boolean {
@@ -327,28 +384,28 @@ export type BackgroundMode = 'white' | 'original'
 
 // Credit costs — loaded from get-public-config, fallback values here
 export const DEFAULT_CREDIT_COSTS: Record<string, number> = {
-  'azure-flux': 5,
-  'gpt-image': 5,
-  'qiniu-gemini-pro': 5,
-  'qiniu-gemini-flash': 5,
-  'volc-seedream-4.5': 5,
-  'volc-seedream-5.0-lite': 5,
-  'flux-kontext-pro': 5,
-  'gemini-pro-image': 5,
-  'gemini-flash-image': 5,
+  'azure-flux': getGenerationCreditCost('azure-flux', '1K'),
+  'gpt-image': getGenerationCreditCost('gpt-image', '1K'),
+  'qiniu-gemini-pro': getGenerationCreditCost('qiniu-gemini-pro', '1K'),
+  'qiniu-gemini-flash': getGenerationCreditCost('qiniu-gemini-flash', '1K'),
+  'volc-seedream-4.5': getGenerationCreditCost('volc-seedream-4.5', '1K'),
+  'volc-seedream-5.0-lite': getGenerationCreditCost('volc-seedream-5.0-lite', '1K'),
+  'flux-kontext-pro': getGenerationCreditCost('flux-kontext-pro', '1K'),
+  'gemini-pro-image': getGenerationCreditCost('gemini-pro-image', '1K'),
+  'gemini-flash-image': getGenerationCreditCost('gemini-flash-image', '1K'),
   'or-gemini-2.5-flash': getGenerationCreditCost('or-gemini-2.5-flash', getDefaultImageSize('or-gemini-2.5-flash')),
   'or-gemini-3.1-flash': getGenerationCreditCost('or-gemini-3.1-flash', getDefaultImageSize('or-gemini-3.1-flash')),
   'or-gemini-3-pro': getGenerationCreditCost('or-gemini-3-pro', getDefaultImageSize('or-gemini-3-pro')),
-  'ta-gemini-2.5-flash': 3,
+  'ta-gemini-2.5-flash': getGenerationCreditCost('ta-gemini-2.5-flash', '1K'),
   'ta-gemini-3.1-flash': getGenerationCreditCost('ta-gemini-3.1-flash', '1K'),
-  'ta-gemini-3-pro': 5,
-  'midjourney': 15,
-  'sd-3.5-ultra': 8,
-  'dall-e-4': 12,
-  'ideogram-3': 10,
-  'turbo-1k': 8,
-  'turbo-2k': 12,
-  'turbo-4k': 17,
+  'ta-gemini-3-pro': getGenerationCreditCost('ta-gemini-3-pro', '1K'),
+  'midjourney': getGenerationCreditCost('midjourney', '1K'),
+  'sd-3.5-ultra': getGenerationCreditCost('sd-3.5-ultra', '1K'),
+  'dall-e-4': getGenerationCreditCost('dall-e-4', '1K'),
+  'ideogram-3': getGenerationCreditCost('ideogram-3', '1K'),
+  'turbo-1k': BILLING_TIER_COSTS.fast,
+  'turbo-2k': BILLING_TIER_COSTS.balanced,
+  'turbo-4k': BILLING_TIER_COSTS.quality,
 }
 
 // --- Upload ---
@@ -389,6 +446,7 @@ export interface BlueprintImagePlan {
   description: string
   design_content: string
   type?: 'refined' | '3d' | 'mannequin' | 'detail' | 'selling_point'
+  scene_recipe?: GenesisSceneRecipe
 }
 
 export interface AnalysisAiMeta {
@@ -457,6 +515,10 @@ export interface AnalysisBlueprint {
   garment_profile?: GarmentProfile
   tryon_strategy?: TryOnStrategy
   copy_analysis?: BlueprintCopyAnalysis
+  product_summary?: string
+  product_visual_identity?: ProductVisualIdentity
+  style_directions?: GenesisStyleDirectionGroup[]
+  commercial_intent?: GenesisCommercialIntent
 }
 
 export type EcomDetailModuleId =
@@ -496,6 +558,42 @@ export interface GenesisStyleDirectionGroup {
   key: GenesisStyleDirectionKey
   options: string[]
   recommended: string | null
+}
+
+export type GenesisProductArchetype =
+  | 'apparel'
+  | 'beauty-liquid'
+  | 'beauty-bottle'
+  | 'footwear'
+  | 'electronics'
+  | 'jewelry'
+  | 'generic'
+
+export interface GenesisCommercialIntent {
+  archetype: GenesisProductArchetype
+  brief_summary: string
+  visual_tone: string
+  mood_keywords: string[]
+  composition_bias: string
+  set_treatment: string
+  lighting_bias: string
+  copy_strategy: string
+}
+
+export interface GenesisSceneRecipe {
+  shot_role: string
+  hero_focus: string
+  product_ratio: string
+  layout_method: string
+  subject_angle: string
+  support_elements: string
+  background_surface: string
+  background_elements: string
+  decorative_elements: string
+  lighting_setup: string
+  lens_hint: string
+  text_zone: string
+  mood_keywords: string
 }
 
 export interface ProductVisualIdentity {
@@ -564,6 +662,7 @@ export type ResultAssetSection = 'original' | 'edited'
 
 export type ResultAssetOrigin =
   | 'studio-genesis'
+  | 'studio-genesis-2'
   | 'ecom-studio'
   | 'clothing-model-tryon'
   | 'clothing-basic-photo'

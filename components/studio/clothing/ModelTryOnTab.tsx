@@ -38,6 +38,8 @@ function uid() {
   return crypto.randomUUID()
 }
 
+type ClothingTranslation = (key: string, values?: Record<string, string | number>) => string
+
 function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> {
   return new Promise((resolve, reject) => {
     const supabase = createClient()
@@ -167,133 +169,114 @@ function planMatchesOrientation(plan: BlueprintImagePlan, orientation: 'front' |
   return /背面|back/.test(text)
 }
 
-function buildTryOnDefaultPlans(typeState: BasicPhotoTypeState): BlueprintImagePlan[] {
+function buildTryOnDefaultPlans(typeState: BasicPhotoTypeState, t: ClothingTranslation): BlueprintImagePlan[] {
   const plans: BlueprintImagePlan[] = []
 
   if (typeState.whiteBgRetouched.front) {
     plans.push({
-      title: '白底精修图（正面）',
-      description: '参考主体正面穿着展示，突出服装正面版型与穿着状态',
-      design_content: '图片类型：白底精修图（正面）\n主体识别：保持参考主体身份或物种一致，使用正面站姿或正面面对镜头。\n服装识别：完整保留服装正面颜色、材质、版型、图案与关键工艺。\n试穿策略：服装真实穿在参考主体身上，不漂浮、不改款，正面展示穿着效果。\n构图方案：纯白背景，主体居中，突出服装正面轮廓与贴合状态。\n光影方案：柔和影棚光，保证材质纹理和体积感。\n背景描述：纯白无干扰背景。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：干净、专业、真实、商业电商。',
+      title: t('tryOnDefaultPlans.whiteBg.front.title'),
+      description: t('tryOnDefaultPlans.whiteBg.front.description'),
+      design_content: t('tryOnDefaultPlans.whiteBg.front.designContent'),
       type: 'refined',
     })
   }
 
   if (typeState.whiteBgRetouched.back) {
     plans.push({
-      title: '白底精修图（背面）',
-      description: '参考主体背面穿着展示，突出服装背部结构与细节',
-      design_content: '图片类型：白底精修图（背面）\n主体识别：保持参考主体身份或物种一致，使用背向镜头的稳定姿态。\n服装识别：完整保留服装背面颜色、材质、结构与背部工艺。\n试穿策略：服装真实穿在参考主体身上，不漂浮、不改款，背面展示结构细节。\n构图方案：纯白背景，主体居中，突出背部版型与穿着贴合。\n光影方案：柔和影棚光，清晰表现背部轮廓和材质。\n背景描述：纯白无干扰背景。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：干净、专业、真实、商业电商。',
+      title: t('tryOnDefaultPlans.whiteBg.back.title'),
+      description: t('tryOnDefaultPlans.whiteBg.back.description'),
+      design_content: t('tryOnDefaultPlans.whiteBg.back.designContent'),
       type: 'refined',
     })
   }
 
   if (typeState.threeDEffect.enabled) {
     plans.push({
-      title: '3D立体效果图',
-      description: '突出服装穿在参考主体身上的立体感、廓形与层次',
-      design_content: '图片类型：3D立体效果图\n主体识别：保持参考主体身份或物种一致，保留主体体态与姿势方向。\n服装识别：完整保留服装颜色、材质、轮廓和关键细节。\n试穿策略：强调服装穿在主体身上的体积感、层次感和自然贴合，不将主体变成 3D 模型或无人台。\n构图方案：中近景或七分身构图，突出服装轮廓与穿着层次。\n光影方案：方向性柔光增强立体感和褶皱层次。\n背景描述：简洁商业背景或纯净过渡背景。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：立体、层次、质感、商业感。',
+      title: t('tryOnDefaultPlans.threeD.title'),
+      description: t('tryOnDefaultPlans.threeD.description'),
+      design_content: t('tryOnDefaultPlans.threeD.designContent'),
       type: '3d',
     })
   }
 
   if (typeState.mannequin.enabled) {
     plans.push({
-      title: '人台图',
-      description: '主体标准展示图，严格保留服装原始材质与外观',
-      design_content: '图片类型：人台图\n主体识别：保持参考主体身份或物种一致，不得替换为真实无人台。\n服装识别：严格保留衣服原始材质、颜色、款式、剪裁、纹理和面料质感。\n试穿策略：将该类型解释为主体标准展示图，主体自然穿着服装，强调标准化展示与材质真实感。\n构图方案：稳定标准展示构图，突出服装整体外观。\n光影方案：真实棚拍或自然光下的高光、阴影和面料反光。\n背景描述：简洁标准背景，不干扰服装主体。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：标准化、真实、材质感、专业展示。',
+      title: t('tryOnDefaultPlans.mannequin.title'),
+      description: t('tryOnDefaultPlans.mannequin.description'),
+      design_content: t('tryOnDefaultPlans.mannequin.designContent'),
       type: 'mannequin',
     })
   }
 
   for (let index = 0; index < typeState.detailCloseup.count; index += 1) {
     plans.push({
-      title: `细节特写图 ${index + 1}`,
-      description: '放大展示服装与主体接触部位的面料、工艺与贴合细节',
-      design_content: '图片类型：细节特写图\n主体识别：保持参考主体身份或物种一致，聚焦局部穿着部位。\n服装识别：突出领口、袖口、纽扣、面料纹理或缝线等关键细节。\n试穿策略：展示服装穿在主体身上的局部贴合与真实材质，不改变服装结构。\n构图方案：微距或近景构图，聚焦一个高价值细节。\n光影方案：侧向柔光增强纹理与工艺。\n背景描述：浅景深或柔化背景。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：精细、质感、工艺、清晰。',
+      title: t('tryOnDefaultPlans.detail.title', { index: index + 1 }),
+      description: t('tryOnDefaultPlans.detail.description'),
+      design_content: t('tryOnDefaultPlans.detail.designContent'),
       type: 'detail',
     })
   }
 
   for (let index = 0; index < typeState.sellingPoint.count; index += 1) {
     plans.push({
-      title: `卖点展示图 ${index + 1}`,
-      description: '围绕核心卖点构图，突出主体穿着后的视觉记忆点',
-      design_content: '图片类型：卖点展示图\n主体识别：保持参考主体身份或物种一致，围绕主体穿着后的使用感或视觉冲击展开。\n服装识别：突出服装最关键的卖点，如版型、功能、材质或设计亮点。\n试穿策略：让服装真实穿在主体身上，通过构图和动作突出卖点，不漂移服装设计。\n构图方案：中景或特写结合，强化卖点区域与视觉层级。\n光影方案：强调光或轮廓光引导焦点。\n背景描述：服务卖点表达的简洁商业场景。\n配色方案：服装主色与辅色需精确还原，包含 hex 色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：高转化、聚焦、记忆点、商业感。',
+      title: t('tryOnDefaultPlans.sellingPoint.title', { index: index + 1 }),
+      description: t('tryOnDefaultPlans.sellingPoint.description'),
+      design_content: t('tryOnDefaultPlans.sellingPoint.designContent'),
       type: 'selling_point',
     })
   }
 
   if (plans.length === 0) {
     plans.push({
-      title: '主体试穿方案 1',
-      description: '参考主体穿着展示方案',
-      design_content: '图片类型：主体试穿展示\n主体识别：保持参考主体身份或物种一致。\n服装识别：保持颜色、材质、版型与关键细节一致。\n试穿策略：服装真实穿在参考主体身上。\n构图方案：中景商业构图。\n光影方案：柔和商业光。\n背景描述：简洁背景。\n配色方案：精确还原服装色值。\n文字内容：无文字（纯视觉）。\n视觉氛围关键词：真实、专业、商业电商。',
+      title: t('tryOnDefaultPlans.fallback.title'),
+      description: t('tryOnDefaultPlans.fallback.description'),
+      design_content: t('tryOnDefaultPlans.fallback.designContent'),
     })
   }
 
   return plans
 }
 
-function buildTryOnFallbackSpecs(isZh: boolean): string {
-  if (isZh) {
-    return `# 主体试穿设计规范
-
-## 核心视觉基调
-- 整体方向：真实自然的商业试穿展示
-- 背景环境：简洁干净，不干扰主体与服装
-- 色彩调性：以服装真实色彩为核心
-
-## 全局摄影参数建议
-- 镜头建议：50mm-85mm 商业人像或主体展示镜头
-- 布光原则：柔和主光搭配轮廓光，保留材质纹理
-- 画质要求：高清、锐利、无明显噪点
-
-## 主体识别摘要
-- 主体类型：以参考主体图为准，保持身份或物种一致
-- 锁定规则：不得人化动物，不得动物化人类，不得改变体态结构
-
-## 服装基础特征
-- 保持服装颜色、材质、版型、图案、logo、结构和关键工艺细节
-- 服装必须真实穿在主体身上，不能漂浮或改款
-
-## 文字系统规范
-- 默认纯视觉，无新增文字
-- 若需文字，必须遵守目标语言约束`
-  }
-
-  return `# Try-on Design Specifications
-
-## Overall Visual Theme
-- Direction: realistic commercial try-on presentation
-- Background: clean and uncluttered
-- Color tone: led by the garment's true color
-
-## Global Photography Specs
-- Lens: 50mm-85mm commercial portrait or subject showcase
-- Lighting: soft key light with subtle rim light
-- Quality: high-detail, sharp, low-noise
-
-## Subject Recognition Summary
-- Subject type must follow the reference subject image
-- Never humanize animals or animalize humans
-
-## Garment Core Traits
-- Preserve color, material, silhouette, logo, print, construction, and key details
-- The garment must be naturally worn by the reference subject
-
-## Typography System
-- Default to visual-only composition
-- Any added text must follow the target language rules`
+function buildTryOnFallbackSpecs(t: ClothingTranslation): string {
+  return [
+    `# ${t('tryOnFallbackSpecs.title')}`,
+    '',
+    `## ${t('tryOnFallbackSpecs.visualThemeTitle')}`,
+    `- ${t('tryOnFallbackSpecs.visualThemeDirection')}`,
+    `- ${t('tryOnFallbackSpecs.visualThemeBackground')}`,
+    `- ${t('tryOnFallbackSpecs.visualThemeColorTone')}`,
+    '',
+    `## ${t('tryOnFallbackSpecs.photoSpecsTitle')}`,
+    `- ${t('tryOnFallbackSpecs.photoSpecsLens')}`,
+    `- ${t('tryOnFallbackSpecs.photoSpecsLighting')}`,
+    `- ${t('tryOnFallbackSpecs.photoSpecsQuality')}`,
+    '',
+    `## ${t('tryOnFallbackSpecs.subjectSummaryTitle')}`,
+    `- ${t('tryOnFallbackSpecs.subjectSummaryType')}`,
+    `- ${t('tryOnFallbackSpecs.subjectSummaryLock')}`,
+    '',
+    `## ${t('tryOnFallbackSpecs.garmentTraitsTitle')}`,
+    `- ${t('tryOnFallbackSpecs.garmentTraitsPreserve')}`,
+    `- ${t('tryOnFallbackSpecs.garmentTraitsWear')}`,
+    '',
+    `## ${t('tryOnFallbackSpecs.typographyTitle')}`,
+    `- ${t('tryOnFallbackSpecs.typographyVisualOnly')}`,
+    `- ${t('tryOnFallbackSpecs.typographyLanguage')}`,
+  ].join('\n')
 }
 
-function normalizeTryOnBlueprint(resultData: unknown, typeState: BasicPhotoTypeState, isZh: boolean): AnalysisBlueprint {
-  const fallbackPlans = buildTryOnDefaultPlans(typeState)
+function normalizeTryOnBlueprint(
+  resultData: unknown,
+  typeState: BasicPhotoTypeState,
+  isZh: boolean,
+  t: ClothingTranslation,
+): AnalysisBlueprint {
+  const fallbackPlans = buildTryOnDefaultPlans(typeState, t)
 
   if (!isAnalysisBlueprint(resultData)) {
     return {
       images: fallbackPlans,
-      design_specs: buildTryOnFallbackSpecs(isZh),
+      design_specs: buildTryOnFallbackSpecs(t),
       _ai_meta: {
         model: 'unknown',
         usage: {},
@@ -336,7 +319,7 @@ function normalizeTryOnBlueprint(resultData: unknown, typeState: BasicPhotoTypeS
   return {
     ...resultData,
     images,
-    design_specs: resultData.design_specs || buildTryOnFallbackSpecs(isZh),
+    design_specs: resultData.design_specs || buildTryOnFallbackSpecs(t),
   }
 }
 
@@ -469,7 +452,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
       set('analyze', { status: 'done' })
       setProgress(65)
 
-      const blueprint = normalizeTryOnBlueprint(analysisJob.result_data, typeState, isZhLocale)
+      const blueprint = normalizeTryOnBlueprint(analysisJob.result_data, typeState, isZhLocale, t)
       setAnalysisBlueprint(blueprint)
       setEditableDesignSpecs(blueprint.design_specs)
       setEditableImagePlans(blueprint.images)
@@ -690,14 +673,14 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
   const leftPanel = (
     <>
       <fieldset disabled={isProcessing} className="space-y-4">
-        <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 space-y-3">
+        <div className="rounded-2xl border border-border bg-background p-5 space-y-3">
           <div className="flex items-center gap-3">
             <SectionIcon icon={ImageIcon} />
             <div className="flex-1">
-              <h3 className="text-[15px] font-semibold text-[#1a1d24]">{t('productImageTitle')}</h3>
-              <p className="text-[13px] text-[#7d818d]">{t('productImageDesc')}</p>
+              <h3 className="text-[15px] font-semibold text-foreground">{t('productImageTitle')}</h3>
+              <p className="text-[13px] text-muted-foreground">{t('productImageDesc')}</p>
             </div>
-            <span className="text-[13px] text-[#6f7380]">{productImages.length}/5</span>
+            <span className="text-[13px] text-muted-foreground">{productImages.length}/5</span>
           </div>
           <MultiImageUploader
             images={productImages}
@@ -716,12 +699,12 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
           />
         </div>
 
-        <div className="rounded-[28px] border border-[#d0d4dc] bg-white p-5 space-y-3">
+        <div className="rounded-2xl border border-border bg-background p-5 space-y-3">
           <div className="flex items-center gap-3">
             <SectionIcon icon={User} />
             <div>
-              <h3 className="text-[15px] font-semibold text-[#1a1d24]">{t('subjectImageTitle')}</h3>
-              <p className="text-[13px] text-[#7d818d]">{t('subjectImageDesc')}</p>
+              <h3 className="text-[15px] font-semibold text-foreground">{t('subjectImageTitle')}</h3>
+              <p className="text-[13px] text-muted-foreground">{t('subjectImageDesc')}</p>
             </div>
           </div>
           <ModelImageSection
@@ -758,7 +741,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
           <Button
             onClick={handleAnalyze}
             disabled={!canStart}
-            className="h-12 w-full rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#111318] disabled:bg-[#9a9ca3] disabled:text-white"
+            className="h-12 w-full rounded-2xl bg-primary text-base font-semibold text-white hover:bg-primary disabled:bg-text-tertiary disabled:text-white"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
             {t('analyzeProduct')}
@@ -776,7 +759,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
             </Button>
             <Button
               onClick={handleGenerate}
-              className="h-12 flex-1 rounded-2xl bg-[#191b22] text-base font-semibold text-white hover:bg-[#111318]"
+              className="h-12 flex-1 rounded-2xl bg-primary text-base font-semibold text-white hover:bg-primary"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
               {t('generateImages')}
@@ -824,8 +807,8 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     if (phase === 'input') {
       if (persistedHistoryGallery) return <div className="space-y-4">{persistedHistoryGallery}</div>
       return (
-        <div className="flex min-h-[700px] flex-col items-center justify-center text-center text-[#7f838f]">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[#eceef2] text-[#717682]">
+        <div className="flex min-h-[700px] flex-col items-center justify-center text-center text-muted-foreground">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <svg
               className="h-8 w-8"
               viewBox="0 0 24 24"
