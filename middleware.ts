@@ -2,7 +2,9 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 import createMiddleware from 'next-intl/middleware'
 import { routing } from './i18n/routing'
+import { getMaintenanceConfig } from '@/lib/maintenance'
 import { getSiteHost } from '@/lib/site'
+import { isAdminUser } from '@/types'
 
 const intlMiddleware = createMiddleware(routing)
 
@@ -26,12 +28,12 @@ function isProtectedPath(pathname: string): boolean {
 
 async function safeGetUser(
   supabase: ReturnType<typeof createServerClient>,
-): Promise<{ user: { id: string } | null }> {
+): Promise<{ user: { id: string; email: string | null } | null }> {
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    return { user: user ? { id: user.id } : null }
+    return { user: user ? { id: user.id, email: user.email ?? null } : null }
   } catch (error) {
     const status = typeof error === 'object' && error !== null && 'status' in error
       ? Number((error as { status?: unknown }).status)
@@ -43,6 +45,18 @@ async function safeGetUser(
 
     throw error
   }
+}
+
+function getLocaleFromPath(pathname: string): string {
+  const segment = pathname.split('/')[1]
+  return routing.locales.includes(segment as (typeof routing.locales)[number])
+    ? segment
+    : routing.defaultLocale
+}
+
+function isMaintenancePath(pathname: string): boolean {
+  const withoutLocale = pathname.replace(/^\/(en|zh)/, '')
+  return withoutLocale === '/maintenance' || withoutLocale.startsWith('/maintenance/')
 }
 
 export async function middleware(request: NextRequest) {
@@ -81,13 +95,30 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  let userPromise: Promise<{ user: { id: string; email: string | null } | null }> | null = null
+  const getCurrentUser = () => {
+    userPromise ??= safeGetUser(supabase)
+    return userPromise
+  }
+
+  const pathname = request.nextUrl.pathname
+  const locale = getLocaleFromPath(pathname)
+  const maintenance = await getMaintenanceConfig()
+
+  if (maintenance.enabled && !isMaintenancePath(pathname)) {
+    const { user } = await getCurrentUser()
+    if (!user || !isAdminUser(user.email)) {
+      const maintenanceUrl = new URL(`/${locale}/maintenance`, request.url)
+      return NextResponse.redirect(maintenanceUrl)
+    }
+  }
+
   // 3. Guard protected routes — only call getUser() when needed (it hits Supabase API)
-  if (isProtectedPath(request.nextUrl.pathname)) {
-    const { user } = await safeGetUser(supabase)
+  if (isProtectedPath(pathname)) {
+    const { user } = await getCurrentUser()
     if (!user) {
-      const locale = request.nextUrl.pathname.split('/')[1] || routing.defaultLocale
       const authUrl = new URL(`/${locale}/auth`, request.url)
-      authUrl.searchParams.set('returnTo', request.nextUrl.pathname)
+      authUrl.searchParams.set('returnTo', pathname)
       return NextResponse.redirect(authUrl)
     }
   }

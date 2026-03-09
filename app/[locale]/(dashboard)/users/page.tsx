@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import MaintenanceModeCard from '@/components/admin/MaintenanceModeCard'
+import { getMaintenanceConfig } from '@/lib/maintenance'
 import { isAdminUser } from '@/types'
 
 type UserRow = {
@@ -51,6 +53,7 @@ export default async function AdminUsersPage({
     totalUsersResult,
     last24hUsersResult,
     last7dUsersResult,
+    maintenanceConfig,
   ] = await Promise.all([
     admin
       .from('profiles')
@@ -68,6 +71,7 @@ export default async function AdminUsersPage({
       .from('profiles')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', last7dSince),
+    getMaintenanceConfig({ fresh: true }),
   ])
 
   if (recentUsersResult.error) {
@@ -138,6 +142,13 @@ export default async function AdminUsersPage({
           <p className="mt-2 text-3xl font-semibold text-foreground">{usersLast7d}</p>
         </div>
       </div>
+
+      <MaintenanceModeCard
+        locale={locale}
+        initialEnabled={maintenanceConfig.enabled}
+        initialUpdatedAt={maintenanceConfig.updatedAt}
+        initialUpdatedBy={maintenanceConfig.updatedBy}
+      />
 
       <div className="mt-6 overflow-hidden rounded-3xl border border-border bg-background">
         <div className="overflow-x-auto">
