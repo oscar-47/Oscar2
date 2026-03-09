@@ -38,6 +38,7 @@ import {
 import { friendlyError } from '@/lib/utils'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
+import { CreditCostBadge } from '@/components/generation/CreditCostBadge'
 
 type Phase = 'idle' | 'running' | 'success' | 'failed'
 type CardStatus = 'loading' | 'success' | 'failed'
@@ -226,6 +227,7 @@ export function RefinementStudioForm() {
   const insufficientCredits = total !== null && total < totalCost
   const isRunning = phase === 'running'
   const canGenerate = expectedCount > 0 && !isRunning && !insufficientCredits
+  const primaryActionClass = 'h-12 w-full rounded-2xl border border-primary/20 bg-primary text-primary-foreground shadow-sm hover:opacity-95 disabled:border-border disabled:bg-muted disabled:text-foreground/75 disabled:shadow-none disabled:opacity-100'
   const previewAspectRatio = toCssAspectRatio(aspectRatio)
 
   const addProductImages = useCallback((files: File[]) => {
@@ -610,7 +612,7 @@ export function RefinementStudioForm() {
             <div className="mt-0">
               {isRunning ? (
                 <div className="grid grid-cols-2 gap-2">
-                  <Button className="h-12 w-full rounded-2xl bg-primary text-white hover:opacity-90" disabled>
+                  <Button className={primaryActionClass} disabled>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {t('generating')}
                   </Button>
@@ -628,15 +630,18 @@ export function RefinementStudioForm() {
                 </div>
               ) : (
                 <Button
-                  className="h-12 w-full rounded-2xl bg-primary text-white hover:opacity-90 disabled:bg-muted disabled:text-white"
+                  className={primaryActionClass}
                   disabled={!canGenerate}
                   onClick={handleSubmit}
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
                   {expectedCount > 0 ? t('generateBatchCount', { count: expectedCount }) : t('generate')}
-                  <span className="ml-1.5 text-white/70 text-[12px]">({t('creditCost', { cost: totalCost })})</span>
                 </Button>
               )}
+            </div>
+
+            <div className="mt-2 flex justify-end">
+              <CreditCostBadge cost={totalCost} className="px-3 py-1 text-[13px]" />
             </div>
 
             {insufficientCredits && (

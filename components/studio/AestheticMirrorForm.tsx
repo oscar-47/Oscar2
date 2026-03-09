@@ -153,6 +153,7 @@ export function AestheticMirrorForm() {
   const canGenerate = mode === 'single'
     ? !!singleRefFile && singleProducts.length > 0 && !isRunning && !insufficientCredits
     : batchRefs.length > 0 && !!batchProduct && !isRunning && !insufficientCredits
+  const primaryActionClass = 'h-12 w-full rounded-2xl border border-primary/20 bg-primary text-primary-foreground shadow-sm hover:opacity-95 disabled:border-border disabled:bg-muted disabled:text-foreground/75 disabled:shadow-none disabled:opacity-100'
 
   // FLUX Kontext Pro supports all resolutions
 
@@ -544,13 +545,13 @@ export function AestheticMirrorForm() {
               </div>
 
               {isRunning ? (
-                <Button className="h-12 w-full rounded-2xl bg-primary" disabled>
+                <Button className={primaryActionClass} disabled>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   {t('generating')}
                 </Button>
               ) : (
                 <Button
-                  className="h-12 w-full rounded-2xl bg-primary text-white hover:opacity-90 disabled:bg-muted disabled:text-white"
+                  className={primaryActionClass}
                   disabled={!canGenerate}
                   onClick={handleSubmit}
                 >
