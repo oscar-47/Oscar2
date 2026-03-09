@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { ArrowRight, ImageIcon } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
 import Image from 'next/image'
+import type { CSSProperties } from 'react'
 
 function parsePlatforms(value: string): string[] {
   return value
@@ -26,6 +27,9 @@ type SectionImagePair = {
   imageClassName?: string
   beforeImageClassName?: string
   afterImageClassName?: string
+  imageStyle?: CSSProperties
+  beforeImageStyle?: CSSProperties
+  afterImageStyle?: CSSProperties
 }
 
 /**
@@ -57,7 +61,10 @@ const SECTION_IMAGES: SectionImagePair[] = [
     beforeFrameClassName: 'bg-[#ddd2c5]',
     afterFrameClassName: 'bg-[#ececec]',
     beforeImageClassName: 'p-3 sm:p-4',
-    afterImageClassName: 'p-0',
+    afterImageStyle: {
+      transform: 'translateX(-9%) scale(1.7)',
+      transformOrigin: 'center center',
+    },
   }, // Section 3: Photo Editing
 ]
 
@@ -67,12 +74,14 @@ function ImageSlot({
   label,
   objectFit = 'cover',
   imageClassName,
+  imageStyle,
 }: {
   src: string | null
   alt: string
   label: string
   objectFit?: 'cover' | 'contain'
   imageClassName?: string
+  imageStyle?: CSSProperties
 }) {
   if (src) {
     return (
@@ -80,6 +89,7 @@ function ImageSlot({
         src={src}
         alt={alt}
         fill
+        style={imageStyle}
         className={[
           objectFit === 'contain' ? 'object-contain' : 'object-cover',
           'transition-transform duration-500 group-hover:scale-[1.02]',
@@ -181,6 +191,7 @@ export function FeatureShowcase() {
                             label={tc('beforeLabel')}
                             objectFit={images.beforeObjectFit ?? images.objectFit}
                             imageClassName={images.beforeImageClassName ?? images.imageClassName}
+                            imageStyle={images.beforeImageStyle ?? images.imageStyle}
                           />
                         </div>
 
@@ -200,6 +211,7 @@ export function FeatureShowcase() {
                             label={tc('afterLabel')}
                             objectFit={images.afterObjectFit ?? images.objectFit}
                             imageClassName={images.afterImageClassName ?? images.imageClassName}
+                            imageStyle={images.afterImageStyle ?? images.imageStyle}
                           />
                         </div>
                       </div>
@@ -228,6 +240,7 @@ export function FeatureShowcase() {
                         label={tc('afterLabel')}
                         objectFit={images.beforeObjectFit ?? images.afterObjectFit ?? images.objectFit}
                         imageClassName={images.beforeImageClassName ?? images.afterImageClassName ?? images.imageClassName}
+                        imageStyle={images.beforeImageStyle ?? images.afterImageStyle ?? images.imageStyle}
                       />
                     </div>
                   )}
