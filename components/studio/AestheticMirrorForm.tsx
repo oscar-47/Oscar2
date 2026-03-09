@@ -367,10 +367,10 @@ export function AestheticMirrorForm() {
               </TabsList>
             </Tabs>
 
-            <section className="rounded-[28px] border border-violet-200 bg-gradient-to-b from-violet-50/60 to-white p-5 dark:border-violet-500/20 dark:from-violet-500/5 dark:to-background">
+            <section className="rounded-[28px] border border-border bg-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <SectionIcon icon={ImageIcon} className="mt-0.5 bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400" />
+                  <SectionIcon icon={ImageIcon} className="mt-0.5" />
                   <div>
                     <p className="text-[15px] font-semibold text-foreground">{t('referenceCardTitle')}</p>
                     <p className="mt-0.5 text-[13px] text-muted-foreground">{t('referenceCardDesc')}</p>
@@ -420,10 +420,10 @@ export function AestheticMirrorForm() {
               )}
             </section>
 
-            <section className="rounded-[28px] border border-blue-200 bg-gradient-to-b from-blue-50/60 to-white p-5 dark:border-blue-500/20 dark:from-blue-500/5 dark:to-background">
+            <section className="rounded-[28px] border border-border bg-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <SectionIcon icon={ImageIcon} className="mt-0.5 bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400" />
+                  <SectionIcon icon={ImageIcon} className="mt-0.5" />
                   <div>
                     <p className="text-[15px] font-semibold text-foreground">{t('productCardTitle')}</p>
                     <p className="mt-0.5 text-[13px] text-muted-foreground">{t('productCardDesc')}</p>
@@ -488,7 +488,7 @@ export function AestheticMirrorForm() {
               )}
             </section>
 
-            <section className="space-y-4 rounded-[28px] border border-amber-200 bg-gradient-to-b from-amber-50/60 to-white p-5 dark:border-amber-500/20 dark:from-amber-500/5 dark:to-background">
+            <section className="space-y-4 rounded-[28px] border border-border bg-white p-5">
               <Label className="text-[13px] font-medium text-muted-foreground">{t('promptTitle')}</Label>
               <Textarea
                 value={userPrompt}
@@ -570,9 +570,9 @@ export function AestheticMirrorForm() {
             </section>
           </div>
 
-          <div className="min-h-[840px] rounded-[28px] border border-emerald-200 bg-gradient-to-b from-emerald-50/40 to-white p-5 sm:p-6 dark:border-emerald-500/20 dark:from-emerald-500/5 dark:to-background">
+          <div className="min-h-[840px] rounded-[28px] border border-border bg-white p-5 sm:p-6">
             <div className="mb-4 flex items-start gap-3">
-              <SectionIcon icon={Sparkles} className="mt-0.5 bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400" />
+              <SectionIcon icon={Sparkles} className="mt-0.5" />
               <div>
                 <h2 className="text-[15px] font-semibold text-foreground">{resultPanelTitle}</h2>
                 <p className="text-[13px] text-muted-foreground">{resultPanelSubtitle}</p>
