@@ -34,6 +34,13 @@ interface HistoryAsset {
   deliveredSize?: string
   sizeStatus?: ResultAsset['sizeStatus']
   normalizedByServer?: boolean
+  retentionExpired?: boolean
+  retentionDays?: number
+}
+
+interface HistoryPolicy {
+  isPaidUser: boolean
+  freeRetentionDays: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -108,6 +115,10 @@ function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
   const urls = extractResultUrls(row)
   const prompt = extractPrompt(row.payload)
   const metadata = extractResultAssetMetadata(row.result_data)
+  const retentionExpired = isRecord(row.result_data) && typeof row.result_data.retention_deleted_at === 'string'
+  const retentionDays = isRecord(row.result_data) && typeof row.result_data.retention_days === 'number'
+    ? row.result_data.retention_days
+    : undefined
   if (urls.length > 0) {
     return urls.map((url, index) => ({
       id: `${row.id}_${index}`,
@@ -119,6 +130,8 @@ function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
       createdAt: row.created_at,
       errorMessage: row.error_message,
       section: 'original',
+      retentionExpired,
+      retentionDays,
       ...metadata,
     }))
   }
@@ -133,6 +146,8 @@ function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
     createdAt: row.created_at,
     errorMessage: row.error_message,
     section: 'original',
+    retentionExpired,
+    retentionDays,
     ...metadata,
   }]
 }
@@ -189,6 +204,7 @@ export function HistoryPage() {
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [policy, setPolicy] = useState<HistoryPolicy | null>(null)
 
   // Selection mode
   const [selectionMode, setSelectionMode] = useState(false)
@@ -234,10 +250,11 @@ export function HistoryPage() {
       const text = await res.text()
       throw new Error(text || `HISTORY_FETCH_FAILED_${res.status}`)
     }
-    const payload = (await res.json()) as { rows?: HistoryJobRow[]; hasMore?: boolean }
+    const payload = (await res.json()) as { rows?: HistoryJobRow[]; hasMore?: boolean; policy?: HistoryPolicy }
     const rows = payload.rows ?? []
     const mapped = rows.flatMap(mapJobToAssets)
 
+    setPolicy(payload.policy ?? null)
     setItems((prev) => append ? [...prev, ...mapped] : mapped)
     setHasMore(Boolean(payload.hasMore))
     setPage(nextPage)
@@ -355,7 +372,11 @@ export function HistoryPage() {
             ) : (
               <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
                 <ImageIcon className="h-7 w-7" />
-                <p className="mt-2 text-xs">{t('noImage')}</p>
+                <p className="mt-2 px-3 text-center text-xs">
+                  {item.retentionExpired
+                    ? t('expiredImage', { days: item.retentionDays ?? policy?.freeRetentionDays ?? 3 })
+                    : t('noImage')}
+                </p>
               </div>
             )}
 
@@ -466,6 +487,18 @@ export function HistoryPage() {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>{t('loading')}</span>
+        </div>
+      )}
+
+      {!loading && policy && !policy.isPaidUser && (
+        <div className="mb-4 rounded-2xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-medium">{t('freeRetentionTitle', { days: policy.freeRetentionDays })}</p>
+              <p className="text-amber-900/80">{t('freeRetentionBody', { days: policy.freeRetentionDays })}</p>
+            </div>
+          </div>
         </div>
       )}
 

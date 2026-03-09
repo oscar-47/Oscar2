@@ -814,10 +814,13 @@
     "loadMore": "加载更多",
     "retry": "重试",
     "loadError": "加载历史记录失败，请稍后重试。",
+    "freeRetentionTitle": "非付费用户的历史图片仅保留 {days} 天",
+    "freeRetentionBody": "超过 {days} 天的历史图片会自动清除。需要长期保留，请及时下载，或升级为付费用户。",
     "open": "查看",
     "download": "下载",
     "imageAlt": "历史生成图片",
     "noImage": "暂无结果图",
+    "expiredImage": "已自动清除（非付费用户仅保留 {days} 天）",
     "status": {
       "processing": "处理中",
       "success": "完成",

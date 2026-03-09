@@ -814,10 +814,13 @@
     "loadMore": "Load more",
     "retry": "Retry",
     "loadError": "Failed to load history. Please try again.",
+    "freeRetentionTitle": "Free accounts keep history images for {days} days",
+    "freeRetentionBody": "History images older than {days} days are removed automatically. Download anything you need to keep, or upgrade to a paid plan.",
     "open": "Open",
     "download": "Download",
     "imageAlt": "Generated history image",
     "noImage": "No result image",
+    "expiredImage": "Removed automatically after {days} days on free accounts",
     "status": {
       "processing": "Processing",
       "success": "Complete",
