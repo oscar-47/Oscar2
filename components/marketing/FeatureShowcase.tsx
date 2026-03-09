@@ -62,7 +62,7 @@ const SECTION_IMAGES: SectionImagePair[] = [
     afterFrameClassName: 'bg-[#ececec]',
     beforeImageClassName: 'p-3 sm:p-4',
     afterImageStyle: {
-      transform: 'translateX(-9%) scale(1.7)',
+      transform: 'translateX(-9%) rotate(180deg) scale(1.7)',
       transformOrigin: 'center center',
     },
   }, // Section 3: Photo Editing
