@@ -8,6 +8,7 @@ import { LanguageSwitcher } from './LanguageSwitcher'
 export function Navbar() {
   const t = useTranslations('landing.nav')
   const locale = useLocale()
+  const ecomAuthHref = `/${locale}/auth?returnTo=${encodeURIComponent(`/${locale}/ecom-studio`)}`
 
   return (
     <header className="sticky top-0 z-50 w-full bg-background/90 backdrop-blur-sm">
@@ -22,7 +23,7 @@ export function Navbar() {
         <div className="flex items-center gap-3">
           <LanguageSwitcher />
           <Link
-            href={`/${locale}/auth`}
+            href={ecomAuthHref}
             prefetch
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-sm font-semibold text-accent-foreground transition-all press-scale hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >

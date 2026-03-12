@@ -32,6 +32,7 @@ export function Hero() {
     { title: t('feature2Title'), desc: t('feature2Desc') },
     { title: t('feature3Title'), desc: t('feature3Desc') },
   ]
+  const ecomAuthHref = `/${locale}/auth?returnTo=${encodeURIComponent(`/${locale}/ecom-studio`)}`
 
   return (
     <section className="relative flex min-h-[calc(100vh-64px)] items-center overflow-hidden bg-background pb-20 pt-24 sm:pb-28 sm:pt-32">
@@ -51,7 +52,7 @@ export function Hero() {
           </p>
 
           <Link
-            href={`/${locale}/auth`}
+            href={ecomAuthHref}
             className="mt-10 inline-flex h-12 items-center gap-2 rounded-lg bg-accent px-8 text-sm font-semibold text-accent-foreground transition-all press-scale hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:h-13 sm:px-10 sm:text-base"
           >
             {t('cta')}

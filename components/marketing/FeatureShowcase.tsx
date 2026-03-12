@@ -111,6 +111,7 @@ export function FeatureShowcase() {
   const tc = useTranslations('landing.showcase')
   const locale = useLocale()
   const reduceMotion = useReducedMotion()
+  const ecomAuthHref = `/${locale}/auth?returnTo=${encodeURIComponent(`/${locale}/ecom-studio`)}`
 
   const sections = [1, 2, 3].map((n) => ({
     title: t(`features.section${n}.title`),
@@ -262,7 +263,7 @@ export function FeatureShowcase() {
           </h2>
 
           <Link
-            href={`/${locale}/auth`}
+            href={ecomAuthHref}
             className="mx-auto mt-8 inline-flex h-12 items-center gap-2 rounded-lg bg-accent px-7 text-sm font-semibold text-accent-foreground transition-all press-scale hover:opacity-90 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:h-[54px] sm:px-9 sm:text-base"
           >
             {t('bottomCta.button')}
