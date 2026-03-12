@@ -71,7 +71,7 @@ export async function middleware(request: NextRequest) {
 
   if (request.nextUrl.pathname === '/') {
     const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = `/${routing.defaultLocale}/studio-genesis`
+    redirectUrl.pathname = `/${routing.defaultLocale}/ecom-studio`
     return NextResponse.redirect(redirectUrl)
   }
 

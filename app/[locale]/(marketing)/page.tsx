@@ -22,5 +22,5 @@ export default async function LandingPage({
 }) {
   const { locale } = await params
 
-  redirect(`/${locale}/studio-genesis`)
+  redirect(`/${locale}/ecom-studio`)
 }
