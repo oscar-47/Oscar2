@@ -69,6 +69,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl, 301)
   }
 
+  if (request.nextUrl.pathname === '/') {
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = `/${routing.defaultLocale}/studio-genesis`
+    return NextResponse.redirect(redirectUrl)
+  }
+
   // 1. Run next-intl middleware first (handles locale detection & redirects)
   const intlResponse = intlMiddleware(request)
 

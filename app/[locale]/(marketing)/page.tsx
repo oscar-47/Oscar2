@@ -1,8 +1,6 @@
 import type { Metadata } from 'next'
-import { Hero } from '@/components/marketing/Hero'
-import { ShowcaseGallery } from '@/components/marketing/ShowcaseGallery'
-import { FeatureShowcase } from '@/components/marketing/FeatureShowcase'
-import { buildMarketingMetadata, buildMarketingStructuredData, type SiteLocale } from '@/lib/site'
+import { redirect } from 'next/navigation'
+import { buildMarketingMetadata, type SiteLocale } from '@/lib/site'
 
 export async function generateMetadata({
   params,
@@ -23,20 +21,6 @@ export default async function LandingPage({
   params: Promise<{ locale: string }>
 }) {
   const { locale } = await params
-  const structuredData = buildMarketingStructuredData(locale as SiteLocale)
 
-  return (
-    <>
-      {structuredData.map((entry, index) => (
-        <script
-          key={`structured-data-${index}`}
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(entry) }}
-        />
-      ))}
-      <Hero />
-      <FeatureShowcase />
-      <ShowcaseGallery />
-    </>
-  )
+  redirect(`/${locale}/studio-genesis`)
 }
