@@ -1,8 +1,15 @@
 export type EdgeImageSize = "1K" | "2K" | "4K";
+export type EdgeBillingTier = "fast" | "balanced" | "quality";
 
 export const DEFAULT_EDGE_MODEL = "or-gemini-3.1-flash";
 
 export const LEGACY_MODEL_ALIASES: Record<string, string> = {};
+
+export const EDGE_BILLING_TIER_COSTS: Record<EdgeBillingTier, number> = {
+  fast: 15,
+  balanced: 30,
+  quality: 50,
+};
 
 export const OPENROUTER_MODEL_MAP: Record<string, string> = {
   "or-gemini-2.5-flash": "google/gemini-2.5-flash-image",
@@ -41,15 +48,31 @@ const MODEL_IMAGE_SIZES: Record<string, { publicSizes: EdgeImageSize[]; internal
     internalSizes: ["1K"],
     defaultSize: "1K",
   },
+  "fal-nano-banana-pro": {
+    publicSizes: ["1K", "2K", "4K"],
+    internalSizes: ["1K", "2K", "4K"],
+    defaultSize: "1K",
+  },
+};
+
+const MODEL_BILLING_TIERS: Record<string, EdgeBillingTier> = {
+  "or-gemini-2.5-flash": "fast",
+  "or-gemini-3.1-flash": "balanced",
+  "or-gemini-3-pro": "quality",
+  "ta-gemini-2.5-flash": "fast",
+  "ta-gemini-3.1-flash": "balanced",
+  "ta-gemini-3-pro": "quality",
+  "fal-nano-banana-pro": "quality",
 };
 
 const MODEL_CREDIT_COSTS: Record<string, Partial<Record<EdgeImageSize, number>>> = {
-  "or-gemini-2.5-flash": { "1K": 3, "2K": 5 },
-  "or-gemini-3.1-flash": { "1K": 5, "2K": 8, "4K": 15 },
-  "or-gemini-3-pro": { "1K": 10 },
-  "ta-gemini-2.5-flash": { "1K": 3 },
-  "ta-gemini-3.1-flash": { "1K": 3 },
-  "ta-gemini-3-pro": { "1K": 5 },
+  "or-gemini-2.5-flash": { "1K": EDGE_BILLING_TIER_COSTS.fast },
+  "or-gemini-3.1-flash": { "1K": EDGE_BILLING_TIER_COSTS.balanced },
+  "or-gemini-3-pro": { "1K": EDGE_BILLING_TIER_COSTS.quality },
+  "ta-gemini-2.5-flash": { "1K": EDGE_BILLING_TIER_COSTS.fast },
+  "ta-gemini-3.1-flash": { "1K": EDGE_BILLING_TIER_COSTS.balanced },
+  "ta-gemini-3-pro": { "1K": EDGE_BILLING_TIER_COSTS.quality },
+  "fal-nano-banana-pro": { "1K": EDGE_BILLING_TIER_COSTS.quality, "2K": EDGE_BILLING_TIER_COSTS.quality, "4K": 100 },
 };
 
 export function normalizeRequestedModel(model: string | null | undefined): string {
@@ -71,6 +94,11 @@ export function getSupportedImageSizesForModel(
 export function getDefaultImageSizeForModel(model: string | null | undefined): EdgeImageSize {
   const normalizedModel = normalizeRequestedModel(model);
   return MODEL_IMAGE_SIZES[normalizedModel]?.defaultSize ?? "1K";
+}
+
+export function getBillingTierForModel(model: string | null | undefined): EdgeBillingTier {
+  const normalizedModel = normalizeRequestedModel(model);
+  return MODEL_BILLING_TIERS[normalizedModel] ?? MODEL_BILLING_TIERS[DEFAULT_EDGE_MODEL] ?? "balanced";
 }
 
 export function isImageSizeSupportedForModel(
@@ -96,5 +124,6 @@ export function sanitizeImageSizeForModel(
 export function getCreditCostForModel(model: string | null | undefined, imageSize: string | null | undefined): number {
   const normalizedModel = normalizeRequestedModel(model);
   const normalizedSize = sanitizeImageSizeForModel(normalizedModel, imageSize, { includeInternal: true });
-  return MODEL_CREDIT_COSTS[normalizedModel]?.[normalizedSize] ?? 5;
+  return MODEL_CREDIT_COSTS[normalizedModel]?.[normalizedSize]
+    ?? EDGE_BILLING_TIER_COSTS[getBillingTierForModel(normalizedModel)];
 }

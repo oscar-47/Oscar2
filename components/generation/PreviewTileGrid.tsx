@@ -1,18 +1,13 @@
 'use client'
 
 import { ImageIcon } from 'lucide-react'
+import { getAspectRatioCardStyle, toCssAspectRatio } from '@/components/generation/aspect-ratio-layout'
 
 interface PreviewTileGridProps {
   count: number
   aspectRatio?: string
   labels?: string[]
   className?: string
-}
-
-function toCssAspectRatio(aspectRatio: string): string {
-  const [w, h] = aspectRatio.split(':').map((v) => Number(v))
-  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return '4 / 3'
-  return `${w} / ${h}`
 }
 
 export function PreviewTileGrid({
@@ -32,8 +27,8 @@ export function PreviewTileGrid({
         {items.map((_, index) => (
           <div
             key={`preview-tile-${index}`}
-            className="relative w-[220px] max-w-full overflow-hidden rounded-2xl border border-border bg-secondary"
-            style={{ aspectRatio: cssAspectRatio }}
+            className="relative max-w-full shrink-0 overflow-hidden rounded-2xl border border-border bg-secondary"
+            style={getAspectRatioCardStyle(cssAspectRatio)}
           >
             <div className="absolute inset-0 m-3 rounded-xl border border-dashed border-border" />
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">

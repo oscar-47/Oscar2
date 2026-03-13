@@ -4,6 +4,11 @@
  */
 import { getOssSts } from './edge-functions'
 import type { OssStsCredentials } from '@/types'
+import {
+  imageFileValidationMessage,
+  validateImageFile,
+  validateImageFiles,
+} from '@/lib/upload-constraints'
 
 export interface UploadResult {
   /** Full public URL of the uploaded file */
@@ -30,6 +35,11 @@ function joinUrl(base: string, path: string): string {
  * - POST form upload (qiniu)
  */
 export async function uploadFile(file: File): Promise<UploadResult> {
+  const validation = validateImageFile(file)
+  if (!validation.ok) {
+    throw new Error(imageFileValidationMessage(validation, false))
+  }
+
   const key = `uploads/${Date.now()}_${normalizeUploadFileName(file.name)}`
   const creds: OssStsCredentials = await getOssSts({
     prefix: 'uploads',
@@ -77,5 +87,10 @@ export async function uploadFile(file: File): Promise<UploadResult> {
  * Upload multiple files concurrently.
  */
 export async function uploadFiles(files: File[]): Promise<UploadResult[]> {
+  const { rejected } = validateImageFiles(files)
+  if (rejected.length > 0) {
+    throw new Error(imageFileValidationMessage(rejected[0].reason, false))
+  }
+
   return Promise.all(files.map(uploadFile))
 }

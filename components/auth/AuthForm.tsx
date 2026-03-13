@@ -12,7 +12,7 @@ export function AuthForm() {
   const locale = useLocale()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const returnTo = searchParams.get('returnTo') ?? `/${locale}/studio-genesis`
+  const returnTo = searchParams.get('returnTo') ?? `/${locale}/ecom-studio`
 
   const [mode, setMode] = useState<Mode>('sign-in')
   const [email, setEmail] = useState('')

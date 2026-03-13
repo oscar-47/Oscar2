@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
+import { getAspectRatioCardStyle } from '@/components/generation/aspect-ratio-layout'
 import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
 import { ResultGallery } from '@/components/generation/ResultGallery'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
@@ -18,6 +19,8 @@ import { CreditCostBadge } from '@/components/generation/CreditCostBadge'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { ModelTextHint } from '@/components/studio/ModelTextHint'
+import { StudioPageHero } from '@/components/studio/StudioPageHero'
+import { SupportFeedbackLink } from '@/components/support/SupportFeedbackLink'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { uploadFile, uploadFiles } from '@/lib/api/upload'
 import { analyzeSingle, processGenerationJob } from '@/lib/api/edge-functions'
@@ -36,9 +39,17 @@ import {
 import { useUserEmail } from '@/lib/hooks/useUserEmail'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import { friendlyError } from '@/lib/utils'
+import {
+  MAX_IMAGE_UPLOAD_MB,
+  imageFileValidationMessage,
+  validateImageFile,
+  validateImageFiles,
+} from '@/lib/upload-constraints'
 import { Download, GalleryVerticalEnd, Image as ImageIcon, LayoutGrid, Loader2, Plus, ShieldCheck, Sparkles } from 'lucide-react'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
+import { WORKFLOW_PRIMARY_BUTTON_CLASS } from '@/components/studio/workflow-button-styles'
+
 
 type Mode = 'single' | 'batch'
 type Phase = 'idle' | 'running' | 'success' | 'failed'
@@ -47,6 +58,10 @@ type Card = { url: string | null; status: CardStatus; error?: string; referenceI
 type UImg = { file: File; previewUrl: string }
 
 const uid = () => crypto.randomUUID()
+const AESTHETIC_ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'] as const
+const AESTHETIC_FILE_VALIDATION_OPTIONS = {
+  allowedExtensions: AESTHETIC_ALLOWED_EXTENSIONS,
+} as const
 
 function toCssAspectRatio(aspectRatio: AspectRatio): string {
   const [w, h] = aspectRatio.split(':').map((v) => Number(v))
@@ -123,6 +138,7 @@ export function AestheticMirrorForm() {
     clearAssets: clearResultAssets,
   } = useResultAssetSession('aesthetic-mirror')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [downloadingAll, setDownloadingAll] = useState(false)
 
   // Session persistence removed: text persisted but images didn't on refresh.
@@ -155,7 +171,17 @@ export function AestheticMirrorForm() {
   const canGenerate = mode === 'single'
     ? !!singleRefFile && singleProducts.length > 0 && !isRunning && !insufficientCredits
     : batchRefs.length > 0 && !!batchProduct && !isRunning && !insufficientCredits
-  const primaryActionClass = 'h-12 w-full rounded-2xl border border-primary/20 bg-primary text-primary-foreground shadow-sm hover:opacity-95 disabled:border-border disabled:bg-muted disabled:text-foreground/75 disabled:shadow-none disabled:opacity-100'
+  const primaryActionClass = `${WORKFLOW_PRIMARY_BUTTON_CLASS} w-full`
+
+  const getAestheticUploadError = useCallback((file: File | null | undefined): string | null => {
+    const result = validateImageFile(file, AESTHETIC_FILE_VALIDATION_OPTIONS)
+    return result.ok ? null : imageFileValidationMessage(result, isZh)
+  }, [isZh])
+
+  const getAestheticBatchError = useCallback((files: File[]): string | null => {
+    const { rejected } = validateImageFiles(files, AESTHETIC_FILE_VALIDATION_OPTIONS)
+    return rejected.length > 0 ? imageFileValidationMessage(rejected[0].reason, isZh) : null
+  }, [isZh])
 
   // FLUX Kontext Pro supports all resolutions
 
@@ -328,24 +354,58 @@ export function AestheticMirrorForm() {
     }
   }
 
-  const addBatchRefs = (files: FileList | null) => setBatchRefs((prev) => [...prev, ...Array.from(files ?? []).filter((f) => f.type.startsWith('image/')).slice(0, Math.max(0, 12 - prev.length)).map((file) => ({ file, previewUrl: URL.createObjectURL(file) }))])
-  const addSingleProducts = (files: FileList | null) => setSingleProducts((prev) => [...prev, ...Array.from(files ?? []).filter((f) => f.type.startsWith('image/')).slice(0, Math.max(0, 6 - prev.length)).map((file) => ({ file, previewUrl: URL.createObjectURL(file) }))])
+  const addBatchRefs = (files: FileList | null) => {
+    setUploadError(null)
+    const incoming = Array.from(files ?? [])
+    const validationError = getAestheticBatchError(incoming)
+    if (validationError) {
+      setUploadError(validationError)
+      return
+    }
+
+    setBatchRefs((prev) => {
+      const remaining = Math.max(0, 12 - prev.length)
+      if (remaining <= 0) {
+        setUploadError(t('uploadLimitReached'))
+        return prev
+      }
+      const toAdd = incoming.slice(0, remaining).map((file) => ({ file, previewUrl: URL.createObjectURL(file) }))
+      if (incoming.length > remaining) setUploadError(t('uploadLimitReached'))
+      return [...prev, ...toAdd]
+    })
+  }
+
+  const addSingleProducts = (files: FileList | null) => {
+    setUploadError(null)
+    const incoming = Array.from(files ?? [])
+    const validationError = getAestheticBatchError(incoming)
+    if (validationError) {
+      setUploadError(validationError)
+      return
+    }
+
+    setSingleProducts((prev) => {
+      const remaining = Math.max(0, 6 - prev.length)
+      if (remaining <= 0) {
+        setUploadError(t('uploadLimitReached'))
+        return prev
+      }
+      const toAdd = incoming.slice(0, remaining).map((file) => ({ file, previewUrl: URL.createObjectURL(file) }))
+      if (incoming.length > remaining) setUploadError(t('uploadLimitReached'))
+      return [...prev, ...toAdd]
+    })
+  }
 
   return (
     <>
     <CorePageShell maxWidthClass="max-w-[1360px]" contentClassName="space-y-8">
-        <div className="mb-7 flex items-start gap-3">
-          <SectionIcon icon={ImageIcon} className="mt-1" />
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-foreground">{t('heroTitle')}</h1>
-              <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-600 dark:bg-violet-500/15 dark:text-violet-400">
-                {t('heroBadge')}
-              </span>
-            </div>
-            <p className="mt-1 text-[13px] text-muted-foreground">{t('heroDescription')}</p>
-          </div>
-        </div>
+        <StudioPageHero
+          icon={ImageIcon}
+          badge={t('heroBadge')}
+          title={t('heroTitle')}
+          description={t('heroDescription')}
+          badgeClassName="border-violet-200/80 bg-violet-50/90 text-violet-700"
+        />
 
         <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="space-y-4">
@@ -385,6 +445,12 @@ export function AestheticMirrorForm() {
                 <div className="mt-4">
                   <ImageUploader
                     onFileSelected={(f) => {
+                      const validationError = getAestheticUploadError(f)
+                      if (validationError) {
+                        setUploadError(validationError)
+                        return
+                      }
+                      setUploadError(null)
                       if (singleRefPreview) URL.revokeObjectURL(singleRefPreview)
                       setSingleRefFile(f)
                       setSingleRefPreview(URL.createObjectURL(f))
@@ -398,7 +464,7 @@ export function AestheticMirrorForm() {
                     previewUrl={singleRefPreview}
                     disabled={isRunning}
                     label={t('uploadReference')}
-                    sublabel={t('referenceUploadHint')}
+                    sublabel={`${t('referenceUploadHint')} · max ${MAX_IMAGE_UPLOAD_MB} MB`}
                   />
                 </div>
               ) : (
@@ -420,6 +486,12 @@ export function AestheticMirrorForm() {
                   </div>
                   <input ref={batchRefInputRef} type="file" multiple accept="image/*" className="hidden" onChange={(e) => { addBatchRefs(e.target.files); e.currentTarget.value = '' }} />
                 </>
+              )}
+              {uploadError && (
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs text-destructive">{uploadError}</p>
+                  <SupportFeedbackLink />
+                </div>
               )}
             </section>
 
@@ -486,8 +558,39 @@ export function AestheticMirrorForm() {
                       <Plus className="mx-auto h-5 w-5" />
                     </button>
                   )}
-                  <input ref={batchProductInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) setBatchProduct({ file: f, previewUrl: URL.createObjectURL(f) }); e.currentTarget.value = '' }} />
+                  <input
+                    ref={batchProductInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) {
+                        const validationError = getAestheticUploadError(f)
+                        if (validationError) {
+                          setUploadError(validationError)
+                        } else {
+                          setUploadError(null)
+                          setBatchProduct({ file: f, previewUrl: URL.createObjectURL(f) })
+                        }
+                      }
+                      e.currentTarget.value = ''
+                    }}
+                  />
                 </>
+              )}
+              {!uploadError && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {isZh
+                    ? `支持 JPG、PNG、WEBP，单张最大 ${MAX_IMAGE_UPLOAD_MB} MB`
+                    : `JPG, PNG, WEBP · max ${MAX_IMAGE_UPLOAD_MB} MB each`}
+                </p>
+              )}
+              {uploadError && (
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs text-destructive">{uploadError}</p>
+                  <SupportFeedbackLink />
+                </div>
               )}
             </section>
 
@@ -595,13 +698,13 @@ export function AestheticMirrorForm() {
                   {cards.map((c, i) => c.status === 'success' && c.url ? (
                     <div
                       key={i}
-                      className="relative w-[220px] max-w-full overflow-hidden rounded-2xl border border-border bg-white opacity-60"
-                      style={{ aspectRatio: previewAspectRatio }}
+                      className="relative max-w-full shrink-0 overflow-hidden rounded-2xl border border-border bg-white opacity-60"
+                      style={getAspectRatioCardStyle(previewAspectRatio)}
                     >
                       <img src={c.url} alt={`prev-${i + 1}`} className="w-full object-cover" />
                     </div>
                   ) : (
-                    <FluidPendingCard key={i} aspectRatio={previewAspectRatio} className="w-[220px] max-w-full rounded-2xl" />
+                    <FluidPendingCard key={i} aspectRatio={previewAspectRatio} className="max-w-full shrink-0 rounded-2xl" style={getAspectRatioCardStyle(previewAspectRatio)} />
                   ))}
                 </div>
                 {resultAssets.length > 0 && (
@@ -647,6 +750,7 @@ export function AestheticMirrorForm() {
               <div className="space-y-3">
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
                   <p className="text-sm text-destructive">{errorMessage ?? tc('error')}</p>
+                  <SupportFeedbackLink className="mt-2" />
                 </div>
                 {resultAssets.length > 0 && (
                   <ResultGallery

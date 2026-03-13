@@ -1,15 +1,18 @@
 'use client'
 
+import type { CSSProperties } from 'react'
+
 interface FluidPendingCardProps {
   aspectRatio: string
   className?: string
+  style?: CSSProperties
 }
 
-export function FluidPendingCard({ aspectRatio, className }: FluidPendingCardProps) {
+export function FluidPendingCard({ aspectRatio, className, style }: FluidPendingCardProps) {
   return (
     <div
       className={`relative overflow-hidden rounded-xl bg-white dark:bg-zinc-950 ${className ?? ''}`}
-      style={{ aspectRatio }}
+      style={{ aspectRatio, ...style }}
     >
       <div
         className="absolute left-[-30%] top-[-30%] h-[130%] w-[130%] rounded-full bg-violet-400/40"

@@ -48,7 +48,8 @@ export type SubscriptionStatus = 'active' | 'canceled' | 'past_due'
 
 export interface Profile {
   id: string
-  email: string
+  email: string | null
+  phone: string | null
   full_name: string | null
   avatar_url: string | null
   subscription_credits: number
@@ -108,6 +109,52 @@ export interface RedeemCodeClaim {
   created_at: string
 }
 
+export type SupportFeedbackStatus = 'open' | 'replied'
+export type SupportFeedbackCategory = 'general' | 'creator_program'
+export type CreatorProgramMetricType = 'like' | 'favorite'
+export type CreatorProgramStage = '3d' | '7d'
+
+export interface SupportFeedbackAttachment {
+  publicUrl: string
+  path: string
+  fileName?: string | null
+  mimeType?: string | null
+  size?: number | null
+}
+
+export interface SupportFeedback {
+  id: string
+  user_id: string
+  message: string
+  attachments: SupportFeedbackAttachment[]
+  category: SupportFeedbackCategory
+  creator_content_url: string | null
+  creator_platform: string | null
+  creator_published_at: string | null
+  status: SupportFeedbackStatus
+  admin_reply: string | null
+  admin_replied_at: string | null
+  admin_replied_by: string | null
+  user_seen_reply_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreatorProgramRewardRow {
+  id: string
+  feedback_id: string
+  user_id: string
+  stage: CreatorProgramStage
+  metric_type: CreatorProgramMetricType
+  metric_value: number
+  reward_credits: number
+  transaction_id: string | null
+  admin_note: string | null
+  email_sent_at: string | null
+  email_error: string | null
+  created_at: string
+}
+
 // --- AI generation models ---
 
 export type BuiltInGenerationModel =
@@ -129,6 +176,8 @@ export type BuiltInGenerationModel =
   | 'ta-gemini-2.5-flash'
   | 'ta-gemini-3.1-flash'
   | 'ta-gemini-3-pro'
+  // fal.ai models
+  | 'fal-nano-banana-pro'
   // New models (routing stubs — not in AVAILABLE_MODELS until API keys are configured)
   | 'midjourney'
   | 'sd-3.5-ultra'
@@ -157,15 +206,18 @@ export const AVAILABLE_MODELS: ReadonlyArray<AvailableModel> = [
 ]
 
 const ADMIN_ONLY_MODELS: ReadonlyArray<AvailableModel> = [
+  { value: 'fal-nano-banana-pro', label: 'fal Nano Banana Pro', tier: 'high', tierLabel: { en: 'fal Nano Banana Pro (Admin)', zh: 'fal Nano Banana Pro (管理员)' } },
   { value: 'ta-gemini-3.1-flash', label: 'TA 3.1 Flash', tier: 'balanced', tierLabel: { en: 'TA 3.1 Flash (Admin)', zh: 'TA 3.1 Flash (管理员)' } },
   { value: 'ta-gemini-2.5-flash', label: 'TA 2.5 Flash', tier: 'fast', tierLabel: { en: 'TA 2.5 Flash (Admin)', zh: 'TA 2.5 Flash (管理员)' } },
   { value: 'ta-gemini-3-pro', label: 'TA 3 Pro', tier: 'high', tierLabel: { en: 'TA 3 Pro (Admin)', zh: 'TA 3 Pro (管理员)' } },
 ]
 
-const ADMIN_EMAILS: ReadonlySet<string> = new Set([
+export const ADMIN_EMAIL_LIST = [
   '951454612@qq.com',
   '1027588424@qq.com',
-])
+] as const
+
+const ADMIN_EMAILS: ReadonlySet<string> = new Set(ADMIN_EMAIL_LIST)
 
 export function isAdminUser(email: string | null | undefined): boolean {
   return !!email && ADMIN_EMAILS.has(email)
@@ -243,6 +295,12 @@ export const MODEL_CAPABILITIES: Partial<Record<BuiltInGenerationModel, ModelCap
   'ta-gemini-3-pro': {
     supportedSizes: ['1K'],
     publicSizes: ['1K'],
+    defaultSize: '1K',
+    rolloutStage: 'internal_only',
+  },
+  'fal-nano-banana-pro': {
+    supportedSizes: ['1K', '2K', '4K'],
+    publicSizes: ['1K', '2K', '4K'],
     defaultSize: '1K',
     rolloutStage: 'internal_only',
   },
@@ -607,6 +665,20 @@ export type GenesisProductArchetype =
   | 'jewelry'
   | 'generic'
 
+export type GenesisHeroExpression =
+  | 'rational-tech'
+  | 'expressive-packaging'
+  | 'premium-material'
+
+export type GenesisCopyDominance =
+  | 'subordinate'
+  | 'co-hero'
+
+export type GenesisHumanInteractionMode =
+  | 'none'
+  | 'optional'
+  | 'required'
+
 export interface GenesisCommercialIntent {
   archetype: GenesisProductArchetype
   brief_summary: string
@@ -616,6 +688,11 @@ export interface GenesisCommercialIntent {
   set_treatment: string
   lighting_bias: string
   copy_strategy: string
+  hero_expression: GenesisHeroExpression
+  hero_layout_archetype: string
+  text_tension: string
+  copy_dominance: GenesisCopyDominance
+  human_interaction_mode: GenesisHumanInteractionMode
 }
 
 export interface GenesisSceneRecipe {

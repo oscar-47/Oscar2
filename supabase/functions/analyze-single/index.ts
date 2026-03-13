@@ -18,6 +18,12 @@ import {
   isAdminOnlyDynamicModel,
   isEffectiveImageSizeSupportedForModel,
 } from "../_shared/admin-model-config.ts";
+import { classifyImageValidationError, validateImageInputUrls } from "../_shared/input-image-validation.ts";
+import {
+  enqueuePaidGenerationJob,
+  getInsufficientCreditsDetails,
+  isInsufficientCreditsRpcError,
+} from "../_shared/paid-job-enqueue.ts";
 
 function hasAllowedRefinementImageExtension(value: string): boolean {
   const lower = value.trim().toLowerCase();
@@ -86,6 +92,26 @@ Deno.serve(async (req) => {
     body.backgroundMode = backgroundMode;
   }
 
+  const inputImageUrls = mode === "single"
+    ? [
+      typeof body.referenceImage === "string" ? body.referenceImage : "",
+      ...(Array.isArray(body.productImages) ? body.productImages.filter((x): x is string => typeof x === "string") : []),
+    ]
+    : mode === "batch"
+    ? [
+      typeof body.productImage === "string" ? body.productImage : "",
+      ...(Array.isArray(body.referenceImages) ? body.referenceImages.filter((x): x is string => typeof x === "string") : []),
+    ]
+    : Array.isArray(body.productImages)
+    ? body.productImages.filter((x): x is string => typeof x === "string")
+    : [];
+
+  try {
+    await validateImageInputUrls(inputImageUrls);
+  } catch (error) {
+    return err(classifyImageValidationError(error), String(error ?? ""), 400);
+  }
+
   const modelName = normalizeRequestedModel(String(body.model ?? "or-gemini-3.1-flash"));
   const adminModelConfigs = await getAdminImageModelConfigs();
   if ((isToApisModel(modelName) || isAdminOnlyDynamicModel(adminModelConfigs, modelName)) && !isAdminEmail(authResult.user.email)) {
@@ -151,60 +177,25 @@ Deno.serve(async (req) => {
       type: "STYLE_REPLICATE",
     });
   }
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("subscription_credits,purchased_credits")
-    .eq("id", authResult.user.id)
-    .single();
-
-  if (profileError || !profile) {
-    return err("PROFILE_NOT_FOUND", "failed to load profile for credit precheck", 500, profileError);
-  }
-  const totalCredits = Number(profile.subscription_credits ?? 0) + Number(profile.purchased_credits ?? 0);
-  if (totalCredits < cost) {
-    return err("INSUFFICIENT_CREDITS", "Not enough credits", 402, {
-      required: cost,
-      available: totalCredits,
-    });
-  }
-
-  // Single job for all modes (single, batch, refinement)
-  const { data, error } = await supabase
-    .from("generation_jobs")
-    .insert({
-      user_id: authResult.user.id,
-      type: "STYLE_REPLICATE",
-      status: "processing",
+  try {
+    const enqueued = await enqueuePaidGenerationJob(supabase, {
+      userId: authResult.user.id,
+      jobType: "STYLE_REPLICATE",
       payload,
-      cost_amount: cost,
-      trace_id: body.trace_id ?? null,
-      client_job_id: body.client_job_id ?? null,
-      fe_attempt: Number(body.fe_attempt ?? 1),
-    })
-    .select("id")
-    .single();
-
-  if (error || !data) {
-    return err("STYLE_REPLICATE_JOB_CREATE_FAILED", "failed to create style replicate job", 500, error);
-  }
-
-  const { error: taskError } = await supabase
-    .from("generation_job_tasks")
-    .insert({
-      job_id: data.id,
-      task_type: "STYLE_REPLICATE",
-      status: "queued",
-      payload,
+      costAmount: cost,
+      traceId: typeof body.trace_id === "string" ? body.trace_id : null,
+      clientJobId: typeof body.client_job_id === "string" ? body.client_job_id : null,
+      feAttempt: Number(body.fe_attempt ?? 1),
     });
-
-  if (taskError) {
-    await supabase.from("generation_jobs").update({
-      status: "failed",
-      error_code: "STYLE_REPLICATE_JOB_CREATE_FAILED",
-      error_message: `Failed to enqueue style replicate task: ${taskError.message}`,
-    }).eq("id", data.id);
-    return err("STYLE_REPLICATE_JOB_CREATE_FAILED", "failed to enqueue style replicate task", 500, taskError);
+    return ok({ job_id: enqueued.jobId, status: "processing" });
+  } catch (enqueueError) {
+    if (isInsufficientCreditsRpcError(enqueueError)) {
+      const details = getInsufficientCreditsDetails(enqueueError);
+      return err("INSUFFICIENT_CREDITS", "Not enough credits", 402, {
+        required: details.required ?? cost,
+        available: details.available,
+      });
+    }
+    return err("STYLE_REPLICATE_JOB_CREATE_FAILED", "failed to create style replicate job", 500, enqueueError);
   }
-
-  return ok({ job_id: data.id, status: "processing" });
 });

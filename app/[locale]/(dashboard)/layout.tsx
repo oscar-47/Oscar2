@@ -1,4 +1,5 @@
 import { DashboardNavbar } from '@/components/shared/DashboardNavbar'
+import { FloatingSupportFeedbackButton } from '@/components/support/FloatingSupportFeedbackButton'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -24,6 +25,7 @@ export default async function DashboardLayout({
       <main className="flex-1">
         {children}
       </main>
+      <FloatingSupportFeedbackButton userId={user.id} />
     </div>
   )
 }

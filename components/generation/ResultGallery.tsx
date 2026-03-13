@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createEditorSession } from '@/lib/utils/editor-session'
+import { getAspectRatioCardStyle, toCssAspectRatio } from '@/components/generation/aspect-ratio-layout'
 import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
 import { groupResultAssetsByBatch, splitResultAssetsByActiveBatch } from '@/lib/utils/result-assets'
 import type { ResultAsset, ResultAssetOrigin } from '@/types'
@@ -76,14 +77,34 @@ function buildDownloadFilename(image: ResultImage, contentType?: string | null):
   return `${baseName}${inferExtension(image.url, contentType)}`
 }
 
-function toCssAspectRatio(aspectRatio: string): string {
-  const [w, h] = aspectRatio.split(':').map((value) => Number(value))
-  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return '4 / 3'
-  return `${w} / ${h}`
+function parseSizeAspectRatio(size?: string): string | null {
+  if (!size) return null
+  const match = size.trim().match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/i)
+  if (!match) return null
+
+  const width = Number(match[1])
+  const height = Number(match[2])
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
+
+  return `${width} / ${height}`
+}
+
+function resolveImageAspectRatio(image: ResultImage, fallbackAspectRatio: string): string {
+  return parseSizeAspectRatio(image.deliveredSize)
+    ?? parseSizeAspectRatio(image.actualSize)
+    ?? parseSizeAspectRatio(image.providerSize)
+    ?? parseSizeAspectRatio(image.requestedSize)
+    ?? fallbackAspectRatio
 }
 
 function SkeletonCard({ aspectRatio }: { aspectRatio: string }) {
-  return <FluidPendingCard aspectRatio={aspectRatio} className="w-[220px] max-w-full" />
+  return (
+    <FluidPendingCard
+      aspectRatio={aspectRatio}
+      className="max-w-full shrink-0"
+      style={getAspectRatioCardStyle(aspectRatio)}
+    />
+  )
 }
 
 function formatBatchTime(timestamp: number): string {
@@ -202,17 +223,17 @@ export function ResultGallery({
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: index * 0.08 }}
       className={cn(
-        'group relative w-[220px] max-w-full overflow-hidden rounded-xl border border-border bg-muted',
+        'group relative max-w-full shrink-0 overflow-hidden rounded-xl border border-border bg-muted',
         onImageClick && 'cursor-pointer',
       )}
-      style={{ aspectRatio: cssAspectRatio }}
+      style={getAspectRatioCardStyle(resolveImageAspectRatio(image, cssAspectRatio))}
       onClick={onImageClick ? () => onImageClick(image, index) : undefined}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={image.url}
         alt={image.label ?? `Result ${index + 1}`}
-        className="h-full w-full object-cover"
+        className="h-full w-full object-contain"
       />
 
       {image.label && (

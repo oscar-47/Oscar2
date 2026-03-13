@@ -17,6 +17,11 @@ import type {
   EcomDetailModuleDefinition,
 } from '@/types'
 
+type FunctionInvokeError = Error & {
+  code?: string | null
+  status?: number
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function supabase() {
@@ -100,14 +105,62 @@ async function invokeFunction<T>(
       payload?.error?.message ??
       payload?.message ??
       `${name} failed: ${response.status}`
-    throw new Error(apiMessage)
+    const error = new Error(apiMessage) as FunctionInvokeError
+    error.code = payload?.error?.code ?? payload?.code ?? null
+    error.status = response.status
+    throw error
   }
 
   return payload as T
 }
 
+async function buildFunctionError(
+  name: string,
+  response: Response
+): Promise<FunctionInvokeError> {
+  let payload: any = null
+  let rawText = ''
+
+  try {
+    rawText = await response.text()
+  } catch {
+    rawText = ''
+  }
+
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText)
+    } catch {
+      payload = null
+    }
+  }
+
+  const apiMessage =
+    payload?.error?.message ??
+    payload?.message ??
+    (rawText.trim() || `${name} failed: ${response.status}`)
+  const error = new Error(apiMessage) as FunctionInvokeError
+  error.code = payload?.error?.code ?? payload?.code ?? null
+  error.status = response.status
+  return error
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function notifyCreditsChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('credits:refetch'))
+  }
+}
+
+function isInsufficientCreditsError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code?: unknown }).code === 'INSUFFICIENT_CREDITS'
+    || (error instanceof Error && /insufficient_credits|not enough credits/i.test(error.message))
 }
 
 function isImageQueueBusyError(error: unknown): boolean {
@@ -252,7 +305,7 @@ export async function generatePromptsV2Stream(
   }
 
   if (!response.ok) {
-    throw new Error(`generate-prompts-v2 failed: ${response.status}`)
+    throw await buildFunctionError('generate-prompts-v2', response)
   }
 
   return response.body!
@@ -291,9 +344,13 @@ export async function generateImage(
   for (let attempt = 0; attempt < IMAGE_QUEUE_RETRY_ATTEMPTS; attempt += 1) {
     try {
       const res = await invokeFunction<JobResponse>('generate-image', params)
+      notifyCreditsChanged()
       void processGenerationJob(res.job_id)
       return res
     } catch (error) {
+      if (isInsufficientCreditsError(error)) {
+        notifyCreditsChanged()
+      }
       const shouldRetry = isImageQueueBusyError(error) && attempt < IMAGE_QUEUE_RETRY_ATTEMPTS - 1
       if (!shouldRetry) throw error
       await sleep(IMAGE_QUEUE_RETRY_DELAY_MS)
@@ -336,6 +393,7 @@ export async function generateModelImage(
     imageCount: params.imageCount ?? params.count ?? 1,
   }
   const res = await invokeFunction<JobResponse>('generate-model-image', payload)
+  notifyCreditsChanged()
   void processGenerationJob(res.job_id)
   return res
 }
@@ -382,6 +440,7 @@ export async function analyzeSingle(
   params: AnalyzeSingleParams
 ): Promise<JobResponse> {
   const res = await invokeFunction<JobResponse>('analyze-single', params)
+  notifyCreditsChanged()
   void processGenerationJob(res.job_id)
   return res
 }
@@ -405,21 +464,25 @@ export async function analyzeStyleDimensions(
 
 export async function createCreditCheckout(
   packageId: string,
-  returnTo: string
+  returnTo: string,
+  currency?: string
 ): Promise<CheckoutResponse> {
   return invokeFunction<CheckoutResponse>('create-credit-checkout', {
     packageId,
     returnTo,
+    currency,
   })
 }
 
 export async function createOnetimeCheckout(
   packageId: string,
-  returnTo: string
+  returnTo: string,
+  currency?: string
 ): Promise<CheckoutResponse> {
   return invokeFunction<CheckoutResponse>('create-onetime-checkout', {
     packageId,
     returnTo,
+    currency,
   })
 }
 

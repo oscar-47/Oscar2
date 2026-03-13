@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { SupportFeedbackLink } from '@/components/support/SupportFeedbackLink'
 import { Progress } from '@/components/ui/progress'
 import type { JobStatus } from '@/types'
 
@@ -104,7 +105,8 @@ export function GenerationProgress({
             animate={{ opacity: 1, y: 0 }}
             className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive"
           >
-            {errorMessage}
+            <p>{errorMessage}</p>
+            <SupportFeedbackLink className="mt-2" />
           </motion.div>
         )}
       </AnimatePresence>

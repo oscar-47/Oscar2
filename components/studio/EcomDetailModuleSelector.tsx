@@ -13,6 +13,7 @@ interface EcomDetailModuleSelectorProps {
   onToggle: (id: EcomDetailModuleId) => void
   disabled?: boolean
   isZh: boolean
+  highlight?: boolean
 }
 
 export function EcomDetailModuleSelector({
@@ -20,11 +21,17 @@ export function EcomDetailModuleSelector({
   onToggle,
   disabled = false,
   isZh,
+  highlight = false,
 }: EcomDetailModuleSelectorProps) {
   const selectedSet = new Set(selectedIds)
 
   return (
-    <div className="rounded-2xl border border-border bg-background p-5 sm:p-6">
+    <div
+      className={cn(
+        'rounded-2xl border border-border bg-background p-5 sm:p-6 transition-shadow duration-500',
+        highlight && 'ring-2 ring-amber-300/60 shadow-[0_0_20px_rgba(245,158,11,0.12)]',
+      )}
+    >
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -50,22 +57,23 @@ export function EcomDetailModuleSelector({
           const active = selectedSet.has(module.id)
 
           return (
-            <button
-              key={module.id}
-              type="button"
-              disabled={disabled}
-              onClick={() => onToggle(module.id)}
-              className={cn(
-                'rounded-2xl border-2 px-5 py-5 text-left transition-colors',
-                active
-                  ? 'border-accent bg-background shadow-sm'
-                  : 'border-border bg-secondary hover:border-muted-foreground hover:bg-background',
-                disabled && 'cursor-not-allowed opacity-60',
-              )}
-            >
-              <p className="text-[17px] font-semibold text-foreground">{localized.title}</p>
-              <p className="mt-2 text-[14px] text-muted-foreground">{localized.subtitle}</p>
-            </button>
+            <div key={module.id}>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onToggle(module.id)}
+                className={cn(
+                  'w-full rounded-2xl border-2 p-5 text-left transition-colors',
+                  active
+                    ? 'border-accent bg-background shadow-sm'
+                    : 'border-border bg-secondary hover:border-muted-foreground hover:bg-background',
+                  disabled && 'cursor-not-allowed opacity-60',
+                )}
+              >
+                <p className="text-[17px] font-semibold text-foreground">{localized.title}</p>
+                <p className="mt-2 text-[14px] text-muted-foreground">{localized.subtitle}</p>
+              </button>
+            </div>
           )
         })}
       </div>

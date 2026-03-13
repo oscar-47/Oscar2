@@ -3,7 +3,9 @@
 import { useCallback, useState } from 'react'
 import { useDropzone, type FileRejection } from 'react-dropzone'
 import { Upload, X, Image as ImageIcon } from 'lucide-react'
+import { SupportFeedbackLink } from '@/components/support/SupportFeedbackLink'
 import { cn } from '@/lib/utils'
+import { MAX_IMAGE_UPLOAD_MB } from '@/lib/upload-constraints'
 
 interface ImageUploaderProps {
   onFileSelected: (file: File) => void
@@ -21,14 +23,15 @@ export function ImageUploader({
   onFileSelected,
   onClear,
   accept = { 'image/*': ['.jpg', '.jpeg', '.png', '.webp'] },
-  maxSizeMB = 10,
+  maxSizeMB = MAX_IMAGE_UPLOAD_MB,
   label = 'Drop image here',
-  sublabel = 'JPG, PNG, WEBP up to 10 MB',
+  sublabel,
   previewUrl,
   disabled = false,
   className,
 }: ImageUploaderProps) {
   const [error, setError] = useState<string | null>(null)
+  const resolvedSublabel = sublabel ?? `JPG, PNG, WEBP up to ${maxSizeMB} MB`
 
   const onDrop = useCallback(
     (accepted: File[], rejected: readonly FileRejection[]) => {
@@ -99,10 +102,15 @@ export function ImageUploader({
           <p className="text-sm font-medium text-foreground">
             {isDragActive ? 'Drop to upload' : label}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">{sublabel}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{resolvedSublabel}</p>
         </div>
       </div>
-      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+      {error && (
+        <div className="mt-2 space-y-1">
+          <p className="text-xs text-destructive">{error}</p>
+          <SupportFeedbackLink />
+        </div>
+      )}
     </div>
   )
 }

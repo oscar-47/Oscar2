@@ -1,7 +1,7 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { options, err } from "../_shared/http.ts";
 import { requireUser } from "../_shared/auth.ts";
-import { getQnChatConfig } from "../_shared/qn-image.ts";
+import { getQnChatConfig, getShuffledChatPool, getQnChatConfigFrom } from "../_shared/qn-image.ts";
 import { applyPromptVariant, buildPromptRegistryKey } from "../_shared/prompt-registry.ts";
 import { resolvePromptProfile, TA_PRO_PROMPT_PROFILE_FLAG } from "../_shared/prompt-profile.ts";
 import { getBooleanSystemConfig } from "../_shared/system-config.ts";
@@ -94,6 +94,11 @@ function normalizeGenesisCommercialIntent(value: unknown): GenesisCommercialInte
     set_treatment: compactLine(String(record.set_treatment ?? "")),
     lighting_bias: compactLine(String(record.lighting_bias ?? "")),
     copy_strategy: compactLine(String(record.copy_strategy ?? "")),
+    hero_expression: compactLine(String(record.hero_expression ?? "")),
+    hero_layout_archetype: compactLine(String(record.hero_layout_archetype ?? "")),
+    text_tension: compactLine(String(record.text_tension ?? "")),
+    copy_dominance: compactLine(String(record.copy_dominance ?? "")),
+    human_interaction_mode: compactLine(String(record.human_interaction_mode ?? "")),
   };
 }
 
@@ -153,6 +158,11 @@ type GenesisCommercialIntent = {
   set_treatment: string;
   lighting_bias: string;
   copy_strategy: string;
+  hero_expression: string;
+  hero_layout_archetype: string;
+  text_tension: string;
+  copy_dominance: string;
+  human_interaction_mode: string;
 };
 
 type GenesisSceneRecipe = {
@@ -226,6 +236,8 @@ function normalizeGenesisPlanSectionLabel(label: string): string {
       return "hierarchy";
     case "文案规则":
       return "copy_rules";
+    case "版式原则":
+      return "layout_principles";
     case "装饰元素":
       return "decorative_elements";
     case "图标风格":
@@ -268,6 +280,21 @@ function normalizeGenesisPlanSectionLabel(label: string): string {
     case "描述文案":
     case "说明文字":
       return "description_text";
+    case "字体气质":
+      return "typography_tone";
+    case "字体风格":
+      return "typeface_direction";
+    case "文字颜色策略":
+      return "typography_color_strategy";
+    case "版式激进度":
+      return "layout_aggression";
+    case "版式类型":
+      return "layout_archetype";
+    case "文字张力":
+      return "text_tension";
+    case "主次关系":
+    case "文字主次关系":
+      return "copy_dominance";
     case "排版说明":
       return "layout_guidance";
     case "氛围关键词":
@@ -301,6 +328,7 @@ function normalizeGenesisPlanSectionLabel(label: string): string {
     case "body_font":
     case "hierarchy":
     case "copy_rules":
+    case "layout_principles":
     case "decorative_elements":
     case "icon_style":
     case "whitespace_principle":
@@ -320,6 +348,13 @@ function normalizeGenesisPlanSectionLabel(label: string): string {
     case "main_title":
     case "subtitle":
     case "description_text":
+    case "typography_tone":
+    case "typeface_direction":
+    case "typography_color_strategy":
+    case "layout_aggression":
+    case "layout_archetype":
+    case "text_tension":
+    case "copy_dominance":
     case "layout_guidance":
     case "mood_keywords":
     case "light_and_shadow_effects":
@@ -491,6 +526,61 @@ function buildGenesisStyleSentence(specSections: Record<string, string[]>, style
     promptProfile === "ta-pro" ? "zero drift same-SKU lock and exact product identity retention" : "",
   ].filter(Boolean);
 
+  return sentenceJoin(parts);
+}
+
+function buildGenesisTypographySystemSentence(specSections: Record<string, string[]>): string {
+  const font = specSections.font_system ?? [];
+  const headingFont = extractSectionDetail(font, "Heading Font");
+  const bodyFont = extractSectionDetail(font, "Body Font");
+  const hierarchy = extractSectionDetail(font, "Hierarchy");
+  const copyRules = extractSectionDetail(font, "Copy Rules");
+  const layoutPrinciples = extractSectionDetail(font, "Layout Principles");
+
+  const parts = [
+    headingFont ? `Use ${headingFont} for the headline style` : "",
+    bodyFont ? `supporting information should follow ${bodyFont}` : "",
+    hierarchy ? `keep the typography hierarchy as ${hierarchy}` : "",
+    copyRules ? `follow these copy rules: ${copyRules}` : "",
+    layoutPrinciples ? `apply these layout principles: ${layoutPrinciples}` : "",
+  ].filter(Boolean);
+
+  return sentenceJoin(parts);
+}
+
+function buildGenesisHeroExpressionSentence(commercialIntent: GenesisCommercialIntent | null): string {
+  if (!commercialIntent) return "";
+  const layoutArchetypeMap: Record<string, string> = {
+    "dominant-vertical-slogan": "a dominant vertical slogan block or split-column contrast headline",
+    "compressed-editorial-title": "a compressed editorial title block inside generous whitespace",
+    "structured-information-band": "a structured side information band with precise technical rhythm",
+  };
+  const textTensionMap: Record<string, string> = {
+    "high-contrast-dual-focus": "high-contrast dual-focus energy where product and typography share the first read",
+    "editorial-material-contrast": "editorial material contrast with restrained but high-presence typography",
+    "restrained-precision": "restrained precision with typography supporting structure and function",
+  };
+  const parts = [
+    commercialIntent.hero_expression ? `Treat the first hero image using the ${commercialIntent.hero_expression} expression mode` : "",
+    commercialIntent.hero_layout_archetype
+      ? `the preferred layout archetype is ${layoutArchetypeMap[commercialIntent.hero_layout_archetype] ?? commercialIntent.hero_layout_archetype}`
+      : "",
+    commercialIntent.text_tension
+      ? `the intended text tension is ${textTensionMap[commercialIntent.text_tension] ?? commercialIntent.text_tension}`
+      : "",
+    commercialIntent.copy_dominance === "co-hero"
+      ? "Typography may act as a co-hero with the product instead of staying merely supportive"
+      : commercialIntent.copy_dominance === "subordinate"
+        ? "Typography should stay subordinate to the product while still feeling designed and deliberate"
+        : "",
+    commercialIntent.human_interaction_mode === "required"
+      ? "A hand-held or human-interaction relationship is required for this hero frame"
+      : commercialIntent.human_interaction_mode === "optional"
+        ? "Human interaction is optional and should appear only if it clarifies scale or usage"
+        : commercialIntent.human_interaction_mode === "none"
+          ? "Do not default to hand-held or human-interaction staging"
+          : "",
+  ].filter(Boolean);
   return sentenceJoin(parts);
 }
 
@@ -680,10 +770,18 @@ export function buildGenesisHeroPromptObjects(params: {
       productMaterial,
       keyFeatures.join(", "),
     ]);
+    const typographySystem = buildGenesisTypographySystemSentence(specSections);
 
     const explicitMainTitle = normalizeVisibleCopyValue(extractSectionDetail(planSections.text_content, "Main Title"));
     const explicitSubtitle = normalizeVisibleCopyValue(extractSectionDetail(planSections.text_content, "Subtitle"));
     const explicitDescription = normalizeVisibleCopyValue(extractSectionDetail(planSections.text_content, "Description Text"));
+    const explicitTypographyTone = extractSectionDetail(planSections.text_content, "Typography Tone");
+    const explicitTypefaceDirection = extractSectionDetail(planSections.text_content, "Typeface Direction");
+    const explicitTypographyColorStrategy = extractSectionDetail(planSections.text_content, "Typography Color Strategy");
+    const explicitLayoutAggression = extractSectionDetail(planSections.text_content, "Layout Aggression");
+    const explicitLayoutArchetype = extractSectionDetail(planSections.text_content, "Layout Archetype");
+    const explicitTextTension = extractSectionDetail(planSections.text_content, "Text Tension");
+    const explicitCopyDominance = extractSectionDetail(planSections.text_content, "Copy Dominance");
     const copyTextParts: string[] = [];
     if (!visualOnlyCopy) {
       if (explicitMainTitle) copyTextParts.push(`Use "${explicitMainTitle}" as the main title.`);
@@ -700,8 +798,20 @@ export function buildGenesisHeroPromptObjects(params: {
     if (visualOnlyCopy && copyTextParts.length === 0) {
       copyTextParts.push("No typography. Keep the composition visual-only with no added visible copy.");
     }
+    const heroExpression = index === 0 ? buildGenesisHeroExpressionSentence(commercialIntent) : "";
     const textLayout = sentenceJoin([
       ...copyTextParts,
+      !visualOnlyCopy && explicitTypographyTone ? `Keep the typography tone as ${explicitTypographyTone}` : "",
+      !visualOnlyCopy && explicitTypefaceDirection ? `Set the typeface direction as ${explicitTypefaceDirection}` : "",
+      !visualOnlyCopy && explicitTypographyColorStrategy ? `Typography color should follow this strategy: ${explicitTypographyColorStrategy}` : "",
+      !visualOnlyCopy && explicitLayoutAggression ? `The layout aggression should feel ${explicitLayoutAggression}` : "",
+      !visualOnlyCopy && explicitLayoutArchetype ? `Use ${explicitLayoutArchetype} as the layout archetype` : "",
+      !visualOnlyCopy && explicitTextTension ? `Let the text tension feel ${explicitTextTension}` : "",
+      !visualOnlyCopy && explicitCopyDominance
+        ? `Treat the copy-product relationship as ${explicitCopyDominance}`
+        : "",
+      !visualOnlyCopy && heroExpression ? heroExpression : "",
+      !visualOnlyCopy && typographySystem ? typographySystem : "",
       sceneRecipe?.text_zone ?? "",
       commercialIntent?.copy_strategy ?? "",
       extractSectionDetail(planSections.composition_plan, "Text Area"),
@@ -1335,6 +1445,7 @@ ${styleConstraintPrompt || "(none)"}
           return;
         }
 
+        // Pick a random endpoint from the pool for load distribution
         const config = getQnChatConfig();
         const isAzure = config.endpoint.includes(".openai.azure.com") || config.endpoint.includes(".cognitiveservices.azure.com") || config.endpoint.includes(".services.ai.azure.com");
 

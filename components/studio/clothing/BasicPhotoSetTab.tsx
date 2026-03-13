@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { useLocale, useTranslations } from 'next-intl'
+import { useRouter } from 'next/navigation'
 import { Image as ImageIcon, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -12,13 +13,14 @@ import type { ProgressStep } from '@/components/generation/GenerationProgress'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
 import { ResultGallery, type ResultImage } from '@/components/generation/ResultGallery'
 import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
+import { SupportFeedbackLink } from '@/components/support/SupportFeedbackLink'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ClothingSettingsSection } from './ClothingSettingsSection'
 import { GenerationTypeSelector, countSelectedTypes } from './GenerationTypeSelector'
 import type { BasicPhotoTypeState, ClothingPhase } from './types'
 import { uploadFile } from '@/lib/api/upload'
 import { analyzeProductV2, generatePromptsV2Stream, generateImage } from '@/lib/api/edge-functions'
-import { refreshCredits } from '@/lib/hooks/useCredits'
+import { refreshCredits, useCredits } from '@/lib/hooks/useCredits'
 import { createClient } from '@/lib/supabase/client'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
@@ -36,8 +38,12 @@ import type {
   GeneratedPrompt,
   OutputLanguage,
 } from '@/types'
-import { DEFAULT_MODEL } from '@/types'
-import { friendlyError } from '@/lib/utils'
+import { DEFAULT_MODEL, getGenerationCreditCost } from '@/types'
+import { friendlyError, generationRetryRefundMessage, isInsufficientCreditsError } from '@/lib/utils'
+import {
+  WORKFLOW_PRIMARY_BUTTON_CLASS,
+  WORKFLOW_SECONDARY_BUTTON_CLASS,
+} from '@/components/studio/workflow-button-styles'
 
 function uid() {
   return crypto.randomUUID()
@@ -750,8 +756,11 @@ interface BasicPhotoSetTabProps {
 
 export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const locale = useLocale()
+  const router = useRouter()
   const isZh = locale.startsWith('zh')
   const t = useTranslations('studio.clothingStudio')
+  const tc = useTranslations('studio.common')
+  const { total } = useCredits()
   const [phase, setPhase] = useState<ClothingPhase>('input')
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
   const [typeState, setTypeState] = useState<BasicPhotoTypeState>({
@@ -788,7 +797,10 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
   const abortRef = useRef<AbortController | null>(null)
 
   const isProcessing = phase === 'analyzing' || phase === 'generating'
-  const canStart = productImages.length > 0 && countSelectedTypes(typeState) > 0
+  const expectedCount = countSelectedTypes(typeState)
+  const totalCost = getGenerationCreditCost(model, resolution) * expectedCount
+  const insufficientCredits = total !== null && total < totalCost
+  const canStart = productImages.length > 0 && expectedCount > 0 && !insufficientCredits
   const backendLocale = language === 'zh' ? 'zh-CN' : language === 'en' ? 'en' : (isZh ? 'zh-CN' : 'en')
   const currentCopyAnalysis = analysisBlueprint?.copy_analysis
 
@@ -1007,7 +1019,11 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       setPhase('complete')
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      setErrorMessage(friendlyError((err as Error).message ?? t('generationFailed'), true))
+      setErrorMessage(
+        isInsufficientCreditsError(err)
+          ? friendlyError((err as Error).message ?? 'Not enough credits', isZh)
+          : generationRetryRefundMessage(isZh)
+      )
       setSteps((prev) => prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s)))
       setPhase('preview')
     } finally {
@@ -1111,38 +1127,52 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
 
       <div className="pt-2">
         {phase === 'input' && (
-          <Button
-            onClick={handleAnalyze}
-            disabled={!canStart}
-            className="h-14 w-full rounded-2xl bg-primary text-base font-semibold text-white hover:bg-primary disabled:bg-text-tertiary disabled:text-white"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
-            {t('analyzeProduct')}
-          </Button>
+          <div className="space-y-2">
+            <Button
+              onClick={handleAnalyze}
+              disabled={!canStart}
+              className={`${WORKFLOW_PRIMARY_BUTTON_CLASS} w-full`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
+              {t('analyzeProduct')}
+            </Button>
+            {insufficientCredits && (
+              <div className="space-y-1 text-center">
+                <p className="text-xs text-destructive">{tc('insufficientCredits')}</p>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/${locale}/pricing`)}
+                  className="text-xs font-medium text-primary underline underline-offset-2"
+                >
+                  {isZh ? '去充值' : 'Top up'}
+                </button>
+              </div>
+            )}
+          </div>
         )}
         {phase === 'analyzing' && (
-          <Button variant="outline" onClick={handleCancel} className="h-14 w-full rounded-2xl border-border bg-background text-foreground">
+          <Button variant="outline" onClick={handleCancel} className={`${WORKFLOW_SECONDARY_BUTTON_CLASS} w-full`}>
             {t('cancelAnalysis')}
           </Button>
         )}
         {phase === 'preview' && (
           <div className="flex gap-3">
-            <Button variant="outline" onClick={handleReset} className="h-14 flex-1 rounded-2xl border-border bg-background text-foreground">
+            <Button variant="outline" onClick={handleReset} className={`${WORKFLOW_SECONDARY_BUTTON_CLASS} flex-1`}>
               {t('restart')}
             </Button>
-            <Button onClick={handleGenerate} className="h-14 flex-1 rounded-2xl bg-primary text-base font-semibold text-white hover:bg-primary">
+            <Button onClick={handleGenerate} className={`${WORKFLOW_PRIMARY_BUTTON_CLASS} flex-1`}>
               <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
               {t('generateImages')}
             </Button>
           </div>
         )}
         {phase === 'generating' && (
-          <Button variant="outline" onClick={handleCancel} className="h-14 w-full rounded-2xl border-border bg-background text-foreground">
+          <Button variant="outline" onClick={handleCancel} className={`${WORKFLOW_SECONDARY_BUTTON_CLASS} w-full`}>
             {t('cancelGeneration')}
           </Button>
         )}
         {phase === 'complete' && (
-          <Button variant="outline" onClick={handleReset} className="h-14 w-full rounded-2xl border-border bg-background text-foreground">
+          <Button variant="outline" onClick={handleReset} className={`${WORKFLOW_SECONDARY_BUTTON_CLASS} w-full`}>
             {t('regenerate')}
           </Button>
         )}
@@ -1244,7 +1274,10 @@ export function BasicPhotoSetTab({ traceId }: BasicPhotoSetTabProps) {
       <div className="space-y-4">
         {persistedHistoryGallery}
         {results.length === 0 && errorMessage && (
-          <div className="text-center text-sm text-destructive">{errorMessage}</div>
+          <div className="text-center text-sm text-destructive">
+            <p>{errorMessage}</p>
+            <SupportFeedbackLink className="mt-2 justify-center" />
+          </div>
         )}
       </div>
     )

@@ -1,0 +1,2 @@
+export const MARKETING_DARK_CTA_BASE =
+  'inline-flex items-center justify-center gap-2 rounded-[1rem] border border-[#171d2a] bg-[#101827] text-[#f8f4ee] shadow-[0_2px_8px_rgba(16,24,39,0.08),0_14px_34px_-12px_rgba(16,24,39,0.38)] transition-all duration-200 press-scale hover:-translate-y-px hover:bg-[#151f31] hover:shadow-[0_2px_8px_rgba(16,24,39,0.08),0_18px_40px_-12px_rgba(16,24,39,0.42)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7c889c] focus-visible:ring-offset-2'

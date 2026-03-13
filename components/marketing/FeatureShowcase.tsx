@@ -33,17 +33,20 @@ type SectionImagePair = {
 }
 
 /**
- * Before/After image pairs for each feature section.
+ * Before/After image pairs for feature sections.
+ * Sections without images use `null`.
  * Images go in public/images/showcase/
  */
-const SECTION_IMAGES: SectionImagePair[] = [
-  {
+const FEATURE_SECTION_IDS = [1, 2, 5] as const
+
+const SECTION_IMAGES: Record<(typeof FEATURE_SECTION_IDS)[number], SectionImagePair | null> = {
+  1: {
     before: '/images/showcase/hero-left.png',
     after: '/images/showcase/hero-right.png',
     aspectRatio: '3 / 4',
     objectFit: 'cover',
-  }, // Section 1: Hero Image Generator
-  {
+  },
+  2: {
     before: '/images/showcase/detail-before.jpg',
     after: '/images/showcase/detail-right.png',
     aspectRatio: '9 / 16',
@@ -52,8 +55,8 @@ const SECTION_IMAGES: SectionImagePair[] = [
     afterFrameClassName: 'bg-[#e8e0d5]',
     beforeImageClassName: 'p-3 sm:p-4',
     afterImageClassName: 'p-0',
-  }, // Section 2: Detail Page Assets
-  {
+  },
+  5: {
     before: '/images/showcase/refinement-lipstick-before.jpg',
     after: '/images/showcase/refinement-lipstick-after.png',
     aspectRatio: '3 / 4',
@@ -65,8 +68,8 @@ const SECTION_IMAGES: SectionImagePair[] = [
       transform: 'translateX(-9%) rotate(180deg) scale(1.7)',
       transformOrigin: 'center center',
     },
-  }, // Section 3: Photo Editing
-]
+  },
+}
 
 function ImageSlot({
   src,
@@ -94,7 +97,9 @@ function ImageSlot({
           objectFit === 'contain' ? 'object-contain' : 'object-cover',
           'transition-transform duration-500 group-hover:scale-[1.02]',
           imageClassName ?? '',
-        ].join(' ').trim()}
+        ]
+          .join(' ')
+          .trim()}
       />
     )
   }
@@ -113,7 +118,7 @@ export function FeatureShowcase() {
   const reduceMotion = useReducedMotion()
   const ecomAuthHref = `/${locale}/auth?returnTo=${encodeURIComponent(`/${locale}/ecom-studio`)}`
 
-  const sections = [1, 2, 3].map((n) => ({
+  const sections = FEATURE_SECTION_IDS.map((n) => ({
     title: t(`features.section${n}.title`),
     subtitle: t(`features.section${n}.subtitle`),
     caps: [
@@ -133,18 +138,13 @@ export function FeatureShowcase() {
   const platforms = parsePlatforms(t('bottomCta.platforms'))
 
   return (
-    <section className="bg-secondary pb-32 pt-24 sm:pb-40 sm:pt-32">
-      <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-24 px-5 sm:gap-32 sm:px-8">
+    <section className="bg-white pb-32 pt-24 sm:pb-40 sm:pt-32">
+      <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-28 px-5 sm:gap-36 sm:px-8">
         {sections.map((section, index) => {
-          const images = SECTION_IMAGES[index]
-          const hasComparison = Boolean(images.before && images.after)
-          const singleImageSrc = images.before ?? images.after
-          const singleImageAlt = images.before
-            ? tc('beforeAlt', { index: index + 1 })
-            : tc('afterAlt', { index: index + 1 })
-          const imageFirst = index % 2 === 0
-          const contentOrder = imageFirst ? 'lg:order-1' : 'lg:order-2'
-          const visualOrder = imageFirst ? 'lg:order-2' : 'lg:order-1'
+          const sectionId = FEATURE_SECTION_IDS[index]
+          const images = SECTION_IMAGES[sectionId]
+          const hasImages = images && (images.before || images.after)
+          const hasComparison = images ? Boolean(images.before && images.after) : false
 
           return (
             <motion.div
@@ -152,101 +152,129 @@ export function FeatureShowcase() {
               {...sectionMotion}
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.55, ease: [0.25, 1, 0.5, 1] }}
-              className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16"
+              className="space-y-12"
             >
-              {/* Text content */}
-              <div className={contentOrder}>
-                <span className="text-sm font-semibold text-muted-foreground">0{index + 1}</span>
+              {/* Section header */}
+              <div className="mx-auto max-w-4xl text-center">
+                <span className="inline-flex items-center rounded-full border border-border/60 bg-white px-4 py-1.5 text-sm font-semibold text-muted-foreground shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                  0{index + 1}
+                </span>
 
-                <h2 className="mt-3 text-[32px] font-semibold leading-[1.22] tracking-[-0.015em] text-foreground md:text-[40px]">
+                <h2 className="mt-6 font-[var(--font-display)] text-[clamp(2rem,4.2vw,3.8rem)] font-extrabold leading-[1.1] tracking-[-0.035em] text-foreground">
                   {section.title}
                 </h2>
 
-                <p className="mt-4 max-w-[520px] text-base leading-8 text-muted-foreground sm:text-lg sm:leading-9">
+                <p className="mx-auto mt-5 max-w-3xl text-base leading-8 text-muted-foreground sm:text-lg sm:leading-9">
                   {section.subtitle}
                 </p>
 
-                <div className="mt-8 space-y-4">
+                {/* Capability cards */}
+                <div className="mt-10 grid gap-3 text-left md:grid-cols-3">
                   {section.caps.map((cap, capIndex) => (
-                    <div key={capIndex}>
+                    <div
+                      key={capIndex}
+                      className="rounded-2xl border border-border/50 bg-[#faf9f7] px-5 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+                    >
                       <h4 className="text-sm font-semibold text-foreground">{cap.title}</h4>
-                      <p className="mt-0.5 text-sm leading-6 text-muted-foreground">{cap.desc}</p>
+                      <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{cap.desc}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Visual — Before/After comparison */}
-              <div className={visualOrder}>
-                <div className="group overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
-                  {hasComparison ? (
-                    <>
-                      <div className="relative grid grid-cols-2">
-                        <div
-                          className={`relative overflow-hidden bg-secondary ${images.frameClassName ?? ''} ${images.beforeFrameClassName ?? ''}`}
-                          style={{ aspectRatio: images.aspectRatio }}
-                        >
-                          <ImageSlot
-                            src={images.before}
-                            alt={tc('beforeAlt', { index: index + 1 })}
-                            label={tc('beforeLabel')}
-                            objectFit={images.beforeObjectFit ?? images.objectFit}
-                            imageClassName={images.beforeImageClassName ?? images.imageClassName}
-                            imageStyle={images.beforeImageStyle ?? images.imageStyle}
-                          />
-                        </div>
+              {/* Before/After comparison (only for sections with images) */}
+              {hasImages && images && (
+                <div className="mx-auto w-full max-w-[1080px]">
+                  <div className="group overflow-hidden rounded-[28px] border border-border/50 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04),0_20px_50px_-28px_rgba(0,0,0,0.1)]">
+                    {hasComparison ? (
+                      <>
+                        <div className="relative grid grid-cols-2">
+                          <div
+                            className={`relative overflow-hidden bg-secondary ${images.frameClassName ?? ''} ${images.beforeFrameClassName ?? ''}`}
+                            style={{ aspectRatio: images.aspectRatio }}
+                          >
+                            <ImageSlot
+                              src={images.before}
+                              alt={tc('beforeAlt', { index: index + 1 })}
+                              label={tc('beforeLabel')}
+                              objectFit={images.beforeObjectFit ?? images.objectFit}
+                              imageClassName={
+                                images.beforeImageClassName ?? images.imageClassName
+                              }
+                              imageStyle={images.beforeImageStyle ?? images.imageStyle}
+                            />
+                          </div>
 
-                        <div className="absolute inset-y-0 left-1/2 z-10 flex -translate-x-1/2 items-center pointer-events-none">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background shadow-lg">
-                            <ArrowRight className="h-4 w-4 text-accent" />
+                          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 flex -translate-x-1/2 items-center">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-white shadow-lg">
+                              <ArrowRight className="h-4 w-4 text-foreground/60" />
+                            </div>
+                          </div>
+
+                          <div
+                            className={`relative overflow-hidden border-l border-border bg-secondary ${images.frameClassName ?? ''} ${images.afterFrameClassName ?? ''}`}
+                            style={{ aspectRatio: images.aspectRatio }}
+                          >
+                            <ImageSlot
+                              src={images.after}
+                              alt={tc('afterAlt', { index: index + 1 })}
+                              label={tc('afterLabel')}
+                              objectFit={images.afterObjectFit ?? images.objectFit}
+                              imageClassName={
+                                images.afterImageClassName ?? images.imageClassName
+                              }
+                              imageStyle={images.afterImageStyle ?? images.imageStyle}
+                            />
                           </div>
                         </div>
 
-                        <div
-                          className={`relative overflow-hidden border-l border-border bg-secondary ${images.frameClassName ?? ''} ${images.afterFrameClassName ?? ''}`}
-                          style={{ aspectRatio: images.aspectRatio }}
-                        >
-                          <ImageSlot
-                            src={images.after}
-                            alt={tc('afterAlt', { index: index + 1 })}
-                            label={tc('afterLabel')}
-                            objectFit={images.afterObjectFit ?? images.objectFit}
-                            imageClassName={images.afterImageClassName ?? images.imageClassName}
-                            imageStyle={images.afterImageStyle ?? images.imageStyle}
-                          />
+                        <div className="grid grid-cols-2 border-t border-border text-center">
+                          <div className="py-3">
+                            <span className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground">
+                              {tc('beforeLabel')}
+                            </span>
+                          </div>
+                          <div className="border-l border-border py-3">
+                            <span className="text-[12px] font-semibold uppercase tracking-wider text-foreground">
+                              {tc('afterLabel')}
+                            </span>
+                          </div>
                         </div>
+                      </>
+                    ) : (
+                      <div
+                        className={`relative overflow-hidden bg-secondary ${images.frameClassName ?? ''} ${images.beforeFrameClassName ?? images.afterFrameClassName ?? ''}`}
+                        style={{ aspectRatio: images.aspectRatio }}
+                      >
+                        <ImageSlot
+                          src={images.before ?? images.after}
+                          alt={
+                            images.before
+                              ? tc('beforeAlt', { index: index + 1 })
+                              : tc('afterAlt', { index: index + 1 })
+                          }
+                          label={tc('afterLabel')}
+                          objectFit={
+                            images.beforeObjectFit ??
+                            images.afterObjectFit ??
+                            images.objectFit
+                          }
+                          imageClassName={
+                            images.beforeImageClassName ??
+                            images.afterImageClassName ??
+                            images.imageClassName
+                          }
+                          imageStyle={
+                            images.beforeImageStyle ??
+                            images.afterImageStyle ??
+                            images.imageStyle
+                          }
+                        />
                       </div>
-
-                      <div className="grid grid-cols-2 border-t border-border text-center">
-                        <div className="py-3">
-                          <span className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground">
-                            {tc('beforeLabel')}
-                          </span>
-                        </div>
-                        <div className="border-l border-border bg-accent/5 py-3">
-                          <span className="text-[12px] font-semibold uppercase tracking-wider text-accent">
-                            {tc('afterLabel')}
-                          </span>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div
-                      className={`relative overflow-hidden bg-secondary ${images.frameClassName ?? ''} ${images.beforeFrameClassName ?? images.afterFrameClassName ?? ''}`}
-                      style={{ aspectRatio: images.aspectRatio }}
-                    >
-                      <ImageSlot
-                        src={singleImageSrc}
-                        alt={singleImageAlt}
-                        label={tc('afterLabel')}
-                        objectFit={images.beforeObjectFit ?? images.afterObjectFit ?? images.objectFit}
-                        imageClassName={images.beforeImageClassName ?? images.afterImageClassName ?? images.imageClassName}
-                        imageStyle={images.beforeImageStyle ?? images.afterImageStyle ?? images.imageStyle}
-                      />
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </motion.div>
           )
         })}
@@ -256,7 +284,7 @@ export function FeatureShowcase() {
           {...sectionMotion}
           viewport={{ once: true, amount: 0.4 }}
           transition={{ duration: 0.55, ease: 'easeOut' }}
-          className="rounded-2xl border border-border bg-background px-6 py-10 text-center shadow-sm sm:px-12 sm:py-14"
+          className="rounded-2xl border border-border/50 bg-[#faf9f7] px-6 py-10 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)] sm:px-12 sm:py-14"
         >
           <h2 className="text-[28px] font-semibold leading-[1.34] tracking-[-0.01em] text-foreground sm:text-[40px]">
             {t('bottomCta.title')}

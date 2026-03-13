@@ -1,0 +1,3 @@
+email,user_id,failed_at_utc,failed_at_hkt,trace_id,studio_type,model,failed_submission_count,queued_job_count,http_status,error_code,recommended_compensation_credits,notes
+1027588424@qq.com,032f35b4-ce32-4d6e-924a-cae91db550eb,2026-03-11T13:10:58Z,2026-03-11 21:10:58 HKT,e0331059-15a9-4b5e-8c98-1b30af6b597a,ecom-detail,or-gemini-3.1-flash,4,0,500,IMAGE_JOB_CREATE_FAILED,120,Confirmed by generation_attempt_events during outage window
+951454612@qq.com,739ab7d6-29d4-46c9-9fb9-8cba8b99f9fc,2026-03-11T13:16:13Z,2026-03-11 21:16:13 HKT,27fd5f70-8094-4062-8f49-fe58e9844ae6,ecom-detail,or-gemini-3.1-flash,1,0,500,IMAGE_JOB_CREATE_FAILED,30,Confirmed by generation_attempt_events during outage window

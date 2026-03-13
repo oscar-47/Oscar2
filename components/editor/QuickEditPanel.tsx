@@ -1,11 +1,13 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
+import { useRouter } from 'next/navigation'
 import { X, Sparkles, Plus, Loader2 } from 'lucide-react'
 import { useEditorStore } from '@/lib/stores/editor-store'
 import { generateImage } from '@/lib/api/edge-functions'
 import { uploadFile } from '@/lib/api/upload'
+import { useCredits } from '@/lib/hooks/useCredits'
 import { useWaitForJob } from '@/lib/hooks/useWaitForJob'
 import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
 import {
@@ -17,6 +19,7 @@ import {
 import { useUserEmail } from '@/lib/hooks/useUserEmail'
 import { useAdminImageModels } from '@/lib/hooks/useAdminImageModels'
 import type { GenerationModel, AspectRatio } from '@/types'
+import { friendlyError, isInsufficientCreditsError } from '@/lib/utils'
 
 const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
   { value: '1:1', label: '1:1' },
@@ -31,14 +34,18 @@ const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
 export function QuickEditPanel() {
   const t = useTranslations('studio.editor')
   const locale = useLocale()
+  const router = useRouter()
   const userEmail = useUserEmail()
   useAdminImageModels(userEmail)
+  const { total } = useCredits()
   const quickEdit = useEditorStore((s) => s.quickEdit)
   const closeQuickEdit = useEditorStore((s) => s.closeQuickEdit)
   const setQuickEditField = useEditorStore((s) => s.setQuickEditField)
   const applyTextEditResult = useEditorStore((s) => s.applyTextEditResult)
   const objects = useEditorStore((s) => s.objects)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const { startWaiting } = useWaitForJob({
     onSuccess: (job) => {
@@ -53,9 +60,10 @@ export function QuickEditPanel() {
       }
       closeQuickEdit()
     },
-    onError: () => {
+    onError: (error) => {
       setQuickEditField('isProcessing', false)
       setQuickEditField('jobId', null)
+      setActionError(friendlyError(error.message ?? 'Job failed', locale.startsWith('zh')))
     },
   })
 
@@ -67,11 +75,14 @@ export function QuickEditPanel() {
     const file = e.target.files?.[0]
     if (!file) return
     try {
+      setUploadError(null)
       setQuickEditField('referencePreview', URL.createObjectURL(file))
       const result = await uploadFile(file)
       setQuickEditField('referenceImage', result.publicUrl)
-    } catch {
+    } catch (error) {
       setQuickEditField('referencePreview', null)
+      setQuickEditField('referenceImage', null)
+      setUploadError(friendlyError((error as Error).message ?? 'Upload failed', locale.startsWith('zh')))
     }
     e.target.value = ''
   }
@@ -80,7 +91,12 @@ export function QuickEditPanel() {
     if (!quickEdit.objectId || !quickEdit.prompt.trim()) return
     const obj = objects.find((o) => o.id === quickEdit.objectId)
     if (!obj) return
+    if (insufficientCredits) {
+      setActionError(friendlyError('INSUFFICIENT_CREDITS', locale.startsWith('zh')))
+      return
+    }
 
+    setActionError(null)
     setQuickEditField('isProcessing', true)
     try {
       const referenceImages = quickEdit.referenceImage ? [quickEdit.referenceImage] : undefined
@@ -100,14 +116,17 @@ export function QuickEditPanel() {
       })
       setQuickEditField('jobId', res.job_id)
       void startWaiting(res.job_id)
-    } catch {
+    } catch (error) {
       setQuickEditField('isProcessing', false)
+      setActionError(friendlyError((error as Error).message ?? 'Generation failed', locale.startsWith('zh')))
     }
   }
 
   if (!quickEdit.open) return null
 
   const cost = computeCost()
+  const insufficientCredits = total !== null && total < cost
+  const showTopUp = insufficientCredits || isInsufficientCreditsError(actionError)
 
   return (
     <div className="absolute right-4 top-16 z-[10000] w-[340px] rounded-2xl border border-border bg-white shadow-2xl">
@@ -158,6 +177,9 @@ export function QuickEditPanel() {
             onChange={(e) => void handleRefUpload(e)}
             className="hidden"
           />
+          {uploadError && (
+            <p className="mt-2 text-xs text-destructive">{uploadError}</p>
+          )}
         </div>
 
         {/* Model */}
@@ -210,7 +232,7 @@ export function QuickEditPanel() {
           <button
             type="button"
             onClick={() => void handleRun()}
-            disabled={!quickEdit.prompt.trim() || quickEdit.isProcessing}
+            disabled={!quickEdit.prompt.trim() || quickEdit.isProcessing || insufficientCredits}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-accent py-2 text-sm font-medium text-accent-foreground hover:shadow-md disabled:opacity-50 transition-all"
           >
             {quickEdit.isProcessing ? (
@@ -222,6 +244,22 @@ export function QuickEditPanel() {
             <span className="opacity-80">{cost}</span>
           </button>
         </div>
+        {(actionError || insufficientCredits) && (
+          <div className="space-y-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2">
+            <p className="text-xs text-destructive">
+              {actionError ?? friendlyError('INSUFFICIENT_CREDITS', locale.startsWith('zh'))}
+            </p>
+            {showTopUp && (
+              <button
+                type="button"
+                onClick={() => router.push(`/${locale}/pricing`)}
+                className="text-xs font-medium text-primary underline underline-offset-2"
+              >
+                {locale.startsWith('zh') ? '去充值' : 'Top up'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

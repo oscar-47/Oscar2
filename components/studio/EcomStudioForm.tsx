@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   ArrowLeft,
@@ -10,6 +10,7 @@ import {
   Settings2,
   ShoppingBag,
   Sparkles,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -29,7 +30,8 @@ import { CorePageShell } from '@/components/studio/CorePageShell'
 import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
 import { EcomDetailModuleSelector } from '@/components/studio/EcomDetailModuleSelector'
 import { ModelTextHint } from '@/components/studio/ModelTextHint'
-import { SectionIcon } from '@/components/shared/SectionIcon'
+import { StudioPageHero } from '@/components/studio/StudioPageHero'
+import { SupportFeedbackLink } from '@/components/support/SupportFeedbackLink'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { useAdminImageModels } from '@/lib/hooks/useAdminImageModels'
@@ -41,8 +43,13 @@ import {
   generatePromptsV2Stream,
   processGenerationJob,
 } from '@/lib/api/edge-functions'
+import {
+  logGenerationAttemptEvent,
+  type GenerationAttemptEventStage,
+} from '@/lib/api/generation-attempt-events'
 import { createClient } from '@/lib/supabase/client'
-import { friendlyError } from '@/lib/utils'
+import { isProviderPolicyBlockedError, toGenerationJobError } from '@/lib/job-errors'
+import { friendlyError, generationRetryRefundMessage, isInsufficientCreditsError } from '@/lib/utils'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
 import {
@@ -73,6 +80,12 @@ import {
   sanitizeImageSizeForModel,
 } from '@/types'
 import { useUserEmail } from '@/lib/hooks/useUserEmail'
+import {
+  WORKFLOW_PENDING_BUTTON_CLASS,
+  WORKFLOW_PRIMARY_BUTTON_CLASS,
+  WORKFLOW_SECONDARY_BUTTON_CLASS,
+  WORKFLOW_WARNING_BUTTON_CLASS,
+} from '@/components/studio/workflow-button-styles'
 
 const ASPECT_RATIOS_EN: { value: AspectRatio; label: string }[] = [
   { value: '1:1', label: '1:1 Square' },
@@ -160,6 +173,27 @@ function computeCost(
   return base * imageCount
 }
 
+function partialGenerationFailedMessage(count: number, isZh: boolean): string {
+  return isZh
+    ? `有 ${count} 张图片生成失败，已保留成功结果。`
+    : `${count} image(s) failed to generate. Successful results have been kept.`
+}
+
+function extractAttemptErrorInfo(error: unknown) {
+  const errorCode = typeof error === 'object' && error && 'code' in error
+    ? String((error as { code?: unknown }).code ?? '').trim() || null
+    : null
+  const rawStatus = typeof error === 'object' && error && 'status' in error
+    ? Number((error as { status?: unknown }).status ?? NaN)
+    : NaN
+
+  return {
+    errorCode,
+    errorMessage: error instanceof Error ? (error.message || 'Unknown error') : String(error ?? 'Unknown error'),
+    httpStatus: Number.isFinite(rawStatus) ? Math.floor(rawStatus) : null,
+  }
+}
+
 function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> {
   return new Promise((resolve, reject) => {
     const supabase = createClient()
@@ -196,7 +230,7 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
       if (!data) return
       const job = data as GenerationJob
       if (job.status === 'success') done(job)
-      else if (job.status === 'failed') fail(new Error(job.error_message ?? 'Job failed'))
+      else if (job.status === 'failed') fail(toGenerationJobError(job))
     }
 
     signal.addEventListener(
@@ -321,7 +355,7 @@ export function EcomStudioForm() {
   const { promptProfile } = usePromptProfile(model)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4')
   const [imageSize, setImageSize] = useState<ImageSize>('1K')
-  const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>('none')
+  const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>(isZh ? 'zh' : 'en')
 
   const [analysisBlueprint, setAnalysisBlueprint] = useState<AnalysisBlueprint | null>(null)
   const [editableDesignSpecs, setEditableDesignSpecs] = useState('')
@@ -341,6 +375,45 @@ export function EcomStudioForm() {
 
   const abortRef = useRef<AbortController | null>(null)
   const { total: credits } = useCredits()
+
+  // --- Onboarding for first-time users ---
+  type OnboardingStep = 'welcome' | 'modules-selected' | null
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(null)
+  const onboardingDismissed = useRef(false)
+
+  // Load sample image for new users
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (localStorage.getItem('shopix_ecom_onboarding_v1')) return
+
+    let cancelled = false
+    fetch('/images/sample/wooden-spatula.jpg')
+      .then((res) => res.blob())
+      .then((blob) => {
+        if (cancelled) return
+        const file = new File([blob], 'sample-wooden-spatula.jpg', { type: 'image/jpeg' })
+        const previewUrl = URL.createObjectURL(blob)
+        setProductImages([{ file, previewUrl }])
+        setOnboardingStep('welcome')
+      })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Advance onboarding when modules are selected
+  useEffect(() => {
+    if (onboardingStep === 'welcome' && selectedDetailModules.length > 0) {
+      setOnboardingStep('modules-selected')
+    }
+  }, [onboardingStep, selectedDetailModules.length])
+
+  const dismissOnboarding = useCallback(() => {
+    setOnboardingStep(null)
+    onboardingDismissed.current = true
+    try { localStorage.setItem('shopix_ecom_onboarding_v1', 'true') } catch {}
+  }, [])
 
   // Session persistence removed: text persisted but images didn't on refresh.
 
@@ -364,6 +437,16 @@ export function EcomStudioForm() {
     setSteps((prev) => prev.map((step) => (step.id === id ? { ...step, ...patch } : step)))
   }, [])
 
+  const resetToInputIfNeeded = useCallback(() => {
+    setPhase((prev) => {
+      if (prev !== 'complete' && prev !== 'preview') return prev
+      setAnalysisBlueprint(null)
+      setAnalysisParams(null)
+      setUploadedUrls([])
+      return 'input'
+    })
+  }, [])
+
   const handleAddImages = useCallback((files: File[]) => {
     setProductImages((prev) => [
       ...prev,
@@ -373,7 +456,8 @@ export function EcomStudioForm() {
       })),
     ])
     setErrorMessage(null)
-  }, [])
+    resetToInputIfNeeded()
+  }, [resetToInputIfNeeded])
 
   const handleRemoveImage = useCallback((index: number) => {
     setProductImages((prev) => {
@@ -381,7 +465,8 @@ export function EcomStudioForm() {
       if (removed) URL.revokeObjectURL(removed.previewUrl)
       return prev.filter((_, currentIndex) => currentIndex !== index)
     })
-  }, [])
+    resetToInputIfNeeded()
+  }, [resetToInputIfNeeded])
 
   const handleToggleModule = useCallback((id: EcomDetailModuleId) => {
     setSelectedDetailModules((prev) => (
@@ -397,6 +482,7 @@ export function EcomStudioForm() {
 
   const handleAnalyze = useCallback(async () => {
     if (productImages.length === 0 || selectedModules.length === 0) return
+    if (onboardingStep) dismissOnboarding()
     const abort = new AbortController()
     abortRef.current = abort
     const traceId = uid()
@@ -463,7 +549,11 @@ export function EcomStudioForm() {
       setPhase('preview')
     } catch (error) {
       if ((error as Error).name === 'AbortError') return
-      setErrorMessage(friendlyError((error as Error).message ?? 'Analysis failed', isZh))
+      const message = friendlyError((error as Error).message ?? 'Analysis failed', isZh)
+      if (isProviderPolicyBlockedError(error) && typeof window !== 'undefined') {
+        window.alert(message)
+      }
+      setErrorMessage(message)
       setSteps((prev) => prev.map((step) => (step.status === 'active' ? { ...step, status: 'error' } : step)))
       setPhase('input')
     }
@@ -501,14 +591,61 @@ export function EcomStudioForm() {
     setProgress(8)
     setErrorMessage(null)
 
+    let queuedJobCount = 0
+    let currentStage: GenerationAttemptEventStage = 'prepare_inputs'
+    let stageFailureLogged = false
+    const baseEventMetadata = {
+      aspectRatio,
+      imageSize,
+      model,
+      moduleCount: editableImagePlans.length,
+      outputLanguage,
+      promptProfile,
+      selectedModules: selectedDetailModules,
+    }
+    const logAttempt = (
+      stage: GenerationAttemptEventStage,
+      status: 'started' | 'success' | 'failed' | 'partial',
+      options?: { error?: unknown; metadata?: Record<string, unknown> }
+    ) => {
+      const errorInfo = options?.error ? extractAttemptErrorInfo(options.error) : null
+      void logGenerationAttemptEvent({
+        traceId,
+        studioType: 'ecom-detail',
+        stage,
+        status,
+        errorCode: errorInfo?.errorCode ?? null,
+        errorMessage: errorInfo?.errorMessage ?? null,
+        httpStatus: errorInfo?.httpStatus ?? null,
+        metadata: {
+          ...baseEventMetadata,
+          ...(options?.metadata ?? {}),
+        },
+      })
+    }
+
+    logAttempt('prepare_inputs', 'started')
     try {
       const productUrls = uploadedUrls.length > 0
         ? uploadedUrls
         : (await uploadFiles(productImages.map((item) => item.file))).map((item) => item.publicUrl)
       if (uploadedUrls.length === 0) setUploadedUrls(productUrls)
+      logAttempt('prepare_inputs', 'success', {
+        metadata: {
+          uploadedImageCount: productUrls.length,
+          reusedUploadedUrls: uploadedUrls.length > 0,
+        },
+      })
 
+      currentStage = 'prompt_generate'
+      logAttempt('prompt_generate', 'started', {
+        metadata: {
+          uploadedImageCount: productUrls.length,
+        },
+      })
       setStep('prompts', { status: 'active' })
       let promptText = ''
+      let promptStreamError: Error | null = null
       const promptStream = await generatePromptsV2Stream(
         {
           analysisJson: {
@@ -536,14 +673,26 @@ export function EcomStudioForm() {
         for (const line of decoder.decode(value, { stream: true }).split('\n')) {
           if (!line.startsWith('data: ')) continue
           const payload = line.slice(6).trim()
-          if (!payload || payload === '[DONE]' || payload.startsWith('[ERROR]')) continue
+          if (!payload || payload === '[DONE]') continue
+          if (payload.startsWith('[ERROR]')) {
+            promptStreamError = new Error(payload.slice('[ERROR]'.length).trim() || 'Prompt generation failed')
+            continue
+          }
           try {
-            const parsed = JSON.parse(payload) as { fullText?: string }
+            const parsed = JSON.parse(payload) as { fullText?: string; error?: string }
+            if (typeof parsed.error === 'string' && parsed.error.trim()) {
+              promptStreamError = new Error(parsed.error.trim())
+              continue
+            }
             promptText = parsed.fullText ?? promptText
           } catch {
             promptText += payload
           }
         }
+      }
+
+      if (promptStreamError) {
+        throw promptStreamError
       }
 
       const parsedPrompts = parsePromptArray(promptText, editableImagePlans.length)
@@ -552,63 +701,182 @@ export function EcomStudioForm() {
           || parsedPrompts[parsedPrompts.length - 1]?.prompt
           || `${plan.title}\n${plan.design_content}`
       ))
+      logAttempt('prompt_generate', 'success', {
+        metadata: {
+          promptCount: prompts.length,
+          promptTextLength: promptText.length,
+        },
+      })
 
+      currentStage = 'image_queue'
+      logAttempt('image_queue', 'started', {
+        metadata: {
+          promptCount: prompts.length,
+        },
+      })
       setStep('prompts', { status: 'done' })
       setStep('generate', { status: 'active' })
       setProgress(38)
 
-      const jobIds: string[] = []
-      for (let index = 0; index < prompts.length; index += 1) {
-        const { job_id } = await generateImage({
-          productImage: productUrls[0],
-          productImages: productUrls,
-          prompt: prompts[index],
-          promptProfile,
-          model,
-          aspectRatio,
-          imageSize,
-          client_job_id: `${uid()}_${index}`,
-          fe_attempt: 1,
-          trace_id: traceId,
+      const submissionResults = await Promise.allSettled(
+        prompts.map((prompt, index) =>
+          generateImage({
+            productImage: productUrls[0],
+            productImages: productUrls,
+            prompt,
+            promptProfile,
+            model,
+            aspectRatio,
+            imageSize,
+            client_job_id: `${uid()}_${index}`,
+            fe_attempt: 1,
+            trace_id: traceId,
+            metadata: {
+              module_id: editableImagePlans[index]?.id ?? null,
+              module_name: editableImagePlans[index]?.title ?? null,
+              selected_modules: selectedDetailModules,
+              module_count: editableImagePlans.length,
+              module_order: editableImagePlans.map((plan) => plan.id ?? plan.title),
+            },
+          }).then((result) => ({ jobId: result.job_id, index })),
+        ),
+      )
+
+      const queuedJobs = submissionResults.flatMap((result) =>
+        result.status === 'fulfilled' ? [result.value] : []
+      )
+      queuedJobCount = queuedJobs.length
+      const submissionFailureCount = submissionResults.filter((result) => result.status === 'rejected').length
+
+      if (queuedJobs.length === 0) {
+        const firstSubmissionError = submissionResults.find((result) => result.status === 'rejected')
+        const firstError = firstSubmissionError?.status === 'rejected'
+          ? firstSubmissionError.reason
+          : new Error('No image jobs were queued')
+        stageFailureLogged = true
+        logAttempt('image_queue', 'failed', {
+          error: firstError,
           metadata: {
-            module_id: editableImagePlans[index]?.id ?? null,
-            module_name: editableImagePlans[index]?.title ?? null,
-            selected_modules: selectedDetailModules,
-            module_count: editableImagePlans.length,
-            module_order: editableImagePlans.map((plan) => plan.id ?? plan.title),
+            failedSubmissionCount: submissionFailureCount,
+            promptCount: prompts.length,
+            queuedJobCount,
           },
         })
-        jobIds.push(job_id)
+        throw firstError
       }
 
-      const jobs = await Promise.all(jobIds.map((jobId) => waitForJob(jobId, abort.signal)))
-      const nextResults: ResultImage[] = jobs
-        .filter((job) => job.result_url)
-        .map((job, index) => ({
-          ...createResultAsset({
-            url: job.result_url!,
-            label: editableImagePlans[index]?.title ?? `${isZh ? '模块' : 'Module'} ${index + 1}`,
-            batchId,
-            batchTimestamp,
-            ...extractResultAssetMetadata(job.result_data),
-            originModule: 'ecom-studio',
-          }),
-        }))
+      const firstRejectedSubmission = submissionResults.find((result) => result.status === 'rejected')
+      logAttempt('image_queue', submissionFailureCount > 0 ? 'partial' : 'success', {
+        error: firstRejectedSubmission?.status === 'rejected' ? firstRejectedSubmission.reason : undefined,
+        metadata: {
+          failedSubmissionCount: submissionFailureCount,
+          promptCount: prompts.length,
+          queuedJobCount,
+        },
+      })
+
+      currentStage = 'batch_complete'
+      const settledJobs = await Promise.allSettled(
+        queuedJobs.map(({ jobId, index }) =>
+          waitForJob(jobId, abort.signal).then((job) => ({ job, index })),
+        ),
+      )
+
+      const nextResults: ResultImage[] = []
+      let failureCount = submissionFailureCount
+      let firstFailure: unknown = firstRejectedSubmission?.status === 'rejected'
+        ? firstRejectedSubmission.reason
+        : null
+
+      settledJobs.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          const { job, index } = result.value
+          const resultUrl = job.result_url
+          if (!resultUrl) {
+            failureCount += 1
+            if (!firstFailure) {
+              firstFailure = new Error('No output image returned')
+            }
+            return
+          }
+
+          nextResults.push({
+            ...createResultAsset({
+              url: resultUrl,
+              label: editableImagePlans[index]?.title ?? `${isZh ? '模块' : 'Module'} ${index + 1}`,
+              batchId,
+              batchTimestamp,
+              ...extractResultAssetMetadata(job.result_data),
+              originModule: 'ecom-studio',
+            }),
+          })
+          return
+        }
+
+        failureCount += 1
+        if (!firstFailure) {
+          firstFailure = result.status === 'rejected'
+            ? result.reason
+            : new Error('No output image returned')
+        }
+      })
+
+      if (nextResults.length === 0) {
+        const finalError = firstFailure instanceof Error ? firstFailure : new Error('No output image returned')
+        stageFailureLogged = true
+        logAttempt('batch_complete', 'failed', {
+          error: finalError,
+          metadata: {
+            failureCount,
+            queuedJobCount,
+            successCount: 0,
+          },
+        })
+        throw finalError
+      }
+
+      logAttempt('batch_complete', failureCount > 0 ? 'partial' : 'success', {
+        error: failureCount > 0 ? firstFailure : undefined,
+        metadata: {
+          failureCount,
+          queuedJobCount,
+          successCount: nextResults.length,
+        },
+      })
 
       setStep('generate', { status: 'done' })
-      setStep('done', { status: 'done' })
+      setStep('done', { status: failureCount > 0 ? 'error' : 'done' })
       setProgress(100)
       appendResults(nextResults, {
         activeBatchId: batchId,
         activeBatchTimestamp: batchTimestamp,
       })
+      setErrorMessage(failureCount > 0 ? partialGenerationFailedMessage(failureCount, isZh) : null)
       setPhase('complete')
-      refreshCredits()
     } catch (error) {
       if ((error as Error).name === 'AbortError') return
-      setErrorMessage(friendlyError((error as Error).message ?? 'Generation failed', isZh))
+      const rawMsg = (error as Error).message ?? 'Generation failed'
+      const message = isInsufficientCreditsError(error)
+        ? friendlyError(rawMsg, isZh)
+        : queuedJobCount > 0
+          ? generationRetryRefundMessage(isZh)
+          : friendlyError(rawMsg, isZh)
+      if (isProviderPolicyBlockedError(error) && typeof window !== 'undefined') {
+        window.alert(message)
+      }
+      if (!stageFailureLogged) {
+        logAttempt(currentStage, 'failed', {
+          error,
+          metadata: {
+            queuedJobCount,
+          },
+        })
+      }
+      setErrorMessage(message)
       setSteps((prev) => prev.map((step) => (step.status === 'active' ? { ...step, status: 'error' } : step)))
       setPhase('preview')
+    } finally {
+      refreshCredits()
     }
   }, [
     appendResults,
@@ -688,22 +956,18 @@ export function EcomStudioForm() {
 
   return (
     <CorePageShell maxWidthClass="max-w-[1360px]">
-      <div className="mb-7 flex items-start gap-3">
-        <SectionIcon icon={ShoppingBag} className="mt-1" />
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-foreground">{t('title')}</h1>
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
-              {t('badge')}
-            </span>
-          </div>
-          <p className="mt-1 text-[13px] text-muted-foreground">{t('description')}</p>
-        </div>
-      </div>
+      <StudioPageHero
+        icon={ShoppingBag}
+        badge={t('badge')}
+        title={t('title')}
+        description={t('description')}
+        badgeClassName="border-amber-200/80 bg-amber-50/90 text-amber-700"
+      />
 
-      {errorMessage && phase !== 'complete' && (
+      {errorMessage && (
         <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {errorMessage}
+          <p>{errorMessage}</p>
+          <SupportFeedbackLink className="mt-2" />
         </div>
       )}
 
@@ -738,6 +1002,56 @@ export function EcomStudioForm() {
               />
             </div>
           </fieldset>
+
+          {/* Onboarding guide banner */}
+          {onboardingStep && (
+            <div className="relative overflow-hidden rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-50/90 to-orange-50/60 px-5 py-4">
+              <button
+                type="button"
+                onClick={dismissOnboarding}
+                className="absolute right-3 top-3 rounded-full p-1 text-amber-400 hover:bg-amber-100 hover:text-amber-600 transition-colors"
+                aria-label="Dismiss"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div className="flex items-start gap-3 pr-6">
+                <span className="mt-0.5 text-lg">
+                  {onboardingStep === 'welcome' ? '✨' : '🎉'}
+                </span>
+                <div className="min-w-0">
+                  {onboardingStep === 'welcome' ? (
+                    <>
+                      <p className="text-[14px] font-semibold text-amber-900">
+                        {isZh ? '欢迎体验详情页生成' : 'Welcome to Detail Page Studio'}
+                      </p>
+                      <p className="mt-1 text-[13px] leading-5 text-amber-800/80">
+                        {isZh
+                          ? '上方已加载示例商品图片，选择下方的详情页模块即可体验生成效果。你可以随时替换为自己的商品图。'
+                          : 'A sample product image is loaded above. Select detail page modules below to try it out. You can replace it with your own product image anytime.'}
+                      </p>
+                      <p className="mt-2 flex items-center gap-1.5 text-[13px] font-medium text-amber-700">
+                        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+                        {isZh ? '选择下方模块开始' : 'Select modules below to start'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[14px] font-semibold text-amber-900">
+                        {isZh
+                          ? `已选择 ${selectedDetailModules.length} 个模块`
+                          : `${selectedDetailModules.length} module${selectedDetailModules.length > 1 ? 's' : ''} selected`}
+                      </p>
+                      <p className="mt-1 text-[13px] leading-5 text-amber-800/80">
+                        {isZh
+                          ? '点击下方「生成详情页规划方案」按钮，即可开始生成。'
+                          : 'Click the "Generate" button below to start generating.'}
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className={leftCardClass}>
             <div className="mb-4 flex items-center gap-3">
@@ -841,25 +1155,48 @@ export function EcomStudioForm() {
             onToggle={handleToggleModule}
             disabled={isProcessing}
             isZh={isZh}
+            highlight={onboardingStep === 'welcome'}
           />
 
           {phase === 'input' && (
-            <Button
-              size="lg"
-              onClick={handleAnalyze}
-              disabled={productImages.length === 0 || selectedModules.length === 0}
-              className="h-14 w-full rounded-3xl bg-primary text-base font-semibold text-white hover:bg-primary disabled:bg-primary"
-            >
-              <Sparkles className="mr-2 h-4 w-4" />
-              {t('analyzeButton')}
-            </Button>
+            <div className="space-y-3">
+              {insufficientCredits && selectedModules.length > 0 && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <p>
+                    {isZh
+                      ? `生成 ${selectedModules.length} 张图片需要 ${totalCost} 积分，当前余额 ${credits ?? 0} 积分。`
+                      : `Generating ${selectedModules.length} images costs ${totalCost} credits. Current balance: ${credits ?? 0}.`}
+                  </p>
+                  <a
+                    href={`/${locale}/pricing`}
+                    className="mt-1.5 inline-block text-[13px] font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-700"
+                  >
+                    {isZh ? '购买积分 →' : 'Buy Credits →'}
+                  </a>
+                </div>
+              )}
+              <Button
+                size="lg"
+                onClick={handleAnalyze}
+                disabled={productImages.length === 0 || selectedModules.length === 0}
+                className={`${WORKFLOW_PRIMARY_BUTTON_CLASS} w-full ${onboardingStep === 'modules-selected' ? 'ring-2 ring-amber-300/60 ring-offset-2' : ''}`}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                {t('analyzeButton')}
+              </Button>
+              {selectedModules.length > 0 && !insufficientCredits && (
+                <p className="text-center text-[13px] text-muted-foreground">
+                  {isZh ? `预计消耗 ${totalCost} 积分` : `Estimated cost: ${totalCost} credits`}
+                </p>
+              )}
+            </div>
           )}
 
           {phase === 'analyzing' && (
             <Button
               size="lg"
               disabled
-              className="h-14 w-full rounded-3xl bg-primary text-base font-semibold text-white"
+              className={`${WORKFLOW_PENDING_BUTTON_CLASS} w-full`}
             >
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               {isZh ? '正在生成详情页规划方案' : 'Building detail page plan'}
@@ -882,7 +1219,7 @@ export function EcomStudioForm() {
                 <Button
                   size="lg"
                   onClick={handleAnalyze}
-                  className="h-14 w-full rounded-3xl bg-amber-600 text-[17px] font-semibold text-white hover:bg-amber-700"
+                  className={`${WORKFLOW_WARNING_BUTTON_CLASS} w-full`}
                 >
                   <RefreshCw className="mr-2 h-5 w-5" />
                   {isZh ? '重新生成详情页规划方案' : 'Rebuild Detail Page Plan'}
@@ -892,7 +1229,7 @@ export function EcomStudioForm() {
                   size="lg"
                   onClick={handleGenerate}
                   disabled={editableImagePlans.length === 0 || insufficientCredits}
-                  className="h-14 w-full rounded-3xl bg-primary text-[17px] font-semibold text-white hover:opacity-90 disabled:bg-muted"
+                  className={`${WORKFLOW_PRIMARY_BUTTON_CLASS} w-full`}
                 >
                   {isZh
                     ? `确认生成 ${editableImagePlans.length} 张图片`
@@ -906,7 +1243,7 @@ export function EcomStudioForm() {
                 variant="outline"
                 size="lg"
                 onClick={handleBackToInput}
-                className="h-14 w-full rounded-3xl border-border bg-secondary text-[17px] font-semibold text-foreground hover:bg-muted"
+                className={`${WORKFLOW_SECONDARY_BUTTON_CLASS} w-full`}
               >
                 <ArrowLeft className="mr-2 h-5 w-5" />
                 {isZh ? '返回编辑' : 'Back to Edit'}

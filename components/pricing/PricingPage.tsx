@@ -7,6 +7,7 @@ import { createCreditCheckout, createOnetimeCheckout } from '@/lib/api/edge-func
 import { createClient } from '@/lib/supabase/client'
 
 type PlanSlug = 'monthly' | 'quarterly' | 'yearly' | 'topup_5' | 'topup_15' | 'topup_30'
+type Currency = 'usd' | 'cny' | 'hkd'
 
 interface DbPackage {
   id: string
@@ -16,6 +17,8 @@ interface DbPackage {
   credits: number
   first_sub_bonus: number
   stripe_price_id: string | null
+  stripe_price_id_cny: string | null
+  stripe_price_id_hkd: string | null
   is_popular: boolean
   sort_order: number
 }
@@ -29,8 +32,48 @@ const SECTION_ORDER: Array<{ key: 'oneTime' | 'monthly' | 'quarterly' | 'yearly'
   { key: 'yearly', plans: ['yearly'] },
 ]
 
-function formatUsd(value: number): string {
-  return Number.isInteger(value) ? `$${value.toFixed(0)}` : `$${value.toFixed(1)}`
+const CURRENCY_OPTIONS: { value: Currency; label: string; symbol: string }[] = [
+  { value: 'usd', label: 'USD', symbol: '$' },
+  { value: 'cny', label: 'CNY', symbol: '¥' },
+  { value: 'hkd', label: 'HKD', symbol: 'HK$' },
+]
+
+const CNY_PRICES: Record<PlanSlug, number> = {
+  topup_5: 36,
+  topup_15: 108,
+  topup_30: 218,
+  monthly: 72,
+  quarterly: 202,
+  yearly: 718,
+}
+
+const HKD_PRICES: Record<PlanSlug, number> = {
+  topup_5: 39,
+  topup_15: 117,
+  topup_30: 234,
+  monthly: 77,
+  quarterly: 218,
+  yearly: 772,
+}
+
+function formatPrice(value: number, currency: Currency): string {
+  const opt = CURRENCY_OPTIONS.find((c) => c.value === currency)!
+  if (currency === 'usd') {
+    return Number.isInteger(value) ? `${opt.symbol}${value.toFixed(0)}` : `${opt.symbol}${value.toFixed(1)}`
+  }
+  return `${opt.symbol}${Math.round(value)}`
+}
+
+function getDisplayPrice(pkg: DbPackage, currency: Currency): number {
+  if (currency === 'cny') return CNY_PRICES[pkg.name as PlanSlug] ?? pkg.price_usd
+  if (currency === 'hkd') return HKD_PRICES[pkg.name as PlanSlug] ?? pkg.price_usd
+  return pkg.price_usd
+}
+
+function hasPriceId(pkg: DbPackage, currency: Currency): boolean {
+  if (currency === 'cny') return !!(pkg.stripe_price_id_cny || pkg.stripe_price_id)
+  if (currency === 'hkd') return !!(pkg.stripe_price_id_hkd || pkg.stripe_price_id)
+  return !!pkg.stripe_price_id
 }
 
 function planCycleKey(plan: PlanSlug): 'month' | 'quarter' | 'year' | null {
@@ -52,6 +95,7 @@ export function PricingPage() {
   const [loading, setLoading] = useState<string | null>(null)
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
   const [packages, setPackages] = useState<DbPackage[]>([])
+  const [currency, setCurrency] = useState<Currency>(locale === 'zh' ? 'cny' : 'usd')
 
   const successParam = searchParams.get('success')
   const typeParam = searchParams.get('type')
@@ -61,7 +105,7 @@ export function PricingPage() {
     const supabase = createClient()
     supabase
       .from('packages')
-      .select('id,name,type,price_usd,credits,first_sub_bonus,stripe_price_id,is_popular,sort_order')
+      .select('id,name,type,price_usd,credits,first_sub_bonus,stripe_price_id,stripe_price_id_cny,stripe_price_id_hkd,is_popular,sort_order')
       .eq('active', true)
       .order('sort_order')
       .then(({ data }) => {
@@ -77,7 +121,7 @@ export function PricingPage() {
   }, [packages])
 
   async function handleChoosePlan(pkg: DbPackage) {
-    if (!pkg.stripe_price_id) return
+    if (!hasPriceId(pkg, currency)) return
 
     setCheckoutError(null)
     setLoading(pkg.id)
@@ -86,12 +130,12 @@ export function PricingPage() {
       const returnTo = `/${locale}/pricing`
 
       if (pkg.type === 'subscription') {
-        const { url } = await createCreditCheckout(pkg.id, returnTo)
+        const { url } = await createCreditCheckout(pkg.id, returnTo, currency)
         window.location.href = url
         return
       }
 
-      const { url } = await createOnetimeCheckout(pkg.id, returnTo)
+      const { url } = await createOnetimeCheckout(pkg.id, returnTo, currency)
       window.location.href = url
     } catch (err) {
       setCheckoutError(err instanceof Error ? err.message : t('paymentSetupHint'))
@@ -126,6 +170,23 @@ export function PricingPage() {
           <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
             {t('subtitle')}
           </p>
+
+          {/* Currency switcher */}
+          <div className="mt-6 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+            {CURRENCY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setCurrency(opt.value)}
+                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
+                  currency === opt.value
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {opt.symbol} {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="mt-10 space-y-8">
@@ -151,7 +212,8 @@ export function PricingPage() {
                   const labelKey = planLabelKey(planName)
                   const isSubscription = pkg.type === 'subscription'
                   const isFeatured = planName === 'yearly'
-                  const isDisabled = !pkg.stripe_price_id || loading !== null
+                  const isDisabled = !hasPriceId(pkg, currency) || loading !== null
+                  const displayPrice = getDisplayPrice(pkg, currency)
 
                   return (
                     <article
@@ -182,7 +244,7 @@ export function PricingPage() {
                       <div className="space-y-3">
                         <div className="flex items-end gap-2">
                           <span className="text-4xl font-semibold tracking-tight text-slate-950">
-                            {formatUsd(pkg.price_usd)}
+                            {formatPrice(displayPrice, currency)}
                           </span>
                           {cycleKey && (
                             <span className="pb-1 text-sm font-medium text-slate-500">
@@ -220,7 +282,7 @@ export function PricingPage() {
                               : t('buttons.topup')}
                         </button>
 
-                        {!pkg.stripe_price_id && (
+                        {!hasPriceId(pkg, currency) && (
                           <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                             <p className="font-semibold">{t('paymentSetupPending')}</p>
                             <p className="mt-1">{t('paymentSetupHint')}</p>
@@ -258,7 +320,7 @@ export function PricingPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">CREDITS</p>
             <h2 className="mt-2 text-xl font-semibold">{t('usage.title')}</h2>
             <div className="mt-6 space-y-3">
-              <div className="rounded-2xl bg-white/10 px-4 py-4 text-sm">{t('usage.speed')}</div>
+              <div className="rounded-2xl bg-white/10 px-4 py-4 text-sm">{t('usage.fast')}</div>
               <div className="rounded-2xl bg-white/10 px-4 py-4 text-sm">{t('usage.balanced')}</div>
               <div className="rounded-2xl bg-white/10 px-4 py-4 text-sm">{t('usage.quality')}</div>
             </div>

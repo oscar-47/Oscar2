@@ -16,6 +16,11 @@ interface UseCreditsResult {
   total: number | null
   subscriptionCredits: number
   purchasedCredits: number
+  /** Backward-compatible alias for active subscription */
+  isPremium: boolean
+  /** Whether the user has any paid history or an active subscription */
+  isPaidMember: boolean
+  hasActiveSubscription: boolean
   isLoading: boolean
   /** Manually refetch credits from DB */
   refetch: () => void
@@ -27,6 +32,7 @@ interface UseCreditsResult {
  */
 export function useCredits(userId?: string): UseCreditsResult {
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [hasPaidHistory, setHasPaidHistory] = useState(false)
   const [resolvedId, setResolvedId] = useState<string | null>(userId ?? null)
   const [isLoading, setIsLoading] = useState(true)
   const resolvedIdRef = useRef(resolvedId)
@@ -36,12 +42,22 @@ export function useCredits(userId?: string): UseCreditsResult {
     const uid = resolvedIdRef.current
     if (!uid) return
     const supabase = createClient()
-    const { data } = await supabase
-      .from('profiles')
-      .select('subscription_credits, purchased_credits')
-      .eq('id', uid)
-      .single()
-    if (data) setProfile(data as Profile)
+    const [{ data: profileData }, { data: paidTransactions }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('subscription_credits, purchased_credits, subscription_plan, subscription_status')
+        .eq('id', uid)
+        .single(),
+      supabase
+        .from('transactions')
+        .select('id')
+        .eq('user_id', uid)
+        .eq('status', 'completed')
+        .gt('amount', 0)
+        .limit(1),
+    ])
+    if (profileData) setProfile(profileData as Profile)
+    setHasPaidHistory((paidTransactions?.length ?? 0) > 0)
   }, [])
 
   // Listen to global refetch events so all useCredits instances stay in sync
@@ -74,14 +90,24 @@ export function useCredits(userId?: string): UseCreditsResult {
           return
         }
 
-        const { data } = await supabase
-          .from('profiles')
-          .select('subscription_credits, purchased_credits')
-          .eq('id', uid)
-          .single()
+        const [{ data: profileData }, { data: paidTransactions }] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('subscription_credits, purchased_credits, subscription_plan, subscription_status')
+            .eq('id', uid)
+            .single(),
+          supabase
+            .from('transactions')
+            .select('id')
+            .eq('user_id', uid)
+            .eq('status', 'completed')
+            .gt('amount', 0)
+            .limit(1),
+        ])
 
         if (!cancelled) {
-          if (data) setProfile(data as Profile)
+          if (profileData) setProfile(profileData as Profile)
+          setHasPaidHistory((paidTransactions?.length ?? 0) > 0)
           setIsLoading(false)
         }
 
@@ -117,10 +143,17 @@ export function useCredits(userId?: string): UseCreditsResult {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
+  const hasActiveSubscription = !!(profile?.subscription_plan && profile?.subscription_status === 'active')
+  const isPaidMember = hasActiveSubscription || hasPaidHistory
+  const isPremium = hasActiveSubscription
+
   return {
     total: profile ? totalCredits(profile) : null,
     subscriptionCredits: profile?.subscription_credits ?? 0,
     purchasedCredits: profile?.purchased_credits ?? 0,
+    isPremium,
+    isPaidMember,
+    hasActiveSubscription,
     isLoading,
     refetch,
   }

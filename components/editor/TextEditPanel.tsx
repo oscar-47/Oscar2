@@ -1,20 +1,24 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { X, Sparkles, Loader2, Type } from 'lucide-react'
 import { useEditorStore } from '@/lib/stores/editor-store'
 import { detectImageText, generateImage } from '@/lib/api/edge-functions'
+import { useCredits } from '@/lib/hooks/useCredits'
 import { useWaitForJob } from '@/lib/hooks/useWaitForJob'
 import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
-import { cn } from '@/lib/utils'
+import { cn, friendlyError, isInsufficientCreditsError } from '@/lib/utils'
 import type { OcrTextItem } from '@/lib/api/edge-functions'
 import { getGenerationCreditCost, type GenerationJob } from '@/types'
 
 export function TextEditPanel() {
   const t = useTranslations('studio.editor')
   const locale = useLocale()
+  const router = useRouter()
   const isZh = locale.startsWith('zh')
+  const { total } = useCredits()
   const textEdit = useEditorStore((s) => s.textEdit)
   const closeTextEdit = useEditorStore((s) => s.closeTextEdit)
   const setTextEditItems = useEditorStore((s) => s.setTextEditItems)
@@ -23,6 +27,7 @@ export function TextEditPanel() {
   const applyTextEditResult = useEditorStore((s) => s.applyTextEditResult)
   const openQuickEdit = useEditorStore((s) => s.openQuickEdit)
   const objects = useEditorStore((s) => s.objects)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Wait for apply (generate-image) job
   const { startWaiting: startApplyWaiting } = useWaitForJob({
@@ -37,9 +42,10 @@ export function TextEditPanel() {
       }
       closeTextEdit()
     },
-    onError: () => {
+    onError: (error) => {
       setTextEditField('isProcessing', false)
       setTextEditField('jobId', null)
+      setActionError(friendlyError(error.message ?? 'Job failed', isZh))
     },
   })
 
@@ -102,6 +108,11 @@ export function TextEditPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [textEdit.open, textEdit.objectId, textEdit.requestId])
 
+  const hasChanges = textEdit.items.some((item) => item.edited !== item.original)
+  const cost = getGenerationCreditCost('gpt-image', '1K')
+  const insufficientCredits = total !== null && total < cost
+  const showTopUp = insufficientCredits || isInsufficientCreditsError(actionError)
+
   const handleApply = useCallback(async () => {
     if (!textEdit.objectId) return
     const obj = objects.find((o) => o.id === textEdit.objectId)
@@ -119,6 +130,12 @@ export function TextEditPanel() {
     const zhParts = diffs.map((d) => `文字${d.original}替换为${d.edited}`).join(',')
     const prompt = `${zhParts}，字体样式大小颜色保持不变，图中其他元素保持不变。`
 
+    if (insufficientCredits) {
+      setActionError(friendlyError('INSUFFICIENT_CREDITS', isZh))
+      return
+    }
+
+    setActionError(null)
     setTextEditField('isProcessing', true)
     try {
       const res = await generateImage({
@@ -137,10 +154,11 @@ export function TextEditPanel() {
       })
       setTextEditField('jobId', res.job_id)
       void startApplyWaiting(res.job_id)
-    } catch {
+    } catch (error) {
       setTextEditField('isProcessing', false)
+      setActionError(friendlyError((error as Error).message ?? 'Generation failed', isZh))
     }
-  }, [textEdit, objects, setTextEditField, startApplyWaiting])
+  }, [insufficientCredits, isZh, objects, setTextEditField, startApplyWaiting, textEdit])
 
   const handleJumpToQuickEdit = useCallback(() => {
     if (textEdit.objectId) {
@@ -151,9 +169,6 @@ export function TextEditPanel() {
   }, [textEdit.objectId, closeTextEdit, openQuickEdit])
 
   if (!textEdit.open) return null
-
-  const hasChanges = textEdit.items.some((item) => item.edited !== item.original)
-  const cost = getGenerationCreditCost('gpt-image', '1K')
 
   return (
     <div className="absolute right-4 top-16 z-[10000] w-[340px] rounded-2xl border border-border bg-white shadow-2xl">
@@ -219,7 +234,7 @@ export function TextEditPanel() {
             <button
               type="button"
               onClick={() => void handleApply()}
-              disabled={!hasChanges || textEdit.isProcessing}
+              disabled={!hasChanges || textEdit.isProcessing || insufficientCredits}
               className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent py-2.5 text-sm font-medium text-accent-foreground hover:shadow-md disabled:opacity-50 transition-all"
             >
               {textEdit.isProcessing ? (
@@ -235,6 +250,22 @@ export function TextEditPanel() {
                 </>
               )}
             </button>
+            {(actionError || insufficientCredits) && (
+              <div className="space-y-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2">
+                <p className="text-xs text-destructive">
+                  {actionError ?? friendlyError('INSUFFICIENT_CREDITS', isZh)}
+                </p>
+                {showTopUp && (
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/${locale}/pricing`)}
+                    className="text-xs font-medium text-primary underline underline-offset-2"
+                  >
+                    {isZh ? '去充值' : 'Top up'}
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

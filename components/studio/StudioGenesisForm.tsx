@@ -16,10 +16,12 @@ import {
 import { MultiImageUploader, type UploadedImage } from '@/components/upload/MultiImageUploader'
 import type { ProgressStep } from '@/components/generation/GenerationProgress'
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
+import { getAspectRatioCardStyle, toCssAspectRatio } from '@/components/generation/aspect-ratio-layout'
 import { ResultGallery, type ResultImage } from '@/components/generation/ResultGallery'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
 import { ModelTextHint } from '@/components/studio/ModelTextHint'
+import { SupportFeedbackLink } from '@/components/support/SupportFeedbackLink'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { useAdminImageModels } from '@/lib/hooks/useAdminImageModels'
@@ -58,7 +60,14 @@ import {
   sanitizeImageSizeForModel,
 } from '@/types'
 import { useUserEmail } from '@/lib/hooks/useUserEmail'
-import { friendlyError } from '@/lib/utils'
+import { friendlyError, generationRetryRefundMessage, isInsufficientCreditsError } from '@/lib/utils'
+import {
+  WORKFLOW_PENDING_BUTTON_CLASS,
+  WORKFLOW_PRIMARY_BUTTON_CLASS,
+  WORKFLOW_SECONDARY_BUTTON_CLASS,
+  WORKFLOW_WARNING_BUTTON_CLASS,
+} from '@/components/studio/workflow-button-styles'
+
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1921,12 +1930,6 @@ function mergePromptsWithFallback(
 
 // ─── Image Slot Card ────────────────────────────────────────────────────────
 
-function toCssAspectRatio(aspectRatio: AspectRatio): string {
-  const [w, h] = aspectRatio.split(':').map((v) => Number(v))
-  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return '4 / 3'
-  return `${w} / ${h}`
-}
-
 function ImageSlotCard({
   slot,
   index,
@@ -1942,7 +1945,7 @@ function ImageSlotCard({
 
   if (slot.status === 'done' && slot.result) {
     return (
-      <div className="group relative w-[220px] max-w-full overflow-hidden rounded-xl border border-border bg-muted" style={{ aspectRatio: boxAspectRatio }}>
+      <div className="group relative max-w-full shrink-0 overflow-hidden rounded-xl border border-border bg-muted" style={getAspectRatioCardStyle(boxAspectRatio)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={slot.result.url}
@@ -1966,7 +1969,7 @@ function ImageSlotCard({
 
   if (slot.status === 'failed') {
     return (
-      <div className="flex w-[220px] max-w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-destructive/40 bg-destructive/5 p-4 text-center" style={{ aspectRatio: boxAspectRatio }}>
+      <div className="flex max-w-full shrink-0 flex-col items-center justify-center rounded-xl border-2 border-dashed border-destructive/40 bg-destructive/5 p-4 text-center" style={getAspectRatioCardStyle(boxAspectRatio)}>
         <AlertTriangle className="h-6 w-6 text-destructive mb-2" />
         <p className="text-xs text-destructive font-medium">{isZh ? '生成失败' : 'Failed'}</p>
         {slot.error && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{slot.error}</p>}
@@ -1976,7 +1979,7 @@ function ImageSlotCard({
 
   // pending
   return (
-    <div className="flex w-[220px] max-w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface p-4" style={{ aspectRatio: boxAspectRatio }}>
+    <div className="flex max-w-full shrink-0 flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface p-4" style={getAspectRatioCardStyle(boxAspectRatio)}>
       <Loader2 className="h-6 w-6 text-muted-foreground animate-spin mb-2" />
       <p className="text-xs text-muted-foreground">{isZh ? '生成中' : 'Pending'}</p>
     </div>
@@ -2113,6 +2116,21 @@ export function StudioGenesisForm() {
   }, [phase, analyzingMessages.length])
 
   // ── Image handlers ──
+  const resetToInputIfNeeded = useCallback(() => {
+    setPhase((prev) => {
+      if (prev !== 'complete' && prev !== 'preview') return prev
+      setGenesisAnalysis(null)
+      setGenesisBlueprint(null)
+      setAnalysisParams(null)
+      setUploadedUrls([])
+      setStyleSelections({})
+      setCustomStyleTags({})
+      setCustomTagInputs({})
+      setActiveCustomInputKey(null)
+      return 'input'
+    })
+  }, [])
+
   const handleAddImages = useCallback((files: File[]) => {
     const newImages: UploadedImage[] = files.map((f) => ({
       file: f,
@@ -2120,7 +2138,8 @@ export function StudioGenesisForm() {
     }))
     setProductImages((prev) => [...prev, ...newImages])
     setErrorMessage(null)
-  }, [])
+    resetToInputIfNeeded()
+  }, [resetToInputIfNeeded])
 
   const handleRemoveImage = useCallback((index: number) => {
     setProductImages((prev) => {
@@ -2128,7 +2147,8 @@ export function StudioGenesisForm() {
       if (removed) URL.revokeObjectURL(removed.previewUrl)
       return prev.filter((_, i) => i !== index)
     })
-  }, [])
+    resetToInputIfNeeded()
+  }, [resetToInputIfNeeded])
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort()
@@ -2442,7 +2462,11 @@ export function StudioGenesisForm() {
       refreshCredits()
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') return
-      setErrorMessage(friendlyError(err instanceof Error ? err.message : tc('error'), isZh))
+      setErrorMessage(
+        isInsufficientCreditsError(err)
+          ? friendlyError((err as Error).message ?? 'Not enough credits', isZh)
+          : generationRetryRefundMessage(isZh)
+      )
       setSteps((prev) =>
         prev.map((s) => (s.status === 'active' ? { ...s, status: 'error' } : s))
       )
@@ -2698,7 +2722,7 @@ export function StudioGenesisForm() {
           size="lg"
           onClick={handleAnalyze}
           disabled={productImages.length === 0}
-          className="h-14 w-full rounded-2xl bg-primary text-base font-semibold text-white hover:opacity-90 disabled:bg-primary disabled:text-white"
+          className={`${WORKFLOW_PRIMARY_BUTTON_CLASS} w-full`}
         >
           <Sparkles className="mr-2 h-4 w-4" />
           {t('analyze')}
@@ -2711,7 +2735,7 @@ export function StudioGenesisForm() {
         <Button
           size="lg"
           disabled
-          className="h-14 w-full rounded-2xl bg-primary text-base font-semibold text-white"
+          className={`${WORKFLOW_PENDING_BUTTON_CLASS} w-full`}
         >
           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           {t('steps.analyze')}
@@ -2732,7 +2756,7 @@ export function StudioGenesisForm() {
             <Button
               size="lg"
               onClick={handleAnalyze}
-              className="h-14 w-full rounded-3xl bg-amber-600 text-[17px] font-semibold text-white hover:bg-amber-700"
+              className={`${WORKFLOW_WARNING_BUTTON_CLASS} w-full`}
             >
               <RefreshCw className="mr-2 h-5 w-5" />
               {t('reanalyze')}
@@ -2742,7 +2766,7 @@ export function StudioGenesisForm() {
               size="lg"
               onClick={handleGenerate}
               disabled={insufficientCredits}
-              className="h-14 w-full rounded-3xl bg-primary text-[17px] font-semibold text-white hover:opacity-90 disabled:bg-muted"
+              className={`${WORKFLOW_PRIMARY_BUTTON_CLASS} w-full`}
             >
               <ArrowRight className="mr-2 h-5 w-5" />
               {isZh
@@ -2772,7 +2796,7 @@ export function StudioGenesisForm() {
             variant="outline"
             size="lg"
             onClick={handleBackToInput}
-            className="h-14 w-full rounded-3xl border-border bg-secondary text-[17px] font-semibold text-foreground hover:bg-muted"
+            className={`${WORKFLOW_SECONDARY_BUTTON_CLASS} w-full`}
           >
             <ArrowLeft className="mr-2 h-5 w-5" />
             {t('backToEdit')}
@@ -3080,7 +3104,10 @@ export function StudioGenesisForm() {
         )}
 
         {errorMessage && (
-          <div className="text-center text-sm text-destructive">{errorMessage}</div>
+          <div className="text-center text-sm text-destructive">
+            <p>{errorMessage}</p>
+            <SupportFeedbackLink className="mt-2 justify-center" />
+          </div>
         )}
       </div>
     )
@@ -3101,7 +3128,8 @@ export function StudioGenesisForm() {
 
         {errorMessage && phase !== 'complete' && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {errorMessage}
+            <p>{errorMessage}</p>
+            <SupportFeedbackLink className="mt-2" />
           </div>
         )}
 

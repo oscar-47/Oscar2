@@ -9,6 +9,7 @@ import {
   withPromptProfileConfigKeySuffix,
 } from "../_shared/prompt-profile.ts";
 import { getBooleanSystemConfig } from "../_shared/system-config.ts";
+import { classifyImageValidationError, validateImageInputUrls } from "../_shared/input-image-validation.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
@@ -20,6 +21,17 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body.productImage !== "string") {
     return err("BAD_REQUEST", "productImage is required");
+  }
+
+  const inputImageUrls = [
+    typeof body.productImage === "string" ? body.productImage : "",
+    ...(Array.isArray(body.productImages) ? body.productImages.filter((x): x is string => typeof x === "string") : []),
+    typeof body.modelImage === "string" ? body.modelImage : "",
+  ];
+  try {
+    await validateImageInputUrls(inputImageUrls);
+  } catch (error) {
+    return err(classifyImageValidationError(error), String(error ?? ""), 400);
   }
 
   const clothingMode = typeof body.clothingMode === "string"

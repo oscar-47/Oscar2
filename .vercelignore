@@ -1,1 +1,13 @@
-.claude/
+.git
+.next
+.next.bak.*
+.next.stale.*
+node_modules
+tmp
+playwright-report
+test-results
+.agent
+.agents
+.claude
+.codex
+skills

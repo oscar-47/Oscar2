@@ -37,6 +37,8 @@ All function errors follow:
 - `PROMPT_STREAM_FAILED`: Failed during SSE generation.
 - `IMAGE_JOB_CREATE_FAILED`: Failed to create image job.
 - `IMAGE_INPUT_SOURCE_MISSING`: Missing uploaded source image.
+- `IMAGE_INPUT_TOO_LARGE`: Uploaded input image exceeds the supported size limit.
+- `IMAGE_INPUT_INVALID_CONTENT_TYPE`: Uploaded input URL did not resolve to an image content type.
 - `IMAGE_INPUT_PROMPT_MISSING`: Missing prompt text.
 - `TASK_CLAIM_FAILED`: Failed to claim queued task.
 - `STYLE_REPLICATE_JOB_CREATE_FAILED`: Failed to create/enqueue style replicate job.
@@ -52,4 +54,5 @@ All function errors follow:
 - `MODEL_UNAVAILABLE`: Selected model is unavailable for the current endpoint/account.
 - `MISSING_DOUBAO_IMAGE_API_KEY`: Doubao key not configured.
 - `UPSTREAM_TIMEOUT`: Upstream generation request timed out.
+- `TASK_STALE_NO_HEARTBEAT`: Worker stopped heartbeating while the task was running.
 - `BATCH_PARTIAL_FAILED`: Job succeeded with partial unit failures.

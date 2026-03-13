@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/internal/job-health-check",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

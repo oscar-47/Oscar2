@@ -42,5 +42,14 @@ verify_jwt = false
 [functions.process-generation-job]
 verify_jwt = false
 
+[functions.process-analysis-job]
+verify_jwt = false
+
+[functions.process-image-gen-job]
+verify_jwt = false
+
+[functions.process-style-replicate-job]
+verify_jwt = false
+
 [functions.drain-generation-queue]
 verify_jwt = false

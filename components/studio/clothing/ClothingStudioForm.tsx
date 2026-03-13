@@ -4,11 +4,12 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { TabsList, TabsTrigger, Tabs } from '@/components/ui/tabs'
 import { CorePageShell } from '@/components/studio/CorePageShell'
-import { SectionIcon } from '@/components/shared/SectionIcon'
+import { StudioPageHero } from '@/components/studio/StudioPageHero'
 import { ModelTryOnTab } from './ModelTryOnTab'
 import { BasicPhotoSetTab } from './BasicPhotoSetTab'
 import type { ClothingTab, ClothingPhase } from './types'
 import { Loader2, Shirt, GalleryVerticalEnd } from 'lucide-react'
+
 
 function getPhaseSteps(t: (key: string) => string): { phase: ClothingPhase; label: string; num: number }[] {
   return [
@@ -95,22 +96,18 @@ export function ClothingStudioForm() {
     <CorePageShell maxWidthClass="max-w-[1360px]">
       <div className="mx-auto w-full">
         <div className="mb-7">
-          <div className="flex items-start gap-3">
-            <SectionIcon icon={Shirt} className="mt-1" />
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-foreground">{t('pageTitle')}</h1>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400">
-                  {t('badge')}
-                </span>
-              </div>
-              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-                {t('pageDescriptionLine1')}
-                <br />
-                {t('pageDescriptionLine2')}
-              </p>
-            </div>
-          </div>
+          <StudioPageHero
+            icon={Shirt}
+            badge={t('badge')}
+            title={t('pageTitle')}
+            description={
+              <>
+                <p>{t('pageDescriptionLine1')}</p>
+                <p>{t('pageDescriptionLine2')}</p>
+              </>
+            }
+            badgeClassName="border-emerald-200/80 bg-emerald-50/90 text-emerald-700"
+          />
 
           <div className="mt-10 w-full">
             <StepIndicator currentPhase={current.phase} steps={phaseSteps} />

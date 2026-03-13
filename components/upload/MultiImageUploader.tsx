@@ -3,7 +3,9 @@
 import { useCallback, useState } from 'react'
 import { useDropzone, type FileRejection } from 'react-dropzone'
 import { Plus, Upload, X } from 'lucide-react'
+import { SupportFeedbackLink } from '@/components/support/SupportFeedbackLink'
 import { cn } from '@/lib/utils'
+import { MAX_IMAGE_UPLOAD_MB } from '@/lib/upload-constraints'
 
 export interface UploadedImage {
   file: File
@@ -34,7 +36,7 @@ export function MultiImageUploader({
   onAdd,
   onRemove,
   maxImages = 5,
-  maxSizeMB = 10,
+  maxSizeMB = MAX_IMAGE_UPLOAD_MB,
   label = 'Drop images here or click to select',
   footerText,
   hideDefaultFooter = false,
@@ -126,7 +128,12 @@ export function MultiImageUploader({
           )}
         </div>
 
-        {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+        {error && (
+          <div className="mt-2 space-y-1">
+            <p className="text-xs text-destructive">{error}</p>
+            <SupportFeedbackLink />
+          </div>
+        )}
       </div>
     )
   }
@@ -186,7 +193,12 @@ export function MultiImageUploader({
         </div>
       )}
 
-      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+      {error && (
+        <div className="mt-2 space-y-1">
+          <p className="text-xs text-destructive">{error}</p>
+          <SupportFeedbackLink />
+        </div>
+      )}
     </div>
   )
 }

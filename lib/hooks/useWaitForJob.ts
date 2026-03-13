@@ -1,6 +1,7 @@
 import { useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { processGenerationJob } from '@/lib/api/edge-functions'
+import { toGenerationJobError } from '@/lib/job-errors'
 import type { GenerationJob } from '@/types'
 
 function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> {
@@ -32,14 +33,14 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
       if (!data) return
       const job = data as GenerationJob
       if (job.status === 'success') done(job)
-      else if (job.status === 'failed') fail(new Error(job.error_message ?? 'Job failed'))
+      else if (job.status === 'failed') fail(toGenerationJobError(job))
     }
     signal.addEventListener('abort', () => fail(Object.assign(new Error('Aborted'), { name: 'AbortError' })), { once: true })
     const channel = supabase.channel(`wait:${jobId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'generation_jobs', filter: `id=eq.${jobId}` }, (p) => {
         const job = p.new as GenerationJob
         if (job.status === 'success') done(job)
-        else if (job.status === 'failed') fail(new Error(job.error_message ?? 'Job failed'))
+        else if (job.status === 'failed') fail(toGenerationJobError(job))
       }).subscribe()
     void processGenerationJob(jobId)
     void checkOnce()

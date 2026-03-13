@@ -7,6 +7,7 @@ import { AlertCircle, Download, ExternalLink, Image as ImageIcon, Loader2, Penci
 import { Button } from '@/components/ui/button'
 import { createEditorSession } from '@/lib/utils/editor-session'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
+import { formatJobDisplaySemantics, getJobDisplaySemantics, getResultAssetDisplaySemantics } from '@/lib/job-display'
 import { createResultAsset, extractResultAssetMetadata } from '@/lib/utils/result-assets'
 import type { GenerationJob, JobStatus, JobType, ResultAsset, ResultAssetSection } from '@/types'
 
@@ -21,6 +22,8 @@ interface HistoryAsset {
   id: string
   jobId: string
   type: JobType
+  businessModuleLabel: string
+  detailLabel: string
   status: JobStatus
   url: string | null
   prompt: string | null
@@ -41,6 +44,26 @@ interface HistoryAsset {
 interface HistoryPolicy {
   isPaidUser: boolean
   freeRetentionDays: number
+}
+
+function parseSizeAspectRatio(size?: string): string | null {
+  if (!size) return null
+  const match = size.trim().match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/i)
+  if (!match) return null
+
+  const width = Number(match[1])
+  const height = Number(match[2])
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
+
+  return `${width} / ${height}`
+}
+
+function resolveHistoryItemAspectRatio(item: HistoryAsset): string {
+  return parseSizeAspectRatio(item.deliveredSize)
+    ?? parseSizeAspectRatio(item.actualSize)
+    ?? parseSizeAspectRatio(item.providerSize)
+    ?? parseSizeAspectRatio(item.requestedSize)
+    ?? '4 / 3'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -111,10 +134,18 @@ function extractResultUrls(row: HistoryJobRow): string[] {
   return Array.from(urls)
 }
 
-function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
+function mapJobToAssets(
+  row: HistoryJobRow,
+  translate: (key: string) => string,
+): HistoryAsset[] {
   const urls = extractResultUrls(row)
   const prompt = extractPrompt(row.payload)
   const metadata = extractResultAssetMetadata(row.result_data)
+  const semantics = formatJobDisplaySemantics(getJobDisplaySemantics({
+    type: row.type,
+    payload: row.payload,
+    resultData: row.result_data,
+  }), translate)
   const retentionExpired = isRecord(row.result_data) && typeof row.result_data.retention_deleted_at === 'string'
   const retentionDays = isRecord(row.result_data) && typeof row.result_data.retention_days === 'number'
     ? row.result_data.retention_days
@@ -124,6 +155,8 @@ function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
       id: `${row.id}_${index}`,
       jobId: row.id,
       type: row.type,
+      businessModuleLabel: semantics.businessModuleLabel,
+      detailLabel: semantics.detailLabel,
       status: row.status,
       url,
       prompt,
@@ -140,6 +173,8 @@ function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
     id: `${row.id}_empty`,
     jobId: row.id,
     type: row.type,
+    businessModuleLabel: semantics.businessModuleLabel,
+    detailLabel: semantics.detailLabel,
     status: row.status,
     url: null,
     prompt,
@@ -152,11 +187,18 @@ function mapJobToAssets(row: HistoryJobRow): HistoryAsset[] {
   }]
 }
 
-function mapResultAssetToHistoryAsset(asset: ResultAsset): HistoryAsset {
+function mapResultAssetToHistoryAsset(
+  asset: ResultAsset,
+  translate: (key: string) => string,
+): HistoryAsset {
+  const displaySemantics = getResultAssetDisplaySemantics(asset.originModule)
+  const semantics = formatJobDisplaySemantics(displaySemantics, translate)
   return {
     id: asset.id,
     jobId: asset.sourceAssetId ?? asset.id,
-    type: 'IMAGE_GEN',
+    type: displaySemantics.technicalType,
+    businessModuleLabel: semantics.businessModuleLabel,
+    detailLabel: asset.label?.trim() || semantics.detailLabel,
     status: 'success',
     url: asset.url,
     prompt: null,
@@ -221,13 +263,13 @@ export function HistoryPage() {
   const displayItems = useMemo(() => {
     const merged = [...items]
     const existingIds = new Set(merged.map((item) => item.id))
-    for (const asset of localAssets.map(mapResultAssetToHistoryAsset)) {
+    for (const asset of localAssets.map((item) => mapResultAssetToHistoryAsset(item, t))) {
       if (existingIds.has(asset.id)) continue
       existingIds.add(asset.id)
       merged.push(asset)
     }
     return merged
-  }, [items, localAssets])
+  }, [items, localAssets, t])
   const originalItems = useMemo(
     () => displayItems.filter((item) => item.section !== 'edited'),
     [displayItems],
@@ -252,13 +294,13 @@ export function HistoryPage() {
     }
     const payload = (await res.json()) as { rows?: HistoryJobRow[]; hasMore?: boolean; policy?: HistoryPolicy }
     const rows = payload.rows ?? []
-    const mapped = rows.flatMap(mapJobToAssets)
+    const mapped = rows.flatMap((row) => mapJobToAssets(row, t))
 
     setPolicy(payload.policy ?? null)
     setItems((prev) => append ? [...prev, ...mapped] : mapped)
     setHasMore(Boolean(payload.hasMore))
     setPage(nextPage)
-  }, [])
+  }, [t])
 
   const loadInitial = useCallback(async () => {
     setLoading(true)
@@ -352,7 +394,6 @@ export function HistoryPage() {
   }
 
   const statusLabel = (status: JobStatus) => t(`status.${status}` as Parameters<typeof t>[0])
-  const typeLabel = (type: JobType) => t(`type.${type}` as Parameters<typeof t>[0])
   const renderItems = (sectionItems: HistoryAsset[]) => (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {sectionItems.map((item) => (
@@ -361,13 +402,13 @@ export function HistoryPage() {
           className="group overflow-hidden rounded-2xl border border-border bg-background"
           onClick={() => selectionMode && item.url && toggleSelection(item.id)}
         >
-          <div className="relative aspect-[3/4] overflow-hidden bg-muted">
+          <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: resolveHistoryItemAspectRatio(item) }}>
             {item.url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={item.url}
                 alt={t('imageAlt')}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
               />
             ) : (
               <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
@@ -403,10 +444,11 @@ export function HistoryPage() {
 
           <div className="space-y-2 p-3">
             <div className="flex items-center gap-2 text-xs">
-              <span className="rounded-md bg-secondary px-2 py-1 text-muted-foreground">{typeLabel(item.type)}</span>
+              <span className="rounded-md bg-secondary px-2 py-1 text-muted-foreground">{item.businessModuleLabel}</span>
               <span className="rounded-md bg-secondary px-2 py-1 text-muted-foreground">{statusLabel(item.status)}</span>
             </div>
 
+            <p className="text-xs font-medium text-foreground">{item.detailLabel}</p>
             <p className="text-xs text-muted-foreground">{formatter.format(new Date(item.createdAt))}</p>
 
             {item.prompt && (

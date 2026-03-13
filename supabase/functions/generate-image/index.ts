@@ -18,6 +18,12 @@ import {
   isAdminOnlyDynamicModel,
   isEffectiveImageSizeSupportedForModel,
 } from "../_shared/admin-model-config.ts";
+import { classifyImageValidationError, validateImageInputUrls } from "../_shared/input-image-validation.ts";
+import {
+  enqueuePaidGenerationJob,
+  getInsufficientCreditsDetails,
+  isInsufficientCreditsRpcError,
+} from "../_shared/paid-job-enqueue.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
@@ -29,6 +35,19 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body.model !== "string" || typeof body.prompt !== "string") {
     return err("BAD_REQUEST", "model and prompt are required");
+  }
+
+  const inputImageUrls = [
+    typeof body.productImage === "string" ? body.productImage : "",
+    typeof body.modelImage === "string" ? body.modelImage : "",
+    typeof body.originalImage === "string" ? body.originalImage : "",
+    ...(Array.isArray(body.productImages) ? body.productImages.filter((x): x is string => typeof x === "string") : []),
+    ...(Array.isArray(body.referenceImages) ? body.referenceImages.filter((x): x is string => typeof x === "string") : []),
+  ];
+  try {
+    await validateImageInputUrls(inputImageUrls);
+  } catch (error) {
+    return err(classifyImageValidationError(error), String(error ?? ""), 400);
   }
 
   const normalizedModel = normalizeRequestedModel(String(body.model));
@@ -104,43 +123,27 @@ Deno.serve(async (req) => {
       type: "IMAGE_GEN",
     });
   }
-  const { data, error } = await supabase
-    .from("generation_jobs")
-    .insert({
-      user_id: authResult.user.id,
-      type: "IMAGE_GEN",
-      status: "processing",
+  try {
+    const enqueued = await enqueuePaidGenerationJob(supabase, {
+      userId: authResult.user.id,
+      jobType: "IMAGE_GEN",
       payload,
-      cost_amount: cost,
-      trace_id: body.trace_id ?? null,
-      client_job_id: body.client_job_id ?? null,
-      fe_attempt: Number(body.fe_attempt ?? 1),
-    })
-    .select("id")
-    .single();
-
-  if (error || !data) {
-    return err("IMAGE_JOB_CREATE_FAILED", "failed to create image generation job", 500, error);
-  }
-
-  const { error: taskError } = await supabase
-    .from("generation_job_tasks")
-    .insert({
-      job_id: data.id,
-      task_type: "IMAGE_GEN",
-      status: "queued",
-      payload,
+      costAmount: cost,
+      traceId: typeof body.trace_id === "string" ? body.trace_id : null,
+      clientJobId: typeof body.client_job_id === "string" ? body.client_job_id : null,
+      feAttempt: Number(body.fe_attempt ?? 1),
     });
 
-  if (taskError) {
-    await supabase.from("generation_jobs").update({
-      status: "failed",
-      error_code: "IMAGE_JOB_CREATE_FAILED",
-      error_message: `Failed to enqueue image task: ${taskError.message}`,
-    }).eq("id", data.id);
-    return err("IMAGE_JOB_CREATE_FAILED", "failed to enqueue image task", 500, taskError);
+    // Queue-only endpoint: return immediately; processing runs via process-generation-job worker.
+    return ok({ job_id: enqueued.jobId, status: "processing" });
+  } catch (enqueueError) {
+    if (isInsufficientCreditsRpcError(enqueueError)) {
+      const details = getInsufficientCreditsDetails(enqueueError);
+      return err("INSUFFICIENT_CREDITS", "Not enough credits", 402, {
+        required: details.required ?? cost,
+        available: details.available,
+      });
+    }
+    return err("IMAGE_JOB_CREATE_FAILED", "failed to create image generation job", 500, enqueueError);
   }
-
-  // Queue-only endpoint: return immediately; processing runs via process-generation-job worker.
-  return ok({ job_id: data.id, status: "processing" });
 });

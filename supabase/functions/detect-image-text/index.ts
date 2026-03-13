@@ -2,6 +2,7 @@ import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { assertUserCanQueueJob } from "../_shared/generation-queue.ts";
+import { classifyImageValidationError, validateImageInputUrls } from "../_shared/input-image-validation.ts";
 
 // Simple in-memory rate limiter (per worker instance)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -37,6 +38,11 @@ Deno.serve(async (req) => {
   }
 
   const image = body.image as string;
+  try {
+    await validateImageInputUrls([image]);
+  } catch (error) {
+    return err(classifyImageValidationError(error), String(error ?? ""), 400);
+  }
 
   const supabase = createServiceClient();
   const queueGate = await assertUserCanQueueJob(authResult.user.id, "ANALYSIS");

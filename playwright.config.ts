@@ -20,7 +20,7 @@ function loadEnvFile(filePath: string) {
 loadEnvFile(resolve(__dirname, '.env.local'))
 loadEnvFile(resolve(__dirname, '.env'))
 
-const baseURL = process.env.TA_PRO_E2E_BASE_URL || 'http://127.0.0.1:3000'
+const baseURL = process.env.TA_PRO_E2E_BASE_URL || 'http://127.0.0.1:3001'
 
 export default defineConfig({
   testDir: './e2e',

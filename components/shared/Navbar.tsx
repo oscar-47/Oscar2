@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useTranslations, useLocale } from 'next-intl'
 import { ArrowRight } from 'lucide-react'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { MARKETING_DARK_CTA_BASE } from '@/components/marketing/marketing-styles'
 
 export function Navbar() {
   const t = useTranslations('landing.nav')
@@ -25,7 +26,7 @@ export function Navbar() {
           <Link
             href={ecomAuthHref}
             prefetch
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-4 text-sm font-semibold text-accent-foreground transition-all press-scale hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className={`${MARKETING_DARK_CTA_BASE} h-9 rounded-[0.9rem] px-4 text-sm font-semibold`}
           >
             {t('cta')}
             <ArrowRight className="h-3.5 w-3.5" />

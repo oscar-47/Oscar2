@@ -1,6 +1,7 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
+import { classifyImageValidationError, validateImageInputUrls } from "../_shared/input-image-validation.ts";
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -80,6 +81,12 @@ Deno.serve(async (req) => {
     return err("BAD_REQUEST", "productImage is required");
   }
 
+  try {
+    await validateImageInputUrls([sourceImage]);
+  } catch (error) {
+    return err(classifyImageValidationError(error), String(error ?? ""), 400);
+  }
+
   if (!gender && !ageRange && !ethnicity && !extraPrompt) {
     return err("BAD_REQUEST", "at least one of gender/ageRange/ethnicity/otherRequirements is required");
   }
@@ -131,9 +138,13 @@ Deno.serve(async (req) => {
 
   const invokeJson = await invokeResponse.json().catch(() => null) as Record<string, unknown> | null;
   if (!invokeResponse.ok || !invokeJson || typeof invokeJson.job_id !== "string") {
+    const forwardedCode = typeof invokeJson?.code === "string" ? invokeJson.code : null;
+    const forwardedMessage = typeof invokeJson?.message === "string"
+      ? invokeJson.message
+      : "failed to create model image generation job";
     return err(
-      "MODEL_IMAGE_GENERATE_FAILED",
-      "failed to create model image generation job",
+      forwardedCode || "MODEL_IMAGE_GENERATE_FAILED",
+      forwardedMessage,
       invokeResponse.status || 500,
       invokeJson,
     );

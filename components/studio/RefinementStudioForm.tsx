@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
+import { getAspectRatioCardStyle } from '@/components/generation/aspect-ratio-layout'
 import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
 import { ResultGallery } from '@/components/generation/ResultGallery'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
@@ -20,6 +21,8 @@ import {
 import { CoreProcessingStatus } from '@/components/generation/CoreProcessingStatus'
 import { CorePageShell } from '@/components/studio/CorePageShell'
 import { GenerationParametersCard } from '@/components/studio/GenerationParametersCard'
+import { StudioPageHero } from '@/components/studio/StudioPageHero'
+import { SupportFeedbackLink } from '@/components/support/SupportFeedbackLink'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
 import { uploadFiles } from '@/lib/api/upload'
@@ -39,6 +42,8 @@ import { friendlyError } from '@/lib/utils'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { ImageThumbnail } from '@/components/shared/ImageThumbnail'
 import { CreditCostBadge } from '@/components/generation/CreditCostBadge'
+import { WORKFLOW_PRIMARY_BUTTON_CLASS } from '@/components/studio/workflow-button-styles'
+
 
 type Phase = 'idle' | 'running' | 'success' | 'failed'
 type CardStatus = 'loading' | 'success' | 'failed'
@@ -227,7 +232,7 @@ export function RefinementStudioForm() {
   const insufficientCredits = total !== null && total < totalCost
   const isRunning = phase === 'running'
   const canGenerate = expectedCount > 0 && !isRunning && !insufficientCredits
-  const primaryActionClass = 'h-12 w-full rounded-2xl border border-primary/20 bg-primary text-primary-foreground shadow-sm hover:opacity-95 disabled:border-border disabled:bg-muted disabled:text-foreground/75 disabled:shadow-none disabled:opacity-100'
+  const primaryActionClass = `${WORKFLOW_PRIMARY_BUTTON_CLASS} w-full`
   const previewAspectRatio = toCssAspectRatio(aspectRatio)
 
   const addProductImages = useCallback((files: File[]) => {
@@ -481,18 +486,13 @@ export function RefinementStudioForm() {
   return (
     <>
     <CorePageShell maxWidthClass="max-w-[1360px]" contentClassName="space-y-8">
-      <div className="mb-7 flex items-start gap-3">
-        <SectionIcon icon={ImageIcon} className="mt-1" />
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-foreground">{t('title')}</h1>
-            <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[11px] font-semibold text-rose-600 dark:bg-rose-500/15 dark:text-rose-400">
-              {t('heroBadge')}
-            </span>
-          </div>
-          <p className="mt-1 text-[13px] text-muted-foreground">{t('description')}</p>
-        </div>
-      </div>
+      <StudioPageHero
+        icon={ImageIcon}
+        badge={t('heroBadge')}
+        title={t('title')}
+        description={t('description')}
+        badgeClassName="border-rose-200/80 bg-rose-50/90 text-rose-700"
+      />
 
       <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
         <div className="space-y-4">
@@ -557,7 +557,12 @@ export function RefinementStudioForm() {
                 </div>
               )}
               <p className="mt-3 text-[13px] text-muted-foreground">{t('uploadSupportHint')}</p>
-              {uploadError && <p className="mt-1 text-xs text-destructive">{uploadError}</p>}
+              {uploadError && (
+                <div className="mt-1 space-y-1">
+                  <p className="text-xs text-destructive">{uploadError}</p>
+                  <SupportFeedbackLink />
+                </div>
+              )}
             </div>
           </section>
 
@@ -672,7 +677,8 @@ export function RefinementStudioForm() {
 
           {phase === 'failed' && errorMessage && (
             <div className="mb-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              {errorMessage}
+              <p>{errorMessage}</p>
+              <SupportFeedbackLink className="mt-2" />
             </div>
           )}
 
@@ -691,16 +697,16 @@ export function RefinementStudioForm() {
               <div className="flex flex-wrap content-start items-start gap-3">
                 {cards.map((card, i) =>
                   card.status === 'loading' ? (
-                    <FluidPendingCard key={i} aspectRatio={previewAspectRatio} className="w-[220px] max-w-full rounded-2xl" />
+                    <FluidPendingCard key={i} aspectRatio={previewAspectRatio} className="max-w-full shrink-0 rounded-2xl" style={getAspectRatioCardStyle(previewAspectRatio)} />
                   ) : card.status === 'failed' ? (
-                    <div key={i} className="w-[220px] max-w-full rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+                    <div key={i} className="max-w-full shrink-0 rounded-2xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive" style={getAspectRatioCardStyle(previewAspectRatio)}>
                       {card.error ?? tc('error')}
                     </div>
                   ) : (
                     <div
                       key={i}
-                      className="w-[220px] max-w-full overflow-hidden rounded-2xl border border-border bg-secondary opacity-60"
-                      style={{ aspectRatio: previewAspectRatio }}
+                      className="max-w-full shrink-0 overflow-hidden rounded-2xl border border-border bg-secondary opacity-60"
+                      style={getAspectRatioCardStyle(previewAspectRatio)}
                     >
                       <img src={card.url!} alt={`result-${i + 1}`} className="w-full object-cover" />
                     </div>

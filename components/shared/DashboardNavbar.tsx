@@ -8,6 +8,7 @@ import { LanguageSwitcher } from './LanguageSwitcher'
 import { UserMenu } from './UserMenu'
 import { cn } from '@/lib/utils'
 import { Layers, Image, Shirt, Paintbrush, Monitor, ShoppingBag, Menu, X } from 'lucide-react'
+import { CreatorProgramHangingTag } from '@/components/creator/CreatorProgramHangingTag'
 
 const NAV_ITEMS = [
   { key: 'studioGenesis', path: '/studio-genesis', icon: Layers },
@@ -45,17 +46,20 @@ export function DashboardNavbar({ userId, email }: DashboardNavbarProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5 sm:px-6">
-        {/* Logo */}
-        <Link
-          href={`/${locale}`}
-          prefetch
-          className="flex shrink-0 items-center gap-2"
-        >
-          <span className="font-[var(--font-display)] text-xl font-extrabold tracking-tight text-foreground">
-            Shopix
-          </span>
-          <span className="text-xs font-medium text-text-tertiary">AI</span>
-        </Link>
+        {/* Logo + hanging tag */}
+        <div className="relative shrink-0">
+          <Link
+            href={`/${locale}`}
+            prefetch
+            className="flex items-center gap-2"
+          >
+            <span className="font-[var(--font-display)] text-xl font-extrabold tracking-tight text-foreground">
+              Shopix
+            </span>
+            <span className="text-xs font-medium text-text-tertiary">AI</span>
+          </Link>
+          <CreatorProgramHangingTag />
+        </div>
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-0.5 md:flex" aria-label="Main navigation">

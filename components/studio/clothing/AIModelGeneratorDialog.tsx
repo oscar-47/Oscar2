@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
+import { useRouter } from 'next/navigation'
 import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -8,15 +10,14 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { generateModelImage, processGenerationJob } from '@/lib/api/edge-functions'
-import { refreshCredits } from '@/lib/hooks/useCredits'
+import { refreshCredits, useCredits } from '@/lib/hooks/useCredits'
 import { uploadFile } from '@/lib/api/upload'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationJob } from '@/types'
 import { getGenerationCreditCost } from '@/types'
 import type { UploadedImage } from '@/components/upload/MultiImageUploader'
 import type { AIModelHistoryItem } from './types'
-import { friendlyError } from '@/lib/utils'
-import { useTranslations } from 'next-intl'
+import { friendlyError, generationRetryRefundMessage, isInsufficientCreditsError } from '@/lib/utils'
 import { Loader2, Clock3, UserCircle2, Sparkles } from 'lucide-react'
 
 type Gender = 'female' | 'male'
@@ -199,6 +200,10 @@ export function AIModelGeneratorDialog({
   productImages,
 }: AIModelGeneratorDialogProps) {
   const t = useTranslations('studio.clothingStudio')
+  const tc = useTranslations('studio.common')
+  const locale = useLocale()
+  const router = useRouter()
+  const { total } = useCredits()
   const [gender, setGender] = useState<Gender>('female')
   const [ageRange, setAgeRange] = useState<AgeRange>('26-35')
   const [ethnicity, setEthnicity] = useState<Ethnicity>('asian')
@@ -214,6 +219,8 @@ export function AIModelGeneratorDialog({
   const abortRef = useRef<AbortController | null>(null)
 
   const isGenerating = dialogState === 'generating'
+  const totalCost = count * AI_MODEL_GENERATION_COST
+  const insufficientCredits = total !== null && total < totalCost
 
   async function loadHistory(silent = true) {
     setIsHistoryLoading(true)
@@ -251,6 +258,11 @@ export function AIModelGeneratorDialog({
   const handleGenerate = async () => {
     if (productImages.length < 1) {
       setError(t('uploadProductFirst'))
+      return
+    }
+    if (insufficientCredits) {
+      setDialogState('error')
+      setError(friendlyError('INSUFFICIENT_CREDITS', locale.startsWith('zh')))
       return
     }
 
@@ -314,7 +326,11 @@ export function AIModelGeneratorDialog({
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       setDialogState('error')
-      setError(friendlyError((err as Error).message ?? t('modelGenerationFailed'), true))
+      setError(
+        isInsufficientCreditsError(err)
+          ? friendlyError((err as Error).message ?? 'Not enough credits', locale.startsWith('zh'))
+          : generationRetryRefundMessage(locale.startsWith('zh'))
+      )
     } finally {
       refreshCredits()
     }
@@ -425,14 +441,26 @@ export function AIModelGeneratorDialog({
                 <Button
                   className="h-11 w-full bg-zinc-900 text-base text-white hover:bg-zinc-800"
                   onClick={handleGenerate}
-                  disabled={isGenerating}
+                  disabled={isGenerating || insufficientCredits}
                 >
                   {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                   {isGenerating ? t('generatingModel') : t('generateNow')}
                 </Button>
                 <p className="mt-2 text-center text-xs text-muted-foreground">
-                  {t('creditInfo', { cost: count * AI_MODEL_GENERATION_COST })}
+                  {t('creditInfo', { cost: totalCost })}
                 </p>
+                {insufficientCredits && (
+                  <div className="mt-2 space-y-1 text-center">
+                    <p className="text-xs text-destructive">{tc('insufficientCredits')}</p>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/${locale}/pricing`)}
+                      className="text-xs font-medium text-primary underline underline-offset-2"
+                    >
+                      {locale.startsWith('zh') ? '去充值' : 'Top up'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {error && (

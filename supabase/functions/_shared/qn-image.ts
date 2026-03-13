@@ -27,22 +27,113 @@ export function getQnImageConfig(): QnImageConfig {
   };
 }
 
-export function getQnChatConfig(): QnChatConfig {
+export type ChatPoolEntry = {
+  endpoint: string;
+  key: string;
+};
+
+function parseApiKeyList(raw: string): string[] {
+  return raw
+    .split(/[\n,]+/)
+    .map((value) => value.trim())
+    .filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index);
+}
+
+function stableHash(value: string): number {
+  let hash = 2166136261;
+  for (const ch of value) {
+    hash ^= ch.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function getOpenRouterKeyPool(params?: {
+  apiKeyOverride?: string;
+  apiKeyPoolOverride?: string[];
+}): string[] {
+  const overridePool = Array.isArray(params?.apiKeyPoolOverride)
+    ? params.apiKeyPoolOverride
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+    : [];
+  if (overridePool.length > 0) {
+    return overridePool.filter((value, index, arr) => arr.indexOf(value) === index);
+  }
+
+  const envPool = parseApiKeyList(Deno.env.get("OPENROUTER_API_KEYS") ?? "");
+  const singleKey = String(params?.apiKeyOverride ?? Deno.env.get("OPENROUTER_API_KEY") ?? "").trim();
+  const merged = singleKey ? [singleKey, ...envPool] : envPool;
+  return merged.filter((value, index, arr) => arr.indexOf(value) === index);
+}
+
+export function orderOpenRouterKeysForRouting(
+  keys: string[],
+  routingKey?: string,
+): string[] {
+  const uniqueKeys = keys.filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index);
+  if (uniqueKeys.length <= 1) return uniqueKeys;
+  if (!routingKey || routingKey.trim().length === 0) return uniqueKeys;
+
+  const offset = stableHash(routingKey.trim()) % uniqueKeys.length;
+  return uniqueKeys.slice(offset).concat(uniqueKeys.slice(0, offset));
+}
+
+/**
+ * Parse the chat endpoint pool from QN_CHAT_API_POOL env var (JSON array).
+ * Falls back to single QN_CHAT_API_ENDPOINT + QN_CHAT_API_KEY.
+ */
+export function getChatEndpointPool(): ChatPoolEntry[] {
+  const poolRaw = Deno.env.get("QN_CHAT_API_POOL") ?? "";
+  if (poolRaw) {
+    try {
+      const parsed = JSON.parse(poolRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter(
+          (e: Record<string, unknown>) => e.endpoint && e.key,
+        ) as ChatPoolEntry[];
+      }
+    } catch {
+      console.warn("QN_CHAT_API_POOL parse failed, falling back to single endpoint");
+    }
+  }
   const apiKey = Deno.env.get("QN_CHAT_API_KEY")
     ?? Deno.env.get("QN_IMAGE_API_KEY")
     ?? "";
+  const endpoint = Deno.env.get("QN_CHAT_API_ENDPOINT")
+    ?? "https://api.qnaigc.com/v1/chat/completions";
   if (!apiKey) {
     throw new Error("Missing QN_CHAT_API_KEY (or QN_IMAGE_API_KEY fallback)");
   }
+  return [{ endpoint, key: apiKey }];
+}
 
+/** Get a shuffled copy of the pool for failover iteration */
+export function getShuffledChatPool(): ChatPoolEntry[] {
+  const pool = [...getChatEndpointPool()];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool;
+}
+
+/** Build a QnChatConfig from a specific pool entry */
+export function getQnChatConfigFrom(entry: ChatPoolEntry): QnChatConfig {
   return {
-    apiKey,
-    endpoint: Deno.env.get("QN_CHAT_API_ENDPOINT") ?? "https://api.qnaigc.com/v1/chat/completions",
+    apiKey: entry.key,
+    endpoint: entry.endpoint,
     model: Deno.env.get("QN_CHAT_MODEL") ?? "moonshotai/kimi-k2.5",
     timeoutMs: Number(Deno.env.get("QN_CHAT_REQUEST_TIMEOUT_MS")
       ?? Deno.env.get("QN_IMAGE_REQUEST_TIMEOUT_MS")
       ?? "30000"),
   };
+}
+
+export function getQnChatConfig(): QnChatConfig {
+  const pool = getChatEndpointPool();
+  const entry = pool[Math.floor(Math.random() * pool.length)];
+  return getQnChatConfigFrom(entry);
 }
 
 /** Detect Azure OpenAI endpoints (.openai.azure.com or .cognitiveservices.azure.com) */
@@ -110,6 +201,15 @@ function isIdeogram(url: string): boolean {
   }
 }
 
+/** Detect fal.ai endpoint */
+function isFal(url: string): boolean {
+  try {
+    return new URL(url).hostname === "fal.run";
+  } catch {
+    return false;
+  }
+}
+
 /** Detect OpenAI native images/generations endpoint (for DALL-E 4 etc.) */
 function isOpenAINativeGenerations(url: string): boolean {
   return url.includes("api.openai.com/v1/images/generations");
@@ -130,6 +230,30 @@ function isAzureEndpoint(url: string): boolean {
   return isAzureOpenAI(url) || isAzureAIFoundry(url);
 }
 
+/** Whether an error is retryable on a different pool endpoint */
+function isChatRetryable(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  const msg = String(err);
+  // Retry on timeout, 429 (rate limit), 5xx server errors
+  if (msg.includes("AbortError") || msg.includes("TIMEOUT")) return true;
+  const statusMatch = msg.match(/QN_CHAT_API_ERROR (\d+)/);
+  if (statusMatch) {
+    const code = Number(statusMatch[1]);
+    return code === 429 || code >= 500;
+  }
+  return false;
+}
+
+function isOpenRouterImageRetryable(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  const msg = String(err);
+  if (msg.includes("AbortError") || msg.includes("TIMEOUT")) return true;
+  const statusMatch = msg.match(/OPENROUTER_IMAGE_API_ERROR (\d+)/);
+  if (!statusMatch) return false;
+  const code = Number(statusMatch[1]);
+  return code === 408 || code === 409 || code === 429 || code >= 500;
+}
+
 export async function callQnChatAPI(params: {
   messages: Array<Record<string, unknown>>;
   model?: string;
@@ -137,55 +261,70 @@ export async function callQnChatAPI(params: {
   stream?: boolean;
   timeoutMsOverride?: number;
 }): Promise<Record<string, unknown>> {
-  const config = getQnChatConfig();
-  const timeoutMs = params.timeoutMsOverride ?? config.timeoutMs;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  const azure = isAzureEndpoint(config.endpoint);
+  const pool = getShuffledChatPool();
+  const baseConfig = getQnChatConfigFrom(pool[0]);
+  const timeoutMs = params.timeoutMsOverride ?? baseConfig.timeoutMs;
+  let lastError: unknown;
 
-  try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (azure) {
-      headers["api-key"] = config.apiKey;
-    } else {
-      headers["Authorization"] = `Bearer ${config.apiKey}`;
-    }
+  for (let i = 0; i < pool.length; i++) {
+    const config = getQnChatConfigFrom(pool[i]);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const azure = isAzureEndpoint(config.endpoint);
 
-    // Azure endpoints include model in URL path, so omit from body
-    const body: Record<string, unknown> = {
-      stream: params.stream ?? false,
-      messages: params.messages,
-      ...(params.maxTokens ? { max_tokens: params.maxTokens } : {}),
-    };
-    if (!azure) {
-      body.model = params.model ?? config.model;
-    }
-
-    const res = await fetch(config.endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-
-    const text = await res.text();
-    let parsed: Record<string, unknown> = {};
     try {
-      parsed = text ? JSON.parse(text) : {};
-    } catch {
-      parsed = { raw: text };
-    }
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (azure) {
+        headers["api-key"] = config.apiKey;
+      } else {
+        headers["Authorization"] = `Bearer ${config.apiKey}`;
+      }
 
-    if (!res.ok) {
-      throw new Error(`QN_CHAT_API_ERROR ${res.status}: ${JSON.stringify(parsed)}`);
-    }
+      // Azure endpoints include model in URL path, so omit from body
+      const body: Record<string, unknown> = {
+        stream: params.stream ?? false,
+        messages: params.messages,
+        ...(params.maxTokens ? { max_tokens: params.maxTokens } : {}),
+      };
+      if (!azure) {
+        body.model = params.model ?? config.model;
+      }
 
-    return parsed;
-  } finally {
-    clearTimeout(timer);
+      const res = await fetch(config.endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      const text = await res.text();
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = text ? JSON.parse(text) : {};
+      } catch {
+        parsed = { raw: text };
+      }
+
+      if (!res.ok) {
+        throw new Error(`QN_CHAT_API_ERROR ${res.status}: ${JSON.stringify(parsed)}`);
+      }
+
+      return parsed;
+    } catch (err) {
+      lastError = err;
+      if (i < pool.length - 1 && isChatRetryable(err)) {
+        console.warn(`CHAT_POOL_FAILOVER endpoint=${config.endpoint.substring(0, 60)}... err=${String(err).substring(0, 100)} trying_next=${i + 2}/${pool.length}`);
+        continue;
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   }
+
+  throw lastError;
 }
 
 /** Convert a data:image/...;base64,... URL to a Blob */
@@ -231,8 +370,8 @@ export function aspectRatioToSize(ratio: string): string {
   }
 }
 
-export async function callQnImageAPI(params: {
-  imageDataUrl: string;
+export type QnImageAPIParams = {
+  imageDataUrl?: string;
   imageDataUrls?: string[];
   imageUrls?: string[];
   prompt: string;
@@ -243,9 +382,61 @@ export async function callQnImageAPI(params: {
   aspectRatio?: string;
   endpointOverride?: string;
   apiKeyOverride?: string;
+  apiKeyPoolOverride?: string[];
   timeoutMsOverride?: number;
   providerHint?: string;
-}): Promise<Record<string, unknown>> {
+  routingKey?: string;
+};
+
+export function buildToAPIsImageRequestBody(params: QnImageAPIParams): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: params.model,
+    prompt: params.prompt,
+    size: params.aspectRatio || "1:1",
+    n: params.n ?? 1,
+  };
+  const imageUrls = params.imageUrls?.filter(Boolean);
+  if (imageUrls && imageUrls.length > 0) {
+    body.image_urls = imageUrls;
+  }
+  return body;
+}
+
+export function buildOpenRouterImageRequestBody(params: QnImageAPIParams): Record<string, unknown> {
+  const contentParts: Record<string, unknown>[] = [
+    { type: "text", text: params.prompt },
+  ];
+  const images = params.imageUrls && params.imageUrls.length > 0
+    ? params.imageUrls
+    : params.imageDataUrls && params.imageDataUrls.length > 0
+    ? params.imageDataUrls
+    : params.imageDataUrl
+    ? [params.imageDataUrl]
+    : [];
+  for (const imageUrl of images) {
+    if (!imageUrl) continue;
+    contentParts.push({
+      type: "image_url",
+      image_url: { url: imageUrl },
+    });
+  }
+
+  const body: Record<string, unknown> = {
+    model: params.model,
+    messages: [{ role: "user", content: contentParts }],
+    modalities: ["image", "text"],
+    provider: {
+      require_parameters: true,
+    },
+  };
+  const imageConfig: Record<string, string> = {};
+  if (params.aspectRatio) imageConfig.aspect_ratio = params.aspectRatio;
+  if (params.imageSize) imageConfig.image_size = params.imageSize;
+  if (Object.keys(imageConfig).length > 0) body.image_config = imageConfig;
+  return body;
+}
+
+export async function callQnImageAPI(params: QnImageAPIParams): Promise<Record<string, unknown>> {
   const envEndpoint = Deno.env.get("QN_IMAGE_API_ENDPOINT") ?? "https://api.qnaigc.com/v1/images/edits";
   const envModel = Deno.env.get("QN_IMAGE_MODEL") ?? "gemini-3.0-pro-image-preview";
   const envApiKey = Deno.env.get("QN_IMAGE_API_KEY") ?? "";
@@ -254,7 +445,16 @@ export async function callQnImageAPI(params: {
   const endpoint = params.endpointOverride ?? envEndpoint;
   const apiKey = params.apiKeyOverride ?? envApiKey;
   const model = params.model ?? envModel;
-  if (!apiKey) {
+  const openRouterKeyPool = isOpenRouter(endpoint)
+    ? orderOpenRouterKeysForRouting(
+      getOpenRouterKeyPool({
+        apiKeyOverride: apiKey,
+        apiKeyPoolOverride: params.apiKeyPoolOverride,
+      }),
+      params.routingKey,
+    )
+    : [];
+  if (!apiKey && openRouterKeyPool.length === 0) {
     throw new Error("Missing image API key");
   }
 
@@ -271,16 +471,7 @@ export async function callQnImageAPI(params: {
 
     if (isToAPIs(endpoint)) {
       // ToAPIs async task-based image generation
-      const taBody: Record<string, unknown> = {
-        model,
-        prompt: params.prompt,
-        size: params.aspectRatio || "1:1",
-        n: params.n ?? 1,
-      };
-      const urls = params.imageUrls?.filter(Boolean);
-      if (urls && urls.length > 0) {
-        taBody.image_urls = urls;
-      }
+      const taBody = buildToAPIsImageRequestBody({ ...params, model });
 
       const createRes = await fetch(endpoint, {
         method: "POST",
@@ -345,83 +536,78 @@ export async function callQnImageAPI(params: {
       throw new Error("TOAPIS_POLL_TIMEOUT");
     } else if (isOpenRouter(endpoint)) {
       // OpenRouter Chat Completions with image generation
-      const contentParts: Record<string, unknown>[] = [
-        { type: "text", text: params.prompt },
-      ];
-      const images = params.imageDataUrls && params.imageDataUrls.length > 0
-        ? params.imageDataUrls
-        : params.imageDataUrl ? [params.imageDataUrl] : [];
-      for (const img of images) {
-        if (img) {
-          contentParts.push({
-            type: "image_url",
-            image_url: { url: img },
+      const orBody = buildOpenRouterImageRequestBody({ ...params, model });
+      const keys = openRouterKeyPool.length > 0 ? openRouterKeyPool : [apiKey];
+      let lastError: unknown = null;
+
+      for (let i = 0; i < keys.length; i++) {
+        const currentKey = keys[i];
+        try {
+          res = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${currentKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(orBody),
+            signal: controller.signal,
           });
-        }
-      }
 
-      const orBody: Record<string, unknown> = {
-        model,
-        messages: [{ role: "user", content: contentParts }],
-        modalities: ["image", "text"],
-        provider: {
-          require_parameters: true,
-        },
-      };
-      const imageConfig: Record<string, string> = {};
-      if (params.aspectRatio) imageConfig.aspect_ratio = params.aspectRatio;
-      if (params.imageSize) imageConfig.image_size = params.imageSize;
-      if (Object.keys(imageConfig).length > 0) orBody.image_config = imageConfig;
-
-      res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(orBody),
-        signal: controller.signal,
-      });
-
-      const text = await res.text();
-      let parsed: Record<string, unknown> = {};
-      try {
-        parsed = text ? JSON.parse(text) : {};
-      } catch {
-        parsed = { raw: text };
-      }
-
-      if (!res.ok) {
-        throw new Error(`OPENROUTER_IMAGE_API_ERROR ${res.status}: ${JSON.stringify(parsed)}`);
-      }
-
-      // Normalize to { data: [{ b64_json }] } or { data: [{ url }] }
-      // deno-lint-ignore no-explicit-any
-      const choices = (parsed as any)?.choices;
-      if (Array.isArray(choices) && choices.length > 0) {
-        const msg = choices[0]?.message;
-        if (Array.isArray(msg?.images) && msg.images.length > 0) {
-          const imgUrl = msg.images[0]?.image_url?.url ?? "";
-          if (imgUrl.startsWith("data:")) {
-            const b64 = imgUrl.split(",")[1] ?? "";
-            return { data: [{ b64_json: b64 }] };
+          const text = await res.text();
+          let parsed: Record<string, unknown> = {};
+          try {
+            parsed = text ? JSON.parse(text) : {};
+          } catch {
+            parsed = { raw: text };
           }
-          if (imgUrl) return { data: [{ url: imgUrl }] };
-        }
-        if (Array.isArray(msg?.content)) {
-          for (const part of msg.content) {
-            if (part?.type === "image_url" && part?.image_url?.url) {
-              const imgUrl = part.image_url.url;
+
+          if (!res.ok) {
+            throw new Error(`OPENROUTER_IMAGE_API_ERROR ${res.status}: ${JSON.stringify(parsed)}`);
+          }
+
+          // Normalize to { data: [{ b64_json }] } or { data: [{ url }] }
+          // deno-lint-ignore no-explicit-any
+          const choices = (parsed as any)?.choices;
+          if (Array.isArray(choices) && choices.length > 0) {
+            const msg = choices[0]?.message;
+            if (Array.isArray(msg?.images) && msg.images.length > 0) {
+              const imgUrl = msg.images[0]?.image_url?.url ?? "";
               if (imgUrl.startsWith("data:")) {
                 const b64 = imgUrl.split(",")[1] ?? "";
                 return { data: [{ b64_json: b64 }] };
               }
-              return { data: [{ url: imgUrl }] };
+              if (imgUrl) return { data: [{ url: imgUrl }] };
+            }
+            if (Array.isArray(msg?.content)) {
+              for (const part of msg.content) {
+                if (part?.type === "image_url" && part?.image_url?.url) {
+                  const imgUrl = part.image_url.url;
+                  if (imgUrl.startsWith("data:")) {
+                    const b64 = imgUrl.split(",")[1] ?? "";
+                    return { data: [{ b64_json: b64 }] };
+                  }
+                  return { data: [{ url: imgUrl }] };
+                }
+              }
             }
           }
+
+          throw new Error(
+            "OPENROUTER_IMAGE_INVALID_RESPONSE: no image found: " + JSON.stringify(parsed).substring(0, 500),
+          );
+        } catch (error) {
+          lastError = error;
+          if (i < keys.length - 1 && isOpenRouterImageRetryable(error)) {
+            console.warn(
+              `OPENROUTER_IMAGE_FAILOVER attempt=${i + 1}/${keys.length} routing_key=${params.routingKey ?? "none"} error=${String(error).substring(0, 160)}`,
+            );
+            continue;
+          }
+          throw error;
         }
       }
-      throw new Error("OPENROUTER_IMAGE_INVALID_RESPONSE: no image found: " + JSON.stringify(parsed).substring(0, 500));
+
+      throw lastError ?? new Error("OPENROUTER_IMAGE_API_ERROR: key pool exhausted");
     } else if (isGoAPI(endpoint) || params.providerHint === "midjourney") {
       // GoAPI (Midjourney proxy): OpenAI-compatible JSON body with images/generations
       const mjBody: Record<string, unknown> = {
@@ -528,6 +714,46 @@ export async function callQnImageAPI(params: {
         return { data: [{ url: ideoData[0].url }] };
       }
       throw new Error("IMAGE_RESULT_MISSING");
+    } else if (isFal(endpoint) || params.providerHint === "fal") {
+      // fal.ai: JSON body with prompt, aspect_ratio, resolution
+      const falBody: Record<string, unknown> = {
+        prompt: params.prompt,
+        num_images: params.n ?? 1,
+        output_format: "png",
+        sync_mode: true,
+      };
+      if (params.aspectRatio) falBody.aspect_ratio = params.aspectRatio;
+      if (params.imageSize) falBody.resolution = params.imageSize;
+
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Key ${apiKey}`,
+        },
+        body: JSON.stringify(falBody),
+        signal: controller.signal,
+      });
+
+      const falText = await res.text();
+      let falParsed: Record<string, unknown> = {};
+      try {
+        falParsed = falText ? JSON.parse(falText) : {};
+      } catch {
+        falParsed = { raw: falText };
+      }
+
+      if (!res.ok) {
+        throw new Error(`FAL_API_ERROR ${res.status}: ${JSON.stringify(falParsed)}`);
+      }
+
+      // fal.ai returns { images: [{ url, width, height }] } — normalize to standard format
+      // deno-lint-ignore no-explicit-any
+      const falImages = (falParsed as any)?.images;
+      if (Array.isArray(falImages) && falImages.length > 0 && falImages[0]?.url) {
+        return { data: [{ url: falImages[0].url }] };
+      }
+      throw new Error("FAL_IMAGE_RESULT_MISSING");
     } else if (isOpenAINativeGenerations(endpoint) || params.providerHint === "openai-generations") {
       // OpenAI images/generations (DALL-E 4 etc.): JSON body, no image input
       const dalleBody: Record<string, unknown> = {
@@ -548,9 +774,10 @@ export async function callQnImageAPI(params: {
       });
     } else if (isAzureAIFoundryGenerations(endpoint)) {
       // Azure AI Foundry /images/generations (e.g. FLUX Kontext Pro): JSON body
-      const images = params.imageDataUrls && params.imageDataUrls.length > 0
+      const images = (params.imageDataUrls && params.imageDataUrls.length > 0
         ? params.imageDataUrls
-        : [params.imageDataUrl];
+        : params.imageDataUrl ? [params.imageDataUrl] : []
+      ).filter((value): value is string => typeof value === "string" && value.length > 0);
       const jsonBody: Record<string, unknown> = {
         model,
         prompt: params.prompt,
@@ -570,9 +797,10 @@ export async function callQnImageAPI(params: {
     } else if (azure || isOpenAINativeEdits(endpoint)) {
       // Azure OpenAI or AI Foundry /images/edits: multipart FormData
       const form = new FormData();
-      const images = params.imageDataUrls && params.imageDataUrls.length > 0
+      const images = (params.imageDataUrls && params.imageDataUrls.length > 0
         ? params.imageDataUrls
-        : [params.imageDataUrl];
+        : params.imageDataUrl ? [params.imageDataUrl] : []
+      ).filter((value): value is string => typeof value === "string" && value.length > 0);
       if (images.length === 1) {
         form.append("image", dataUrlToBlob(images[0]), "image-0.png");
       } else {
@@ -630,9 +858,10 @@ export async function callQnImageAPI(params: {
         signal: controller.signal,
       });
     } else {
-      const images = params.imageDataUrls && params.imageDataUrls.length > 0
+      const images = (params.imageDataUrls && params.imageDataUrls.length > 0
         ? params.imageDataUrls
-        : [params.imageDataUrl];
+        : params.imageDataUrl ? [params.imageDataUrl] : []
+      ).filter((value): value is string => typeof value === "string" && value.length > 0);
 
       // OpenAI-compatible edits: always use multipart FormData so the proxy
       // receives proper binary image data (JSON string was silently ignored).

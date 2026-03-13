@@ -175,6 +175,10 @@ const localeSeoContent: Record<SiteLocale, LocaleSeoContent> = {
   },
 }
 
+function resolveSiteLocale(locale: string | undefined): SiteLocale {
+  return SUPPORTED_LOCALES.includes(locale as SiteLocale) ? (locale as SiteLocale) : 'en'
+}
+
 function normalizeSiteUrl(value: string | undefined): string {
   const siteUrl = value?.trim() || DEFAULT_SITE_URL
   return siteUrl.endsWith('/') ? siteUrl.slice(0, -1) : siteUrl
@@ -193,8 +197,8 @@ export function getSiteHost(): string {
   return new URL(getSiteUrl()).host
 }
 
-export function getLocaleSeoContent(locale: SiteLocale): LocaleSeoContent {
-  return localeSeoContent[locale]
+export function getLocaleSeoContent(locale: SiteLocale | string): LocaleSeoContent {
+  return localeSeoContent[resolveSiteLocale(locale)]
 }
 
 export function getLocalizedPath(locale: SiteLocale, pathname = ''): string {
@@ -217,9 +221,10 @@ export function getAlternates(pathname = ''): Metadata['alternates'] {
   }
 }
 
-export function getLocaleAlternates(locale: SiteLocale, pathname = ''): Metadata['alternates'] {
+export function getLocaleAlternates(locale: SiteLocale | string, pathname = ''): Metadata['alternates'] {
+  const resolvedLocale = resolveSiteLocale(locale)
   return {
-    canonical: getLocalizedUrl(locale, pathname),
+    canonical: getLocalizedUrl(resolvedLocale, pathname),
     languages: {
       en: getLocalizedUrl('en', pathname),
       zh: getLocalizedUrl('zh', pathname),
@@ -228,16 +233,17 @@ export function getLocaleAlternates(locale: SiteLocale, pathname = ''): Metadata
   }
 }
 
-export function getOpenGraphLocale(locale: SiteLocale): string {
-  return locale === 'zh' ? 'zh_CN' : 'en_US'
+export function getOpenGraphLocale(locale: SiteLocale | string): string {
+  return resolveSiteLocale(locale) === 'zh' ? 'zh_CN' : 'en_US'
 }
 
-export function buildMarketingMetadata(locale: SiteLocale): Metadata {
-  const content = getLocaleSeoContent(locale)
+export function buildMarketingMetadata(locale: SiteLocale | string): Metadata {
+  const resolvedLocale = resolveSiteLocale(locale)
+  const content = getLocaleSeoContent(resolvedLocale)
   return {
     title: content.title,
     description: content.description,
-    alternates: getLocaleAlternates(locale),
+    alternates: getLocaleAlternates(resolvedLocale),
     robots: {
       index: true,
       follow: true,
@@ -251,8 +257,8 @@ export function buildMarketingMetadata(locale: SiteLocale): Metadata {
     },
     openGraph: {
       type: 'website',
-      locale: getOpenGraphLocale(locale),
-      url: getLocalizedUrl(locale),
+      locale: getOpenGraphLocale(resolvedLocale),
+      url: getLocalizedUrl(resolvedLocale),
       title: content.title,
       description: content.description,
       siteName: content.siteName,
@@ -265,23 +271,24 @@ export function buildMarketingMetadata(locale: SiteLocale): Metadata {
   }
 }
 
-export function buildLegalMetadata(locale: SiteLocale, kind: LegalDocumentKind): Metadata {
-  const legal = getLocaleSeoContent(locale).legal[kind]
+export function buildLegalMetadata(locale: SiteLocale | string, kind: LegalDocumentKind): Metadata {
+  const resolvedLocale = resolveSiteLocale(locale)
+  const legal = getLocaleSeoContent(resolvedLocale).legal[kind]
   return {
     title: legal.title,
     description: legal.description,
-    alternates: getLocaleAlternates(locale, `/${kind}`),
+    alternates: getLocaleAlternates(resolvedLocale, `/${kind}`),
     robots: {
       index: true,
       follow: true,
     },
     openGraph: {
       type: 'article',
-      locale: getOpenGraphLocale(locale),
-      url: getLocalizedUrl(locale, `/${kind}`),
+      locale: getOpenGraphLocale(resolvedLocale),
+      url: getLocalizedUrl(resolvedLocale, `/${kind}`),
       title: legal.title,
       description: legal.description,
-      siteName: getLocaleSeoContent(locale).siteName,
+      siteName: getLocaleSeoContent(resolvedLocale).siteName,
     },
     twitter: {
       card: 'summary',
@@ -291,10 +298,11 @@ export function buildLegalMetadata(locale: SiteLocale, kind: LegalDocumentKind):
   }
 }
 
-export function buildMarketingStructuredData(locale: SiteLocale) {
-  const content = getLocaleSeoContent(locale)
+export function buildMarketingStructuredData(locale: SiteLocale | string) {
+  const resolvedLocale = resolveSiteLocale(locale)
+  const content = getLocaleSeoContent(resolvedLocale)
   const siteUrl = getSiteUrl()
-  const localeUrl = getLocalizedUrl(locale)
+  const localeUrl = getLocalizedUrl(resolvedLocale)
 
   return [
     {
@@ -309,7 +317,7 @@ export function buildMarketingStructuredData(locale: SiteLocale) {
       '@type': 'WebSite',
       name: content.siteName,
       url: siteUrl,
-      inLanguage: locale === 'zh' ? 'zh-CN' : 'en',
+      inLanguage: resolvedLocale === 'zh' ? 'zh-CN' : 'en',
       description: content.description,
     },
     {
@@ -319,7 +327,7 @@ export function buildMarketingStructuredData(locale: SiteLocale) {
       applicationCategory: content.softwareApplicationCategory,
       operatingSystem: 'Web',
       url: localeUrl,
-      inLanguage: locale === 'zh' ? 'zh-CN' : 'en',
+      inLanguage: resolvedLocale === 'zh' ? 'zh-CN' : 'en',
       description: content.description,
       offers: {
         '@type': 'Offer',

@@ -17,8 +17,10 @@ const USER_LIMIT_DEFAULTS: Record<JobType, number> = {
 
 const QUEUE_MAX_RUNNING_TASKS_KEY = "generation_queue_max_running_tasks";
 const QUEUE_RUNNER_BATCH_SIZE_KEY = "generation_queue_runner_batch_size";
+const QUEUE_INVOKE_BACKOFF_MS_KEY = "generation_queue_invoke_backoff_ms";
 const DEFAULT_QUEUE_MAX_RUNNING_TASKS = 8;
 const DEFAULT_QUEUE_RUNNER_BATCH_SIZE = 4;
+const DEFAULT_QUEUE_INVOKE_BACKOFF_MS = 60_000;
 
 function clampInt(value: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
@@ -38,6 +40,11 @@ export async function getQueueMaxRunningTasks(): Promise<number> {
 export async function getQueueRunnerBatchSize(): Promise<number> {
   const configured = await getIntegerSystemConfig(QUEUE_RUNNER_BATCH_SIZE_KEY, DEFAULT_QUEUE_RUNNER_BATCH_SIZE);
   return clampInt(configured, 1, 50, DEFAULT_QUEUE_RUNNER_BATCH_SIZE);
+}
+
+export async function getQueueInvokeBackoffMs(): Promise<number> {
+  const configured = await getIntegerSystemConfig(QUEUE_INVOKE_BACKOFF_MS_KEY, DEFAULT_QUEUE_INVOKE_BACKOFF_MS);
+  return clampInt(configured, 5_000, 300_000, DEFAULT_QUEUE_INVOKE_BACKOFF_MS);
 }
 
 export async function getActiveProcessingJobCount(
