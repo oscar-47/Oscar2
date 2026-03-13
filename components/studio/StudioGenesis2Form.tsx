@@ -27,6 +27,7 @@ import { uploadFiles } from '@/lib/api/upload'
 import { createClient } from '@/lib/supabase/client'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
+import { useAdminImageModels } from '@/lib/hooks/useAdminImageModels'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { useUserEmail } from '@/lib/hooks/useUserEmail'
 import { clampText, formatTextCounter, TEXT_LIMITS } from '@/lib/input-guard'
@@ -605,6 +606,7 @@ export function StudioGenesis2Form() {
   const isZh = locale.startsWith('zh')
   const defaultOutputLanguage: OutputLanguage = isZh ? 'zh' : 'en'
   const userEmail = useUserEmail()
+  useAdminImageModels(userEmail)
 
   const [productImages, setProductImages] = useState<UploadedImage[]>([])
   const [requirements, setRequirements] = useState('')

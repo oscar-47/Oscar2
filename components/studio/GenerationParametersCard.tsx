@@ -2,6 +2,7 @@
 
 import { useLocale } from 'next-intl'
 import { Label } from '@/components/ui/label'
+import { useAdminImageModels } from '@/lib/hooks/useAdminImageModels'
 import { useUserEmail } from '@/lib/hooks/useUserEmail'
 import { ModelTextHint } from '@/components/studio/ModelTextHint'
 import {
@@ -108,6 +109,7 @@ export function GenerationParametersCard({
   const locale = useLocale()
   const isZh = locale === 'zh'
   const userEmail = useUserEmail()
+  useAdminImageModels(userEmail)
 
   const ratios = aspectRatioOptions ?? DEFAULT_ASPECT_RATIOS
 

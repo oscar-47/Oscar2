@@ -32,6 +32,7 @@ import { ModelTextHint } from '@/components/studio/ModelTextHint'
 import { SectionIcon } from '@/components/shared/SectionIcon'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
+import { useAdminImageModels } from '@/lib/hooks/useAdminImageModels'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { uploadFiles } from '@/lib/api/upload'
 import {
@@ -304,6 +305,7 @@ export function EcomStudioForm() {
   const locale = useLocale()
   const isZh = locale.startsWith('zh')
   const userEmail = useUserEmail()
+  useAdminImageModels(userEmail)
   const backendLocale = isZh ? 'zh-CN' : 'en'
   const defaultRequirements = isZh ? DEFAULT_REQUIREMENTS_ZH : DEFAULT_REQUIREMENTS_EN
   const aspectRatios = isZh ? ASPECT_RATIOS_ZH : ASPECT_RATIOS_EN

@@ -15,6 +15,7 @@ import {
   sanitizeImageSizeForModel,
 } from '@/types'
 import { useUserEmail } from '@/lib/hooks/useUserEmail'
+import { useAdminImageModels } from '@/lib/hooks/useAdminImageModels'
 import type { GenerationModel, AspectRatio } from '@/types'
 
 const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
@@ -31,6 +32,7 @@ export function QuickEditPanel() {
   const t = useTranslations('studio.editor')
   const locale = useLocale()
   const userEmail = useUserEmail()
+  useAdminImageModels(userEmail)
   const quickEdit = useEditorStore((s) => s.quickEdit)
   const closeQuickEdit = useEditorStore((s) => s.closeQuickEdit)
   const setQuickEditField = useEditorStore((s) => s.setQuickEditField)

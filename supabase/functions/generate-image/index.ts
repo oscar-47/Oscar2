@@ -4,9 +4,6 @@ import { requireUser, isAdminEmail, isToApisModel } from "../_shared/auth.ts";
 import { assertUserCanQueueJob } from "../_shared/generation-queue.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 import {
-  getCreditCostForModel,
-  getDefaultImageSizeForModel,
-  isImageSizeSupportedForModel,
   normalizeRequestedModel,
 } from "../_shared/generation-config.ts";
 import {
@@ -14,11 +11,13 @@ import {
   TA_PRO_PROMPT_PROFILE_FLAG,
 } from "../_shared/prompt-profile.ts";
 import { getBooleanSystemConfig } from "../_shared/system-config.ts";
-
-function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
-  void turboEnabled;
-  return getCreditCostForModel(model, imageSize);
-}
+import {
+  getAdminImageModelConfigs,
+  getEffectiveCreditCostForModel,
+  getEffectiveDefaultImageSizeForModel,
+  isAdminOnlyDynamicModel,
+  isEffectiveImageSizeSupportedForModel,
+} from "../_shared/admin-model-config.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return options();
@@ -33,7 +32,8 @@ Deno.serve(async (req) => {
   }
 
   const normalizedModel = normalizeRequestedModel(String(body.model));
-  if (isToApisModel(normalizedModel) && !isAdminEmail(authResult.user.email)) {
+  const adminModelConfigs = await getAdminImageModelConfigs();
+  if ((isToApisModel(normalizedModel) || isAdminOnlyDynamicModel(adminModelConfigs, normalizedModel)) && !isAdminEmail(authResult.user.email)) {
     return err("MODEL_RESTRICTED", "This model is only available to admin users", 403);
   }
   const taProPromptProfileEnabled = await getBooleanSystemConfig(TA_PRO_PROMPT_PROFILE_FLAG, false);
@@ -43,13 +43,12 @@ Deno.serve(async (req) => {
     enabled: taProPromptProfileEnabled,
   });
   const imageSize = body.imageSize == null
-    ? getDefaultImageSizeForModel(normalizedModel)
+    ? getEffectiveDefaultImageSizeForModel(adminModelConfigs, normalizedModel)
     : String(body.imageSize);
-  if (!isImageSizeSupportedForModel(normalizedModel, imageSize, { includeInternal: true })) {
+  if (!isEffectiveImageSizeSupportedForModel(adminModelConfigs, normalizedModel, imageSize, { includeInternal: true })) {
     return err("IMAGE_SIZE_UNSATISFIED", `imageSize ${imageSize} is not supported for model ${normalizedModel}`, 400);
   }
-  const turboEnabled = Boolean(body.turboEnabled ?? false);
-  const cost = computeCost(normalizedModel, turboEnabled, imageSize);
+  const cost = getEffectiveCreditCostForModel(adminModelConfigs, normalizedModel, imageSize);
   const workflowMode = String(body.workflowMode ?? "product");
 
   if (workflowMode === "model" && typeof body.modelImage !== "string") {

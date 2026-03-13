@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
 import { ResultGallery } from '@/components/generation/ResultGallery'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
+import { useAdminImageModels } from '@/lib/hooks/useAdminImageModels'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -94,6 +95,7 @@ export function AestheticMirrorForm() {
   const router = useRouter()
   const { total } = useCredits()
   const userEmail = useUserEmail()
+  useAdminImageModels(userEmail)
 
   const [mode, setMode] = useState<Mode>('single')
   const [singleRefFile, setSingleRefFile] = useState<File | null>(null)

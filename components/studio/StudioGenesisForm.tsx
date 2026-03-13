@@ -22,6 +22,7 @@ import { DesignBlueprint } from '@/components/studio/DesignBlueprint'
 import { ModelTextHint } from '@/components/studio/ModelTextHint'
 import { useCredits, refreshCredits } from '@/lib/hooks/useCredits'
 import { usePromptProfile } from '@/lib/hooks/usePromptProfile'
+import { useAdminImageModels } from '@/lib/hooks/useAdminImageModels'
 import { useResultAssetSession } from '@/lib/hooks/useResultAssetSession'
 import { uploadFiles } from '@/lib/api/upload'
 import {
@@ -2013,6 +2014,7 @@ export function StudioGenesisForm() {
   const router = useRouter()
   const isZh = locale.startsWith('zh')
   const userEmail = useUserEmail()
+  useAdminImageModels(userEmail)
   const defaultRequirements = getGenesisDefaultRequirements(isZh)
 
   // ── Input state ──

@@ -1,3 +1,11 @@
+import {
+  buildAvailableModelsFromAdminConfigs,
+  getRegisteredAdminImageModel,
+  getRegisteredAdminImageModels,
+  type AdminImageModelConfig,
+  type DynamicAdminGenerationModel,
+} from '@/lib/admin-models'
+
 // ============================================================
 // Shared types — aligned with Codex OpenAPI contract
 // ============================================================
@@ -102,7 +110,7 @@ export interface RedeemCodeClaim {
 
 // --- AI generation models ---
 
-export type GenerationModel =
+export type BuiltInGenerationModel =
   | 'azure-flux'
   | 'gpt-image'
   | 'qiniu-gemini-pro'
@@ -126,6 +134,8 @@ export type GenerationModel =
   | 'sd-3.5-ultra'
   | 'dall-e-4'
   | 'ideogram-3'
+
+export type GenerationModel = BuiltInGenerationModel | DynamicAdminGenerationModel
 
 export type PromptProfile = 'default' | 'ta-pro'
 
@@ -162,7 +172,12 @@ export function isAdminUser(email: string | null | undefined): boolean {
 }
 
 export function getAvailableModels(email: string | null | undefined): ReadonlyArray<AvailableModel> {
-  return isAdminUser(email) ? [...AVAILABLE_MODELS, ...ADMIN_ONLY_MODELS] : AVAILABLE_MODELS
+  if (!isAdminUser(email)) return AVAILABLE_MODELS
+  return [
+    ...AVAILABLE_MODELS,
+    ...ADMIN_ONLY_MODELS,
+    ...buildAvailableModelsFromAdminConfigs(getRegisteredAdminImageModels()) as AvailableModel[],
+  ]
 }
 
 export const DEFAULT_MODEL: GenerationModel = 'or-gemini-3.1-flash'
@@ -194,7 +209,7 @@ export interface ModelCapability {
   migrateTo?: GenerationModel
 }
 
-export const MODEL_CAPABILITIES: Partial<Record<GenerationModel, ModelCapability>> = {
+export const MODEL_CAPABILITIES: Partial<Record<BuiltInGenerationModel, ModelCapability>> = {
   'or-gemini-2.5-flash': {
     supportedSizes: ['1K'],
     publicSizes: ['1K'],
@@ -233,7 +248,7 @@ export const MODEL_CAPABILITIES: Partial<Record<GenerationModel, ModelCapability
   },
 }
 
-const MODEL_BILLING_TIERS: Partial<Record<GenerationModel, BillingTier>> = {
+const MODEL_BILLING_TIERS: Partial<Record<BuiltInGenerationModel, BillingTier>> = {
   'azure-flux': 'balanced',
   'gpt-image': 'quality',
   'qiniu-gemini-pro': 'quality',
@@ -255,7 +270,7 @@ const MODEL_BILLING_TIERS: Partial<Record<GenerationModel, BillingTier>> = {
   'ideogram-3': 'quality',
 }
 
-export const MODEL_CREDIT_COSTS: Partial<Record<GenerationModel, Partial<Record<ImageSize, number>>>> = {
+export const MODEL_CREDIT_COSTS: Partial<Record<BuiltInGenerationModel, Partial<Record<ImageSize, number>>>> = {
   'azure-flux': { '1K': 30, '2K': 30, '4K': 30 },
   'gpt-image': { '1K': 50, '2K': 50, '4K': 50 },
   'qiniu-gemini-pro': { '1K': 50, '2K': 50, '4K': 50 },
@@ -277,7 +292,7 @@ export const MODEL_CREDIT_COSTS: Partial<Record<GenerationModel, Partial<Record<
   'ideogram-3': { '1K': 50, '2K': 50, '4K': 50 },
 }
 
-function knownModelValues(): GenerationModel[] {
+function knownModelValues(): BuiltInGenerationModel[] {
   return [
     'azure-flux',
     'gpt-image',
@@ -305,18 +320,34 @@ export function normalizeGenerationModel(model: string | null | undefined): Gene
   const raw = String(model ?? '').trim()
   if (!raw) return DEFAULT_MODEL
 
-  const capability = MODEL_CAPABILITIES[raw as GenerationModel]
+  const capability = MODEL_CAPABILITIES[raw as BuiltInGenerationModel]
   if (capability?.migrateTo) return capability.migrateTo
 
-  if (knownModelValues().includes(raw as GenerationModel)) {
-    return raw as GenerationModel
+  if (knownModelValues().includes(raw as BuiltInGenerationModel)) {
+    return raw as BuiltInGenerationModel
+  }
+
+  if (getRegisteredAdminImageModel(raw)) {
+    return raw as DynamicAdminGenerationModel
   }
 
   return DEFAULT_MODEL
 }
 
+function toAdminModelCapability(config: AdminImageModelConfig): ModelCapability {
+  return {
+    supportedSizes: config.supportedSizes.slice() as ImageSize[],
+    publicSizes: config.supportedSizes.slice() as ImageSize[],
+    defaultSize: config.defaultSize as ImageSize,
+    rolloutStage: 'internal_only',
+  }
+}
+
 export function getModelCapability(model: GenerationModel | string): ModelCapability | null {
-  return MODEL_CAPABILITIES[normalizeGenerationModel(model)] ?? null
+  const normalizedModel = normalizeGenerationModel(model)
+  const adminModel = getRegisteredAdminImageModel(normalizedModel)
+  if (adminModel) return toAdminModelCapability(adminModel)
+  return MODEL_CAPABILITIES[normalizedModel as BuiltInGenerationModel] ?? null
 }
 
 export function getSupportedImageSizes(
@@ -356,23 +387,30 @@ export function getGenerationCreditCost(
   imageSize: ImageSize
 ): number {
   const normalizedModel = normalizeGenerationModel(model)
+  const adminModel = getRegisteredAdminImageModel(normalizedModel)
+  if (adminModel) {
+    return BILLING_TIER_COSTS[adminModel.billingTier]
+  }
   const normalizedSize = sanitizeImageSizeForModel(normalizedModel, imageSize, { includeInternal: true })
-  const costs = MODEL_CREDIT_COSTS[normalizedModel]
+  const costs = MODEL_CREDIT_COSTS[normalizedModel as BuiltInGenerationModel]
   return costs?.[normalizedSize] ?? BILLING_TIER_COSTS[getBillingTierForModel(normalizedModel)]
 }
 
 export function getBillingTierForModel(model: GenerationModel | string): BillingTier {
   const normalizedModel = normalizeGenerationModel(model)
-  const tier = MODEL_BILLING_TIERS[normalizedModel]
+  const adminModel = getRegisteredAdminImageModel(normalizedModel)
+  if (adminModel) return adminModel.billingTier
+  const tier = MODEL_BILLING_TIERS[normalizedModel as BuiltInGenerationModel]
   if (tier) return tier
-  return MODEL_BILLING_TIERS[DEFAULT_MODEL] ?? 'balanced'
+  return MODEL_BILLING_TIERS[DEFAULT_MODEL as BuiltInGenerationModel] ?? 'balanced'
 }
 
 export function isValidModel(m: string): boolean {
   const raw = String(m ?? '').trim()
   if (!raw) return false
-  if (MODEL_CAPABILITIES[raw as GenerationModel]?.migrateTo) return true
-  return knownModelValues().includes(raw as GenerationModel)
+  if (MODEL_CAPABILITIES[raw as BuiltInGenerationModel]?.migrateTo) return true
+  if (knownModelValues().includes(raw as BuiltInGenerationModel)) return true
+  return getRegisteredAdminImageModel(raw) !== null
 }
 
 export const IMAGE_SIZE_LABELS: Record<ImageSize, { en: string; zh: string }> = {

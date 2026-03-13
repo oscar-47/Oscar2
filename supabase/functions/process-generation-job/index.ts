@@ -9,12 +9,16 @@ import {
   aspectRatioToSize,
 } from "../_shared/qn-image.ts";
 import {
-  getCreditCostForModel,
-  getDefaultImageSizeForModel,
-  isImageSizeSupportedForModel,
   normalizeRequestedModel,
   OPENROUTER_MODEL_MAP,
 } from "../_shared/generation-config.ts";
+import {
+  getAdminImageModelConfig,
+  getAdminImageModelConfigs,
+  getEffectiveCreditCostForModel,
+  getEffectiveDefaultImageSizeForModel,
+  isEffectiveImageSizeSupportedForModel,
+} from "../_shared/admin-model-config.ts";
 import { applyPromptVariant, buildPromptRegistryKey } from "../_shared/prompt-registry.ts";
 import { sanitizePromptProfile } from "../_shared/prompt-profile.ts";
 import {
@@ -3153,11 +3157,6 @@ export function normalizeGenesisAnalysis(
   };
 }
 
-function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
-  void turboEnabled;
-  return getCreditCostForModel(model, imageSize);
-}
-
 function upstreamHttpStatusFromError(error: unknown): number | null {
   const message = String(error ?? "");
   const match = message.match(/(?:API_ERROR|CREATE_ERROR)\s+(\d{3})\b/);
@@ -3200,6 +3199,7 @@ type ImageRoute = {
   model?: string;
   endpoint?: string;
   apiKey?: string;
+  providerHint?: string;
 };
 
 const TA_MODEL_MAP: Record<string, string> = {
@@ -3208,10 +3208,24 @@ const TA_MODEL_MAP: Record<string, string> = {
   "ta-gemini-3-pro": "gemini-3-pro-image-preview",
 };
 
-function resolveImageRoute(modelFromRequest: string): ImageRoute {
+function resolveImageRoute(
+  modelFromRequest: string,
+  adminModelConfigs: Awaited<ReturnType<typeof getAdminImageModelConfigs>>,
+): ImageRoute {
   const model = normalizeRequestedModel(modelFromRequest.trim());
   const qnEndpoint = Deno.env.get("QN_IMAGE_API_ENDPOINT");
   const qnApiKey = Deno.env.get("QN_IMAGE_API_KEY");
+  const adminModel = getAdminImageModelConfig(adminModelConfigs, model);
+
+  if (adminModel) {
+    return {
+      provider: "default",
+      endpoint: adminModel.endpoint,
+      apiKey: Deno.env.get(adminModel.apiKeyEnvVar) ?? "",
+      model: adminModel.providerModel,
+      providerHint: adminModel.providerHint === "auto" ? undefined : adminModel.providerHint,
+    };
+  }
 
   if (model === "azure-flux" || model === "flux-kontext-pro") {
     return {
@@ -5100,18 +5114,18 @@ async function processImageGenJob(
   const startedAt = Date.now();
   const pulseLease = taskLease?.pulse ?? (async () => {});
   const payload = job.payload ?? {};
+  const adminModelConfigs = await getAdminImageModelConfigs();
   const model = normalizeRequestedModel(String(payload.model ?? "or-gemini-3.1-flash"));
   const promptProfile = sanitizePromptProfile(payload.promptProfile ?? payload.prompt_profile);
-  const imageRoute = resolveImageRoute(model);
+  const imageRoute = resolveImageRoute(model, adminModelConfigs);
   const imageSize = payload.imageSize == null
-    ? getDefaultImageSizeForModel(model)
+    ? getEffectiveDefaultImageSizeForModel(adminModelConfigs, model)
     : String(payload.imageSize);
-  if (!isImageSizeSupportedForModel(model, imageSize, { includeInternal: true })) {
+  if (!isEffectiveImageSizeSupportedForModel(adminModelConfigs, model, imageSize, { includeInternal: true })) {
     throw new Error(`IMAGE_SIZE_UNSATISFIED requested=${imageSize} model=${model}`);
   }
-  const turboEnabled = Boolean(payload.turboEnabled ?? false);
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
-  const cost = Number(job.cost_amount ?? computeCost(model, turboEnabled, imageSize));
+  const cost = Number(job.cost_amount ?? getEffectiveCreditCostForModel(adminModelConfigs, model, imageSize));
 
   const source = getSourceImageFromPayload(payload);
   if (!source) throw new Error("IMAGE_INPUT_SOURCE_MISSING");
@@ -5263,6 +5277,7 @@ async function processImageGenJob(
       imageSize,
       aspectRatio,
       timeoutMsOverride: imageGenTimeoutMs,
+      providerHint: imageRoute.providerHint,
     });
     await pulseLease();
 
@@ -5397,13 +5412,14 @@ async function _processStyleReplicateJobInner(
   const startedAt = Date.now();
   const pulseLease = taskLease?.pulse ?? (async () => {});
   const payload = job.payload ?? {};
+  const adminModelConfigs = await getAdminImageModelConfigs();
   const modelName = normalizeRequestedModel(String(payload.model ?? "or-gemini-3.1-flash"));
   const promptProfile = sanitizePromptProfile(payload.promptProfile ?? payload.prompt_profile);
-  const imageRoute = resolveImageRoute(modelName);
+  const imageRoute = resolveImageRoute(modelName, adminModelConfigs);
   const imageSize = payload.imageSize == null
-    ? getDefaultImageSizeForModel(modelName)
+    ? getEffectiveDefaultImageSizeForModel(adminModelConfigs, modelName)
     : String(payload.imageSize);
-  if (!isImageSizeSupportedForModel(modelName, imageSize, { includeInternal: true })) {
+  if (!isEffectiveImageSizeSupportedForModel(adminModelConfigs, modelName, imageSize, { includeInternal: true })) {
     throw new Error(`IMAGE_SIZE_UNSATISFIED requested=${imageSize} model=${modelName}`);
   }
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
@@ -5414,8 +5430,7 @@ async function _processStyleReplicateJobInner(
     : "single";
   const imageCount = clampInt(payload.imageCount ?? 1, 1, 9, 1);
   const groupCount = clampInt(payload.groupCount ?? 1, 1, 9, 1);
-  const turboEnabled = Boolean(payload.turboEnabled ?? false);
-  const unitCost = computeCost(modelName, turboEnabled, imageSize);
+  const unitCost = getEffectiveCreditCostForModel(adminModelConfigs, modelName, imageSize);
   const backgroundMode = payload.backgroundMode === "original" ? "original" : "white";
 
   const productImages = Array.isArray(payload.productImages)
@@ -5732,6 +5747,7 @@ async function _processStyleReplicateJobInner(
           imageSize,
           aspectRatio,
           timeoutMsOverride: styleTimeoutMs,
+          providerHint: imageRoute.providerHint,
         });
         await pulseLease();
 

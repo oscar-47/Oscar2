@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import AdminModelConfigCard from '@/components/admin/AdminModelConfigCard'
 import MaintenanceModeCard from '@/components/admin/MaintenanceModeCard'
+import { getAdminImageModelConfigs } from '@/lib/admin-model-config'
 import { getMaintenanceConfig } from '@/lib/maintenance'
 import { isAdminUser } from '@/types'
 
@@ -54,6 +56,7 @@ export default async function AdminUsersPage({
     last24hUsersResult,
     last7dUsersResult,
     maintenanceConfig,
+    adminModelConfigs,
   ] = await Promise.all([
     admin
       .from('profiles')
@@ -72,6 +75,7 @@ export default async function AdminUsersPage({
       .select('id', { count: 'exact', head: true })
       .gte('created_at', last7dSince),
     getMaintenanceConfig({ fresh: true }),
+    getAdminImageModelConfigs(),
   ])
 
   if (recentUsersResult.error) {
@@ -148,6 +152,11 @@ export default async function AdminUsersPage({
         initialEnabled={maintenanceConfig.enabled}
         initialUpdatedAt={maintenanceConfig.updatedAt}
         initialUpdatedBy={maintenanceConfig.updatedBy}
+      />
+
+      <AdminModelConfigCard
+        locale={locale}
+        initialConfigs={adminModelConfigs}
       />
 
       <div className="mt-6 overflow-hidden rounded-3xl border border-border bg-background">

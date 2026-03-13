@@ -4,9 +4,6 @@ import { requireUser, isAdminEmail, isToApisModel } from "../_shared/auth.ts";
 import { assertUserCanQueueJob } from "../_shared/generation-queue.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 import {
-  getCreditCostForModel,
-  getDefaultImageSizeForModel,
-  isImageSizeSupportedForModel,
   normalizeRequestedModel,
 } from "../_shared/generation-config.ts";
 import {
@@ -14,11 +11,13 @@ import {
   TA_PRO_PROMPT_PROFILE_FLAG,
 } from "../_shared/prompt-profile.ts";
 import { getBooleanSystemConfig } from "../_shared/system-config.ts";
-
-function computeCost(model: string, turboEnabled: boolean, imageSize: string): number {
-  void turboEnabled;
-  return getCreditCostForModel(model, imageSize);
-}
+import {
+  getAdminImageModelConfigs,
+  getEffectiveCreditCostForModel,
+  getEffectiveDefaultImageSizeForModel,
+  isAdminOnlyDynamicModel,
+  isEffectiveImageSizeSupportedForModel,
+} from "../_shared/admin-model-config.ts";
 
 function hasAllowedRefinementImageExtension(value: string): boolean {
   const lower = value.trim().toLowerCase();
@@ -88,7 +87,8 @@ Deno.serve(async (req) => {
   }
 
   const modelName = normalizeRequestedModel(String(body.model ?? "or-gemini-3.1-flash"));
-  if (isToApisModel(modelName) && !isAdminEmail(authResult.user.email)) {
+  const adminModelConfigs = await getAdminImageModelConfigs();
+  if ((isToApisModel(modelName) || isAdminOnlyDynamicModel(adminModelConfigs, modelName)) && !isAdminEmail(authResult.user.email)) {
     return err("MODEL_RESTRICTED", "This model is only available to admin users", 403);
   }
   const taProPromptProfileEnabled = await getBooleanSystemConfig(TA_PRO_PROMPT_PROFILE_FLAG, false);
@@ -98,9 +98,9 @@ Deno.serve(async (req) => {
     enabled: taProPromptProfileEnabled,
   });
   const effectiveImageSize = body.imageSize == null
-    ? getDefaultImageSizeForModel(modelName)
+    ? getEffectiveDefaultImageSizeForModel(adminModelConfigs, modelName)
     : String(body.imageSize);
-  if (!isImageSizeSupportedForModel(modelName, effectiveImageSize, { includeInternal: true })) {
+  if (!isEffectiveImageSizeSupportedForModel(adminModelConfigs, modelName, effectiveImageSize, { includeInternal: true })) {
     return err("IMAGE_SIZE_UNSATISFIED", `imageSize ${effectiveImageSize} is not supported for model ${modelName}`, 400);
   }
   const imageCount = Math.max(1, Math.min(9, Number(body.imageCount ?? 1)));
@@ -116,8 +116,7 @@ Deno.serve(async (req) => {
     : mode === "refinement"
     ? productCount
     : productCount * imageCount;
-  const turboEnabled = Boolean(body.turboEnabled ?? false);
-  const unitCost = computeCost(modelName, turboEnabled, effectiveImageSize);
+  const unitCost = getEffectiveCreditCostForModel(adminModelConfigs, modelName, effectiveImageSize);
   const cost = unitCost * requestedCount;
 
   const payload = {
