@@ -532,6 +532,7 @@ export interface JobResponse {
 
 export interface CheckoutResponse {
   url: string
+  surface?: 'page' | 'wap'
 }
 
 // --- Studio Genesis: Analysis Blueprint ---
