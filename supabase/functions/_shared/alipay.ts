@@ -134,26 +134,31 @@ export interface PagePayParams {
   passbackParams?: string;
 }
 
+export type AlipayCheckoutSurface = "page" | "wap";
+
 /**
- * Build a signed URL for `alipay.trade.page.pay` (电脑网站支付).
- * The user should be redirected to this URL via GET.
+ * Build a signed URL for Alipay web checkout.
+ * Desktop uses `alipay.trade.page.pay`, mobile uses `alipay.trade.wap.pay`.
  */
-export async function buildPagePayUrl(
+export async function buildCheckoutUrl(
   config: AlipayConfig,
   params: PagePayParams,
+  surface: AlipayCheckoutSurface = "page",
 ): Promise<string> {
+  const isWap = surface === "wap";
   const bizContent = JSON.stringify({
     out_trade_no: params.outTradeNo,
     total_amount: params.totalAmount,
     subject: params.subject,
     body: params.body ?? "",
-    product_code: "FAST_INSTANT_TRADE_PAY",
+    product_code: isWap ? "QUICK_WAP_WAY" : "FAST_INSTANT_TRADE_PAY",
+    timeout_express: "30m",
     passback_params: params.passbackParams ?? "",
   });
 
   const commonParams: Record<string, string> = {
     app_id: config.appId,
-    method: "alipay.trade.page.pay",
+    method: isWap ? "alipay.trade.wap.pay" : "alipay.trade.page.pay",
     charset: "utf-8",
     sign_type: "RSA2",
     timestamp: formatTimestamp(),
