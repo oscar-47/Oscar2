@@ -4,16 +4,16 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { generateModelImage, processGenerationJob } from '@/lib/api/edge-functions'
 import { refreshCredits, useCredits } from '@/lib/hooks/useCredits'
 import { uploadFile } from '@/lib/api/upload'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationJob } from '@/types'
+import type { GenerationModel } from '@/types'
 import { getGenerationCreditCost } from '@/types'
 import type { UploadedImage } from '@/components/upload/MultiImageUploader'
 import type { AIModelHistoryItem } from './types'
@@ -23,6 +23,7 @@ import { Loader2, Clock3, UserCircle2, Sparkles } from 'lucide-react'
 type Gender = 'female' | 'male'
 type AgeRange = '18-25' | '26-35' | '36-45' | '46-60' | '60+'
 type Ethnicity = 'asian' | 'white' | 'black' | 'latino'
+type ModelMode = 'fast' | 'balanced' | 'quality'
 type DialogState = 'idle' | 'generating' | 'ready' | 'error'
 
 type PreviewItem = {
@@ -45,8 +46,20 @@ type ModelHistoryRow = {
   created_at: string
 }
 
-const AI_MODEL_GENERATION_MODEL = 'ta-gemini-3-pro' as const
-const AI_MODEL_GENERATION_COST = getGenerationCreditCost(AI_MODEL_GENERATION_MODEL, '1K')
+const MODEL_OPTION_BUTTON_CLASS =
+  'inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2.5 text-sm font-medium outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-zinc-900/15 disabled:cursor-not-allowed disabled:opacity-50'
+
+const MODEL_OPTION_BUTTON_IDLE_CLASS =
+  'border-[#d8d1c6] bg-[#fcfaf6] text-[#1f2937] shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] hover:border-[#cac1b4] hover:bg-white'
+
+const MODEL_OPTION_BUTTON_ACTIVE_CLASS =
+  'border-[#172033] bg-[#101827] text-[#f8f4ee] shadow-[0_2px_8px_rgba(16,24,39,0.08),0_14px_30px_-14px_rgba(16,24,39,0.38)]'
+
+const AI_MODEL_MODE_CONFIG: Record<ModelMode, { model: GenerationModel }> = {
+  fast: { model: 'or-gemini-2.5-flash' },
+  balanced: { model: 'or-gemini-3.1-flash' },
+  quality: { model: 'or-gemini-3-pro' },
+}
 
 function uid() {
   return crypto.randomUUID()
@@ -118,6 +131,37 @@ function mapHistoryRow(row: ModelHistoryRow): AIModelHistoryItem {
     errorMessage: row.error_message,
     createdAt: row.created_at,
   }
+}
+
+function getModeLabel(
+  mode: ModelMode,
+  tCommon: (key: string) => string
+): string {
+  if (mode === 'fast') return tCommon('fastLabel')
+  if (mode === 'quality') return tCommon('qualityLabel')
+  return tCommon('balancedLabel')
+}
+
+function getModeDescription(
+  mode: ModelMode,
+  t: (key: string) => string
+): string {
+  if (mode === 'fast') return t('modelModeFastDescription')
+  if (mode === 'quality') return t('modelModeQualityDescription')
+  return t('modelModeBalancedDescription')
+}
+
+function getCreditsLabel(
+  cost: number,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  return t('creditsPerImage', { cost })
+}
+
+function optionButtonClassName(selected: boolean): string {
+  return `${MODEL_OPTION_BUTTON_CLASS} ${
+    selected ? MODEL_OPTION_BUTTON_ACTIVE_CLASS : MODEL_OPTION_BUTTON_IDLE_CLASS
+  }`
 }
 
 function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> {
@@ -201,12 +245,14 @@ export function AIModelGeneratorDialog({
 }: AIModelGeneratorDialogProps) {
   const t = useTranslations('studio.clothingStudio')
   const tc = useTranslations('studio.common')
+  const tp = useTranslations('pricing.usage')
   const locale = useLocale()
   const router = useRouter()
   const { total } = useCredits()
   const [gender, setGender] = useState<Gender>('female')
   const [ageRange, setAgeRange] = useState<AgeRange>('26-35')
   const [ethnicity, setEthnicity] = useState<Ethnicity>('asian')
+  const [modelMode, setModelMode] = useState<ModelMode>('balanced')
   const [count, setCount] = useState<1 | 2 | 3 | 4>(2)
   const [otherRequirements, setOtherRequirements] = useState('')
   const [dialogState, setDialogState] = useState<DialogState>('idle')
@@ -219,7 +265,9 @@ export function AIModelGeneratorDialog({
   const abortRef = useRef<AbortController | null>(null)
 
   const isGenerating = dialogState === 'generating'
-  const totalCost = count * AI_MODEL_GENERATION_COST
+  const selectedModel = AI_MODEL_MODE_CONFIG[modelMode].model
+  const singleImageCost = getGenerationCreditCost(selectedModel, '1K')
+  const totalCost = count * singleImageCost
   const insufficientCredits = total !== null && total < totalCost
 
   async function loadHistory(silent = true) {
@@ -246,6 +294,7 @@ export function AIModelGeneratorDialog({
     setGender('female')
     setAgeRange('26-35')
     setEthnicity('asian')
+    setModelMode('balanced')
     setCount(2)
     setOtherRequirements('')
     setDialogState('idle')
@@ -253,6 +302,8 @@ export function AIModelGeneratorDialog({
     setPreviewItems([])
     setSelectedImageUrl(null)
     void loadHistory(true)
+    // loadHistory is intentionally invoked only when the dialog opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const handleGenerate = async () => {
@@ -278,7 +329,7 @@ export function AIModelGeneratorDialog({
       const { publicUrl: uploadedProductUrl } = await uploadFile(productImages[0].file)
       const tasks = Array.from({ length: count }, async (_, index) => {
         const { job_id } = await generateModelImage({
-          model: AI_MODEL_GENERATION_MODEL,
+          model: selectedModel,
           gender,
           ageRange,
           ethnicity,
@@ -360,56 +411,145 @@ export function AIModelGeneratorDialog({
     onOpenChange(next)
   }
 
+  const genderOptions: { value: Gender; label: string }[] = [
+    { value: 'female', label: t('genderFemale') },
+    { value: 'male', label: t('genderMale') },
+  ]
+
+  const ageOptions: { value: AgeRange; label: string }[] = [
+    { value: '18-25', label: t('age18_25') },
+    { value: '26-35', label: t('age26_35') },
+    { value: '36-45', label: t('age36_45') },
+    { value: '46-60', label: t('age46_60') },
+    { value: '60+', label: t('age60plus') },
+  ]
+
+  const ethnicityOptions: { value: Ethnicity; label: string }[] = [
+    { value: 'asian', label: t('ethnicityAsian') },
+    { value: 'white', label: t('ethnicityWhite') },
+    { value: 'black', label: t('ethnicityBlack') },
+    { value: 'latino', label: t('ethnicityLatino') },
+  ]
+
+  const countOptions: { value: 1 | 2 | 3 | 4; label: string }[] = [
+    { value: 1, label: t('countImage', { count: 1 }) },
+    { value: 2, label: t('countImage', { count: 2 }) },
+    { value: 3, label: t('countImage', { count: 3 }) },
+    { value: 4, label: t('countImage', { count: 4 }) },
+  ]
+
+  const modelModeOptions: ModelMode[] = ['fast', 'balanced', 'quality']
+
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="w-[96vw] max-w-6xl gap-0 overflow-hidden p-0">
-        <div className="border-b px-6 py-4">
-          <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+      <DialogContent className="top-2 w-[calc(100vw-1rem)] max-w-6xl translate-y-0 gap-0 overflow-hidden rounded-[30px] border-[#e4dbcf] bg-[#fffdf9] p-0 shadow-[0_24px_80px_-32px_rgba(16,24,39,0.45)] sm:top-[50%] sm:w-[96vw] sm:-translate-y-1/2">
+        <div className="shrink-0 border-b border-[#ebe3d7] px-5 py-4 sm:px-6">
+          <DialogTitle className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
             <Sparkles className="h-5 w-5" />
             {t('aiModelDialogTitle')}
-          </h2>
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {t('aiModelDialogDescription')}
+          </DialogDescription>
         </div>
 
-        <div className="flex max-h-[76vh] min-h-[620px] flex-col lg:flex-row">
-          <div className="flex w-full flex-col border-b p-6 lg:w-3/5 lg:border-b-0 lg:border-r">
-            <div className="flex-1 space-y-5 overflow-y-auto pr-1">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>{t('labelGender')}</Label>
-                  <Select value={gender} onValueChange={(v) => setGender(v as Gender)} disabled={isGenerating}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="female">{t('genderFemale')}</SelectItem>
-                      <SelectItem value="male">{t('genderMale')}</SelectItem>
-                    </SelectContent>
-                  </Select>
+        <div className="flex max-h-[calc(100dvh-7.25rem)] min-h-0 flex-col overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch] lg:max-h-[76vh] lg:min-h-[620px] lg:flex-row lg:overflow-hidden">
+          <div className="flex w-full flex-col border-b border-[#ebe3d7] p-5 sm:p-6 lg:w-3/5 lg:min-h-0 lg:border-b-0 lg:border-r">
+            <div className="space-y-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+              <div className="space-y-2.5">
+                <Label>{t('labelModelMode')}</Label>
+                <div className="grid gap-3 md:grid-cols-3">
+                  {modelModeOptions.map((option) => {
+                    const optionModel = AI_MODEL_MODE_CONFIG[option].model
+                    const optionCost = getGenerationCreditCost(optionModel, '1K')
+                    const isSelected = modelMode === option
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => setModelMode(option)}
+                        disabled={isGenerating}
+                        className={`rounded-[24px] border px-4 py-4 text-left outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-zinc-900/15 disabled:cursor-not-allowed disabled:opacity-50 ${
+                          isSelected
+                            ? 'border-[#172033] bg-[#101827] text-[#f8f4ee] shadow-[0_2px_8px_rgba(16,24,39,0.08),0_14px_30px_-14px_rgba(16,24,39,0.38)]'
+                            : 'border-[#ddd5c9] bg-[#fcfaf6] text-[#1f2937] shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] hover:border-[#cac1b4] hover:bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold">{getModeLabel(option, tp)}</p>
+                            <p className={`mt-1 text-xs ${isSelected ? 'text-[#ddd7cf]' : 'text-muted-foreground'}`}>
+                              {getModeDescription(option, t)}
+                            </p>
+                          </div>
+                          <span
+                            className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                              isSelected
+                                ? 'border-white/15 bg-white/10 text-white'
+                                : 'border-[#d9d1c4] bg-white/80 text-[#4a5565]'
+                            }`}
+                          >
+                            {getCreditsLabel(optionCost, t)}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label>{t('labelAge')}</Label>
-                  <Select value={ageRange} onValueChange={(v) => setAgeRange(v as AgeRange)} disabled={isGenerating}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="18-25">{t('age18_25')}</SelectItem>
-                      <SelectItem value="26-35">{t('age26_35')}</SelectItem>
-                      <SelectItem value="36-45">{t('age36_45')}</SelectItem>
-                      <SelectItem value="46-60">{t('age46_60')}</SelectItem>
-                      <SelectItem value="60+">{t('age60plus')}</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="space-y-2.5">
+                <Label>{t('labelGender')}</Label>
+                <div className="flex flex-wrap gap-2.5">
+                  {genderOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={gender === option.value}
+                      onClick={() => setGender(option.value)}
+                      disabled={isGenerating}
+                      className={optionButtonClassName(gender === option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label>{t('labelEthnicity')}</Label>
-                  <Select value={ethnicity} onValueChange={(v) => setEthnicity(v as Ethnicity)} disabled={isGenerating}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="asian">{t('ethnicityAsian')}</SelectItem>
-                      <SelectItem value="white">{t('ethnicityWhite')}</SelectItem>
-                      <SelectItem value="black">{t('ethnicityBlack')}</SelectItem>
-                      <SelectItem value="latino">{t('ethnicityLatino')}</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="space-y-2.5">
+                <Label>{t('labelAge')}</Label>
+                <div className="flex flex-wrap gap-2.5">
+                  {ageOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={ageRange === option.value}
+                      onClick={() => setAgeRange(option.value)}
+                      disabled={isGenerating}
+                      className={optionButtonClassName(ageRange === option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <Label>{t('labelEthnicity')}</Label>
+                <div className="flex flex-wrap gap-2.5">
+                  {ethnicityOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={ethnicity === option.value}
+                      onClick={() => setEthnicity(option.value)}
+                      disabled={isGenerating}
+                      className={optionButtonClassName(ethnicity === option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -424,22 +564,27 @@ export function AIModelGeneratorDialog({
                 />
               </div>
 
-              <div className="flex items-center gap-3">
-                <Label className="min-w-16">{t('labelGenerateCount')}</Label>
-                <Select value={String(count)} onValueChange={(v) => setCount(Number(v) as 1 | 2 | 3 | 4)} disabled={isGenerating}>
-                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">{t('countImage', { count: 1 })}</SelectItem>
-                    <SelectItem value="2">{t('countImage', { count: 2 })}</SelectItem>
-                    <SelectItem value="3">{t('countImage', { count: 3 })}</SelectItem>
-                    <SelectItem value="4">{t('countImage', { count: 4 })}</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2.5">
+                <Label>{t('labelGenerateCount')}</Label>
+                <div className="flex flex-wrap gap-2.5">
+                  {countOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={count === option.value}
+                      onClick={() => setCount(option.value)}
+                      disabled={isGenerating}
+                      className={optionButtonClassName(count === option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
                 <Button
-                  className="h-11 w-full bg-zinc-900 text-base text-white hover:bg-zinc-800"
+                  className="h-12 w-full rounded-full border border-[#172033] bg-[#101827] text-base text-[#f8f4ee] shadow-[0_2px_8px_rgba(16,24,39,0.08),0_14px_30px_-14px_rgba(16,24,39,0.38)] hover:bg-[#162136]"
                   onClick={handleGenerate}
                   disabled={isGenerating || insufficientCredits}
                 >
@@ -447,7 +592,11 @@ export function AIModelGeneratorDialog({
                   {isGenerating ? t('generatingModel') : t('generateNow')}
                 </Button>
                 <p className="mt-2 text-center text-xs text-muted-foreground">
-                  {t('creditInfo', { cost: totalCost })}
+                  {t('creditInfo', {
+                    mode: getModeLabel(modelMode, tp),
+                    cost: totalCost,
+                    unitCost: singleImageCost,
+                  })}
                 </p>
                 {insufficientCredits && (
                   <div className="mt-2 space-y-1 text-center">
@@ -520,12 +669,12 @@ export function AIModelGeneratorDialog({
             </div>
           </div>
 
-          <div className="flex w-full flex-col p-6 lg:w-2/5">
+          <div className="flex w-full flex-col p-5 sm:p-6 lg:w-2/5 lg:min-h-0">
             <div className="mb-4 flex items-center gap-2 text-lg font-semibold">
               <Clock3 className="h-4 w-4" />
               {t('generationHistoryTitle')}
             </div>
-            <div className="flex-1 overflow-y-auto pr-1">
+            <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
               {isHistoryLoading && (
                 <p className="text-sm text-muted-foreground">{t('loadingHistory')}</p>
               )}
@@ -578,16 +727,17 @@ export function AIModelGeneratorDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-between border-t px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-t border-[#ebe3d7] px-5 py-4 sm:px-6">
           <Button
             variant="ghost"
             onClick={() => handleDialogOpenChange(false)}
             disabled={isGenerating || isApplying}
+            className="rounded-full"
           >
             {t('cancel')}
           </Button>
           <Button
-            className="h-10 min-w-44 bg-zinc-900 text-white hover:bg-zinc-800"
+            className="h-11 min-w-44 rounded-full border border-[#172033] bg-[#101827] text-[#f8f4ee] hover:bg-[#162136]"
             onClick={handleUseSelected}
             disabled={!selectedImageUrl || isGenerating || isApplying}
           >
