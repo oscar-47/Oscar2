@@ -7,10 +7,10 @@ import { FluidPendingCard } from '@/components/generation/FluidPendingCard'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { generateModelImage, processGenerationJob } from '@/lib/api/edge-functions'
 import { refreshCredits, useCredits } from '@/lib/hooks/useCredits'
-import { uploadFile } from '@/lib/api/upload'
 import { createClient } from '@/lib/supabase/client'
 import type { GenerationJob } from '@/types'
 import type { GenerationModel } from '@/types'
@@ -18,7 +18,7 @@ import { getGenerationCreditCost } from '@/types'
 import type { UploadedImage } from '@/components/upload/MultiImageUploader'
 import type { AIModelHistoryItem } from './types'
 import { friendlyError, generationRetryRefundMessage, isInsufficientCreditsError } from '@/lib/utils'
-import { Loader2, Clock3, UserCircle2, Sparkles } from 'lucide-react'
+import { Loader2, Clock3, UserCircle2, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 type Gender = 'female' | 'male'
 type AgeRange = '18-25' | '26-35' | '36-45' | '46-60' | '60+'
@@ -45,9 +45,6 @@ type ModelHistoryRow = {
   error_message: string | null
   created_at: string
 }
-
-const MODEL_OPTION_BUTTON_CLASS =
-  'inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2.5 text-sm font-medium outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-zinc-900/15 disabled:cursor-not-allowed disabled:opacity-50'
 
 const MODEL_OPTION_BUTTON_IDLE_CLASS =
   'border-[#d8d1c6] bg-[#fcfaf6] text-[#1f2937] shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] hover:border-[#cac1b4] hover:bg-white'
@@ -158,11 +155,29 @@ function getCreditsLabel(
   return t('creditsPerImage', { cost })
 }
 
+function normalizeHistoryErrorMessage(
+  errorMessage: string | null,
+  t: (key: string) => string
+): string | null {
+  if (!errorMessage) return null
+  if (/aborterror|signal has been aborted/i.test(errorMessage)) return t('generationCancelled')
+  return errorMessage
+}
+
+type LightboxItem = {
+  id: string
+  url: string
+  label: string
+}
+
 function optionButtonClassName(selected: boolean): string {
-  return `${MODEL_OPTION_BUTTON_CLASS} ${
+  return `inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2.5 text-sm font-medium outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-zinc-900/15 disabled:cursor-not-allowed disabled:opacity-50 ${
     selected ? MODEL_OPTION_BUTTON_ACTIVE_CLASS : MODEL_OPTION_BUTTON_IDLE_CLASS
   }`
 }
+
+const selectTriggerClass =
+  'h-11 rounded-2xl border-border bg-secondary text-[14px] text-foreground shadow-none'
 
 function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> {
   return new Promise((resolve, reject) => {
@@ -234,14 +249,12 @@ interface AIModelGeneratorDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onGenerate: (modelImages: UploadedImage[]) => void
-  productImages: UploadedImage[]
 }
 
 export function AIModelGeneratorDialog({
   open,
   onOpenChange,
   onGenerate,
-  productImages,
 }: AIModelGeneratorDialogProps) {
   const t = useTranslations('studio.clothingStudio')
   const tc = useTranslations('studio.common')
@@ -260,8 +273,10 @@ export function AIModelGeneratorDialog({
   const [previewItems, setPreviewItems] = useState<PreviewItem[]>([])
   const [historyItems, setHistoryItems] = useState<AIModelHistoryItem[]>([])
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null)
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null)
   const [isApplying, setIsApplying] = useState(false)
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  const [lightbox, setLightbox] = useState<{ images: LightboxItem[]; index: number } | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const isGenerating = dialogState === 'generating'
@@ -301,16 +316,14 @@ export function AIModelGeneratorDialog({
     setError(null)
     setPreviewItems([])
     setSelectedImageUrl(null)
+    setSelectedHistoryId(null)
+    setLightbox(null)
     void loadHistory(true)
     // loadHistory is intentionally invoked only when the dialog opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const handleGenerate = async () => {
-    if (productImages.length < 1) {
-      setError(t('uploadProductFirst'))
-      return
-    }
     if (insufficientCredits) {
       setDialogState('error')
       setError(friendlyError('INSUFFICIENT_CREDITS', locale.startsWith('zh')))
@@ -326,7 +339,6 @@ export function AIModelGeneratorDialog({
     abortRef.current = abort
 
     try {
-      const { publicUrl: uploadedProductUrl } = await uploadFile(productImages[0].file)
       const tasks = Array.from({ length: count }, async (_, index) => {
         const { job_id } = await generateModelImage({
           model: selectedModel,
@@ -336,7 +348,6 @@ export function AIModelGeneratorDialog({
           otherRequirements: otherRequirements.trim() || undefined,
           count: 1,
           imageCount: 1,
-          productImage: uploadedProductUrl,
           trace_id: uid(),
           client_job_id: uid(),
           fe_attempt: index + 1,
@@ -367,6 +378,7 @@ export function AIModelGeneratorDialog({
       const firstSuccess = results.find((item) => item.status === 'success' && item.resultUrl)
       if (firstSuccess?.resultUrl) {
         setSelectedImageUrl(firstSuccess.resultUrl)
+        setSelectedHistoryId(null)
         setDialogState('ready')
       } else {
         setDialogState('error')
@@ -411,6 +423,22 @@ export function AIModelGeneratorDialog({
     onOpenChange(next)
   }
 
+  const closeLightbox = () => setLightbox(null)
+  const openLightbox = (images: LightboxItem[], index: number) => {
+    if (images.length === 0 || !images[index]) return
+    setLightbox({ images, index })
+  }
+  const prevLightbox = () => {
+    setLightbox((current) => (
+      current ? { ...current, index: Math.max(0, current.index - 1) } : current
+    ))
+  }
+  const nextLightbox = () => {
+    setLightbox((current) => (
+      current ? { ...current, index: Math.min(current.images.length - 1, current.index + 1) } : current
+    ))
+  }
+
   const genderOptions: { value: Gender; label: string }[] = [
     { value: 'female', label: t('genderFemale') },
     { value: 'male', label: t('genderMale') },
@@ -439,6 +467,20 @@ export function AIModelGeneratorDialog({
   ]
 
   const modelModeOptions: ModelMode[] = ['fast', 'balanced', 'quality']
+  const previewLightboxItems: LightboxItem[] = previewItems
+    .filter((item): item is PreviewItem & { resultUrl: string } => item.status === 'success' && typeof item.resultUrl === 'string')
+    .map((item, index) => ({
+      id: item.id,
+      url: item.resultUrl,
+      label: t('previewImageLabel', { index: index + 1 }),
+    }))
+  const historyLightboxItems: LightboxItem[] = historyItems
+    .filter((item): item is AIModelHistoryItem & { resultUrl: string } => typeof item.resultUrl === 'string' && item.resultUrl.length > 0)
+    .map((item) => ({
+      id: item.id,
+      url: item.resultUrl,
+      label: `${genderLabel(item.gender, t)}, ${ageLabel(item.ageRange, t)}, ${ethnicityLabel(item.ethnicity, t)}`,
+    }))
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
@@ -456,47 +498,27 @@ export function AIModelGeneratorDialog({
         <div className="flex max-h-[calc(100dvh-7.25rem)] min-h-0 flex-col overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch] lg:max-h-[76vh] lg:min-h-[620px] lg:flex-row lg:overflow-hidden">
           <div className="flex w-full flex-col border-b border-[#ebe3d7] p-5 sm:p-6 lg:w-3/5 lg:min-h-0 lg:border-b-0 lg:border-r">
             <div className="space-y-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 <Label>{t('labelModelMode')}</Label>
-                <div className="grid gap-3 md:grid-cols-3">
-                  {modelModeOptions.map((option) => {
-                    const optionModel = AI_MODEL_MODE_CONFIG[option].model
-                    const optionCost = getGenerationCreditCost(optionModel, '1K')
-                    const isSelected = modelMode === option
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        aria-pressed={isSelected}
-                        onClick={() => setModelMode(option)}
-                        disabled={isGenerating}
-                        className={`rounded-[24px] border px-4 py-4 text-left outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-zinc-900/15 disabled:cursor-not-allowed disabled:opacity-50 ${
-                          isSelected
-                            ? 'border-[#172033] bg-[#101827] text-[#f8f4ee] shadow-[0_2px_8px_rgba(16,24,39,0.08),0_14px_30px_-14px_rgba(16,24,39,0.38)]'
-                            : 'border-[#ddd5c9] bg-[#fcfaf6] text-[#1f2937] shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] hover:border-[#cac1b4] hover:bg-white'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold">{getModeLabel(option, tp)}</p>
-                            <p className={`mt-1 text-xs ${isSelected ? 'text-[#ddd7cf]' : 'text-muted-foreground'}`}>
-                              {getModeDescription(option, t)}
-                            </p>
-                          </div>
-                          <span
-                            className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                              isSelected
-                                ? 'border-white/15 bg-white/10 text-white'
-                                : 'border-[#d9d1c4] bg-white/80 text-[#4a5565]'
-                            }`}
-                          >
-                            {getCreditsLabel(optionCost, t)}
-                          </span>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
+                <Select value={modelMode} onValueChange={(value) => setModelMode(value as ModelMode)} disabled={isGenerating}>
+                  <SelectTrigger className={selectTriggerClass}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelModeOptions.map((option) => {
+                      const optionModel = AI_MODEL_MODE_CONFIG[option].model
+                      const optionCost = getGenerationCreditCost(optionModel, '1K')
+                      return (
+                        <SelectItem key={option} value={option}>
+                          {`${getModeLabel(option, tp)} · ${getCreditsLabel(optionCost, t)}`}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {getModeDescription(modelMode, t)} · {getCreditsLabel(singleImageCost, t)}
+                </p>
               </div>
 
               <div className="space-y-2.5">
@@ -639,30 +661,37 @@ export function AIModelGeneratorDialog({
 
                 {(dialogState === 'ready' || dialogState === 'error') && (
                   <div className="grid grid-cols-2 gap-3">
-                    {previewItems.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => {
-                          if (item.resultUrl && item.status === 'success') setSelectedImageUrl(item.resultUrl)
-                        }}
-                        className={`relative overflow-hidden rounded-xl border text-left ${
-                          item.resultUrl && selectedImageUrl === item.resultUrl
-                            ? 'border-zinc-900 ring-2 ring-zinc-900/20'
-                            : 'border-border'
-                        }`}
-                        disabled={!item.resultUrl || item.status !== 'success'}
-                      >
-                        {item.resultUrl && item.status === 'success' ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={item.resultUrl} alt="model-preview" className="aspect-[4/5] w-full object-cover" />
-                        ) : (
-                          <div className="flex aspect-[4/5] items-center justify-center bg-destructive/5 px-3 text-xs text-destructive">
-                            {item.errorMessage ?? t('modelGenerationFailed')}
-                          </div>
-                        )}
-                      </button>
-                    ))}
+                    {previewItems.map((item) => {
+                      const previewIndex = previewLightboxItems.findIndex((image) => image.id === item.id)
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            if (item.resultUrl && item.status === 'success') {
+                              setSelectedImageUrl(item.resultUrl)
+                              setSelectedHistoryId(null)
+                              if (previewIndex >= 0) openLightbox(previewLightboxItems, previewIndex)
+                            }
+                          }}
+                          className={`relative overflow-hidden rounded-xl border text-left transition-transform hover:scale-[1.01] ${
+                            item.resultUrl && selectedImageUrl === item.resultUrl && !selectedHistoryId
+                              ? 'border-zinc-900 ring-2 ring-zinc-900/20'
+                              : 'border-border'
+                          }`}
+                          disabled={!item.resultUrl || item.status !== 'success'}
+                        >
+                          {item.resultUrl && item.status === 'success' ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={item.resultUrl} alt="model-preview" className="aspect-[4/5] w-full object-cover" />
+                          ) : (
+                            <div className="flex aspect-[4/5] items-center justify-center bg-destructive/5 px-3 text-xs text-destructive">
+                              {item.errorMessage ?? t('modelGenerationFailed')}
+                            </div>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -694,9 +723,15 @@ export function AIModelGeneratorDialog({
                     key={item.id}
                     type="button"
                     disabled={!item.resultUrl}
-                    onClick={() => item.resultUrl && setSelectedImageUrl(item.resultUrl)}
-                    className={`flex w-full gap-3 rounded-xl border p-2 text-left transition-colors ${
-                      item.resultUrl && selectedImageUrl === item.resultUrl
+                    onClick={() => {
+                      if (!item.resultUrl) return
+                      setSelectedImageUrl(item.resultUrl)
+                      setSelectedHistoryId(item.id)
+                      const historyIndex = historyLightboxItems.findIndex((image) => image.id === item.id)
+                      if (historyIndex >= 0) openLightbox(historyLightboxItems, historyIndex)
+                    }}
+                    className={`flex w-full gap-3 rounded-xl border p-2 text-left transition-colors enabled:cursor-zoom-in ${
+                      item.id === selectedHistoryId
                         ? 'border-zinc-900 bg-zinc-100'
                         : 'border-transparent hover:bg-muted/40'
                     }`}
@@ -717,7 +752,9 @@ export function AIModelGeneratorDialog({
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">{formatRelativeTime(item.createdAt, t)}</p>
                       {item.status === 'failed' && (
-                        <p className="mt-1 truncate text-xs text-destructive">{item.errorMessage ?? t('modelGenerationFailed')}</p>
+                        <p className="mt-1 truncate text-xs text-destructive">
+                          {normalizeHistoryErrorMessage(item.errorMessage, t) ?? t('modelGenerationFailed')}
+                        </p>
                       )}
                     </div>
                   </button>
@@ -745,6 +782,62 @@ export function AIModelGeneratorDialog({
             {t('useSelectedModel')}
           </Button>
         </div>
+
+        {lightbox && lightbox.images[lightbox.index] && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
+            onClick={closeLightbox}
+          >
+            <button
+              type="button"
+              onClick={closeLightbox}
+              className="absolute right-4 top-4 rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
+            >
+              <X className="h-5 w-5 text-white" />
+            </button>
+
+            {lightbox.index > 0 && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  prevLightbox()
+                }}
+                className="absolute left-4 rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
+              >
+                <ChevronLeft className="h-6 w-6 text-white" />
+              </button>
+            )}
+
+            {lightbox.index < lightbox.images.length - 1 && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  nextLightbox()
+                }}
+                className="absolute right-4 rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
+              >
+                <ChevronRight className="h-6 w-6 text-white" />
+              </button>
+            )}
+
+            <div
+              className="flex max-h-[90vh] max-w-3xl flex-col items-center gap-3"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lightbox.images[lightbox.index].url}
+                alt={lightbox.images[lightbox.index].label}
+                className="max-h-[82vh] max-w-full rounded-2xl object-contain"
+              />
+              <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/85">
+                {lightbox.images[lightbox.index].label} · {lightbox.index + 1}/{lightbox.images.length}
+              </div>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

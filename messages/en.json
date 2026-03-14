@@ -528,6 +528,8 @@
       "timeMinutesAgo": "{minutes}m ago",
       "timeHoursAgo": "{hours}h ago",
       "timeDaysAgo": "{days}d ago",
+      "generationCancelled": "Cancelled before the dialog finished waiting for the job",
+      "previewImageLabel": "Preview {index}",
       "requirementsTitle": "Requirements",
       "requirementsDesc": "Describe your product info and desired image style",
       "requirementsPlaceholder": "Suggested: style name, fabric material, design highlights, target audience, style tone...",

@@ -655,6 +655,7 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
     editableDesignSpecs,
     editableImagePlans,
     generatedPrompts,
+    isZhLocale,
     model,
     modelImage,
     promptProfile,
@@ -816,7 +817,6 @@ export function ModelTryOnTab({ traceId }: ModelTryOnTabProps) {
             setModelImage(models[0])
           }
         }}
-        productImages={productImages}
       />
     </>
   )

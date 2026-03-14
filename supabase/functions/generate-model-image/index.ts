@@ -1,18 +1,9 @@
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireUser } from "../_shared/auth.ts";
-import { classifyImageValidationError, validateImageInputUrls } from "../_shared/input-image-validation.ts";
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function firstString(values: unknown): string {
-  if (!Array.isArray(values)) return "";
-  for (const value of values) {
-    if (typeof value === "string" && value.trim().length > 0) return value.trim();
-  }
-  return "";
 }
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
@@ -31,24 +22,30 @@ function buildModelPortraitPrompt(params: {
   const { gender, ageRange, ethnicity, extraPrompt, uiLanguage } = params;
   if (uiLanguage === "zh") {
     const segments = [
-      "专业棚拍人像，时尚电商模特参考图。",
+      "生成一张专业棚拍真人模特参考图，仅保留一位真人主体，只输出模特本人。",
       gender ? `性别特征：${gender}。` : "",
       ageRange ? `年龄段：${ageRange}。` : "",
       ethnicity ? `人群特征：${ethnicity}。` : "",
-      "自然站姿，镜头正面或微侧，五官清晰，皮肤质感真实。",
-      "纯净白色背景，柔和影棚光，高清细节，无水印无文字。",
+      "镜头为单人模特肖像，可半身或全身，自然站姿或轻微转身，构图干净，五官清晰，皮肤质感真实，比例自然。",
+      "服装保持简洁中性的基础款纯色造型，避免夸张穿搭设计，重点是模特本人而不是服装搭配。",
+      "纯净白色无缝背景，柔和影棚光，高级商业人像质感，无水印无文字，无海报排版。",
+      "禁止出现任何商品、配饰展示、首饰盒、手提包、包装盒、桌面、陈列台、家具、布幔、花材、镜子、场景道具、额外人物或拼图分栏。",
+      "不要让模特手持、接触、佩戴或靠近任何待售物件，画面中除了模特和基础服装之外不要出现其他主体。",
       extraPrompt ? `补充要求：${extraPrompt}` : "",
     ].filter(Boolean);
     return segments.join(" ");
   }
 
   const segments = [
-    "Professional studio portrait for a fashion e-commerce model reference.",
+    "Create a professional studio reference portrait with exactly one real human fashion model and nothing else as the subject.",
     gender ? `Gender presentation: ${gender}.` : "",
     ageRange ? `Age range: ${ageRange}.` : "",
     ethnicity ? `Ethnicity: ${ethnicity}.` : "",
-    "Natural standing pose, frontal or slight angle, clear facial features, realistic skin texture.",
-    "Pure white background, soft studio lighting, high-detail quality, no watermark, no text.",
+    "Frame a single-model portrait or full-body studio shot with a natural standing pose or slight turn, realistic proportions, clear facial features, and natural skin texture.",
+    "Keep wardrobe simple, neutral, and plain, like fitted basics, so the focus stays on the model reference rather than fashion styling.",
+    "Use a pure white seamless studio background, soft diffused lighting, high-detail commercial portrait quality, no watermark, no text, no poster layout.",
+    "Do not include any product, accessory display, jewelry case, handbag, packaging, table, pedestal, furniture, drapery, flowers, mirror, extra people, collage layout, or unrelated objects.",
+    "Do not let the model hold, touch, wear, or stand beside any sale item or prop. The frame should contain only the model and the minimal neutral outfit.",
     extraPrompt ? `Additional requirements: ${extraPrompt}` : "",
   ].filter(Boolean);
   return segments.join(" ");
@@ -68,24 +65,11 @@ Deno.serve(async (req) => {
   const ageRange = normalizeText(body.ageRange || body.age);
   const ethnicity = normalizeText(body.ethnicity || body.skinColor || body.skin);
   const extraPrompt = normalizeText(body.otherRequirements || body.prompt);
-  const sourceImage = normalizeText(body.productImage)
-    || firstString(body.productImages)
-    || normalizeText(body.modelImage);
   const uiLanguage = normalizeText(body.uiLanguage || body.targetLanguage || "en").toLowerCase() === "zh"
     ? "zh"
     : "en";
   const requestedCount = clampInt(body.imageCount ?? body.count ?? 1, 1, 4, 1);
   const imageCount = 1;
-
-  if (!sourceImage) {
-    return err("BAD_REQUEST", "productImage is required");
-  }
-
-  try {
-    await validateImageInputUrls([sourceImage]);
-  } catch (error) {
-    return err(classifyImageValidationError(error), String(error ?? ""), 400);
-  }
 
   if (!gender && !ageRange && !ethnicity && !extraPrompt) {
     return err("BAD_REQUEST", "at least one of gender/ageRange/ethnicity/otherRequirements is required");
@@ -104,7 +88,6 @@ Deno.serve(async (req) => {
   const generateImagePayload = {
     model: typeof body.model === "string" ? body.model : "or-gemini-3.1-flash",
     prompt: portraitPrompt,
-    productImage: sourceImage,
     workflowMode: "product",
     aspectRatio: typeof body.aspectRatio === "string" ? body.aspectRatio : "3:4",
     imageSize: typeof body.imageSize === "string" ? body.imageSize : "1K",
@@ -115,7 +98,7 @@ Deno.serve(async (req) => {
     fe_attempt: Number(body.fe_attempt ?? 1),
     metadata: {
       ...(typeof body.metadata === "object" && body.metadata ? body.metadata as Record<string, unknown> : {}),
-      workflow_mode: "model",
+      workflow_mode: "model_reference",
       model_profile: { gender, age_range: ageRange, ethnicity },
       requested_count: requestedCount,
     },
