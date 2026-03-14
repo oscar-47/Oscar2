@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
   const supabase = createServiceClient();
 
   const generateImagePayload = {
-    model: typeof body.model === "string" ? body.model : "ta-gemini-3-pro",
+    model: typeof body.model === "string" ? body.model : "or-gemini-3.1-flash",
     prompt: portraitPrompt,
     productImage: sourceImage,
     workflowMode: "product",
