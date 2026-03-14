@@ -8,6 +8,12 @@ import { createServiceClient } from "../_shared/supabase.ts";
 import { getAlipayConfig, verifyNotification } from "../_shared/alipay.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 
+function assertNoError(error: { message?: string } | null, context: string) {
+  if (error) {
+    throw new Error(`${context}: ${error.message ?? "unknown error"}`);
+  }
+}
+
 /** Calculate subscription period end date */
 function calcPeriodEnd(planName: string): string {
   const now = new Date();
@@ -99,11 +105,12 @@ Deno.serve(async (req) => {
 
     // Add credits
     const creditType = isSubscription ? "subscription" : "purchased";
-    await supabase.rpc("add_credits", {
+    const { error: addCreditsError } = await supabase.rpc("add_credits", {
       p_user_id: userId,
       p_amount: order.credits + bonus,
       p_type: creditType,
     });
+    assertNoError(addCreditsError, "add_credits failed");
 
     // Update profile
     const profileUpdate: Record<string, unknown> = {};
@@ -116,11 +123,15 @@ Deno.serve(async (req) => {
       if (bonus > 0) profileUpdate.has_first_purchase = true;
     }
     if (Object.keys(profileUpdate).length > 0) {
-      await supabase.from("profiles").update(profileUpdate).eq("id", userId);
+      const { error: profileUpdateError } = await supabase
+        .from("profiles")
+        .update(profileUpdate)
+        .eq("id", userId);
+      assertNoError(profileUpdateError, "profile update failed");
     }
 
     // Record transaction
-    await supabase.from("transactions").insert({
+    const { error: transactionError } = await supabase.from("transactions").insert({
       user_id: userId,
       package_id: order.package_id,
       stripe_event_id: null,
@@ -139,9 +150,10 @@ Deno.serve(async (req) => {
         bonus,
       },
     });
+    assertNoError(transactionError, "transaction insert failed");
 
     // Mark order as completed
-    await supabase
+    const { error: orderUpdateError } = await supabase
       .from("alipay_orders")
       .update({
         status: "completed",
@@ -149,6 +161,7 @@ Deno.serve(async (req) => {
         paid_at: new Date().toISOString(),
       })
       .eq("out_trade_no", outTradeNo);
+    assertNoError(orderUpdateError, "alipay order update failed");
 
     console.log(`Alipay notify: fulfilled order ${outTradeNo}, credits=${order.credits}+${bonus}`);
 
