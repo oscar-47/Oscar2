@@ -12,6 +12,7 @@ const intlMiddleware = createMiddleware(routing)
 const PROTECTED_PATHS = [
   '/studio-genesis',
   '/aesthetic-mirror',
+  '/batch-studio',
   '/clothing-studio',
   '/ecom-studio',
   '/refinement-studio',

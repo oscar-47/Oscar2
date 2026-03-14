@@ -4,12 +4,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   ArrowLeft,
+  ArrowRight,
   Image as ImageIcon,
+  LayoutGrid,
   Loader2,
   RefreshCw,
   Settings2,
   ShoppingBag,
   Sparkles,
+  Upload,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -381,33 +384,12 @@ export function EcomStudioForm() {
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(null)
   const onboardingDismissed = useRef(false)
 
-  // Load sample image for new users
+  // Show onboarding guide for new users (no sample image — saves credits)
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (localStorage.getItem('shopix_ecom_onboarding_v1')) return
-
-    let cancelled = false
-    fetch('/images/sample/wooden-spatula.jpg')
-      .then((res) => res.blob())
-      .then((blob) => {
-        if (cancelled) return
-        const file = new File([blob], 'sample-wooden-spatula.jpg', { type: 'image/jpeg' })
-        const previewUrl = URL.createObjectURL(blob)
-        setProductImages([{ file, previewUrl }])
-        setOnboardingStep('welcome')
-      })
-      .catch(() => {})
-
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    setOnboardingStep('welcome')
   }, [])
-
-  // Advance onboarding when modules are selected
-  useEffect(() => {
-    if (onboardingStep === 'welcome' && selectedDetailModules.length > 0) {
-      setOnboardingStep('modules-selected')
-    }
-  }, [onboardingStep, selectedDetailModules.length])
 
   const dismissOnboarding = useCallback(() => {
     setOnboardingStep(null)
@@ -1003,52 +985,83 @@ export function EcomStudioForm() {
             </div>
           </fieldset>
 
-          {/* Onboarding guide banner */}
-          {onboardingStep && (
-            <div className="relative overflow-hidden rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-50/90 to-orange-50/60 px-5 py-4">
+          {/* Onboarding walkthrough — zero credit cost */}
+          {onboardingStep === 'welcome' && (
+            <div className="relative overflow-hidden rounded-2xl border border-blue-200/60 bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/40 px-5 py-5 sm:px-6 sm:py-6">
               <button
                 type="button"
                 onClick={dismissOnboarding}
-                className="absolute right-3 top-3 rounded-full p-1 text-amber-400 hover:bg-amber-100 hover:text-amber-600 transition-colors"
+                className="absolute right-3 top-3 rounded-full p-1 text-muted-foreground/50 hover:bg-muted hover:text-foreground transition-colors"
                 aria-label="Dismiss"
               >
                 <X className="h-4 w-4" />
               </button>
-              <div className="flex items-start gap-3 pr-6">
-                <span className="mt-0.5 text-lg">
-                  {onboardingStep === 'welcome' ? '✨' : '🎉'}
-                </span>
-                <div className="min-w-0">
-                  {onboardingStep === 'welcome' ? (
-                    <>
-                      <p className="text-[14px] font-semibold text-amber-900">
-                        {isZh ? '欢迎体验详情页生成' : 'Welcome to Detail Page Studio'}
-                      </p>
-                      <p className="mt-1 text-[13px] leading-5 text-amber-800/80">
-                        {isZh
-                          ? '上方已加载示例商品图片，选择下方的详情页模块即可体验生成效果。你可以随时替换为自己的商品图。'
-                          : 'A sample product image is loaded above. Select detail page modules below to try it out. You can replace it with your own product image anytime.'}
-                      </p>
-                      <p className="mt-2 flex items-center gap-1.5 text-[13px] font-medium text-amber-700">
-                        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
-                        {isZh ? '选择下方模块开始' : 'Select modules below to start'}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-[14px] font-semibold text-amber-900">
-                        {isZh
-                          ? `已选择 ${selectedDetailModules.length} 个模块`
-                          : `${selectedDetailModules.length} module${selectedDetailModules.length > 1 ? 's' : ''} selected`}
-                      </p>
-                      <p className="mt-1 text-[13px] leading-5 text-amber-800/80">
-                        {isZh
-                          ? '点击下方「生成详情页规划方案」按钮，即可开始生成。'
-                          : 'Click the "Generate" button below to start generating.'}
-                      </p>
-                    </>
-                  )}
+
+              <p className="text-[15px] font-bold text-foreground">
+                {isZh ? '3步生成专业详情页' : '3 Steps to Professional Detail Pages'}
+              </p>
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                {isZh ? '上传商品图 → 选择模块 → AI自动生成，无需浪费积分试用' : 'Upload product photos, pick modules, and let AI generate — no credits spent on demos'}
+              </p>
+
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                {/* Step 1 */}
+                <div className="relative rounded-xl border border-border bg-white/80 p-3 sm:p-4">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100/80 text-blue-600">
+                    <Upload className="h-4 w-4" />
+                  </div>
+                  <p className="mt-2.5 text-[13px] font-semibold text-foreground">
+                    {isZh ? '上传商品图' : 'Upload Photos'}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                    {isZh ? '支持多张、多角度' : 'Multi-image supported'}
+                  </p>
+                  <span className="absolute -right-2 top-1/2 -translate-y-1/2 text-muted-foreground/30 sm:block hidden">
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
                 </div>
+
+                {/* Step 2 */}
+                <div className="relative rounded-xl border border-border bg-white/80 p-3 sm:p-4">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100/80 text-violet-600">
+                    <LayoutGrid className="h-4 w-4" />
+                  </div>
+                  <p className="mt-2.5 text-[13px] font-semibold text-foreground">
+                    {isZh ? '选择详情模块' : 'Pick Modules'}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                    {isZh ? '主图、场景、细节等' : 'Hero, scene, detail, etc.'}
+                  </p>
+                  <span className="absolute -right-2 top-1/2 -translate-y-1/2 text-muted-foreground/30 sm:block hidden">
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+
+                {/* Step 3 */}
+                <div className="rounded-xl border border-border bg-white/80 p-3 sm:p-4">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100/80 text-emerald-600">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <p className="mt-2.5 text-[13px] font-semibold text-foreground">
+                    {isZh ? 'AI生成详情页' : 'AI Generates'}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                    {isZh ? '专业排版即刻呈现' : 'Pro layouts in seconds'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={dismissOnboarding}
+                  className="rounded-full bg-foreground px-5 py-2 text-[13px] font-semibold text-background transition-colors hover:bg-foreground/90 press-scale"
+                >
+                  {isZh ? '开始创作' : 'Start Creating'}
+                </button>
+                <span className="text-[12px] text-muted-foreground">
+                  {isZh ? '每张图约 15-50 积分' : '~15-50 credits per image'}
+                </span>
               </div>
             </div>
           )}
@@ -1179,7 +1192,7 @@ export function EcomStudioForm() {
                 size="lg"
                 onClick={handleAnalyze}
                 disabled={productImages.length === 0 || selectedModules.length === 0}
-                className={`${WORKFLOW_PRIMARY_BUTTON_CLASS} w-full ${onboardingStep === 'modules-selected' ? 'ring-2 ring-amber-300/60 ring-offset-2' : ''}`}
+                className={`${WORKFLOW_PRIMARY_BUTTON_CLASS} w-full`}
               >
                 <Sparkles className="mr-2 h-4 w-4" />
                 {t('analyzeButton')}

@@ -7,13 +7,14 @@ import { usePathname, useRouter } from 'next/navigation'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { UserMenu } from './UserMenu'
 import { cn } from '@/lib/utils'
-import { Layers, Image, Shirt, Paintbrush, Monitor, ShoppingBag, Menu, X } from 'lucide-react'
-import { CreatorProgramHangingTag } from '@/components/creator/CreatorProgramHangingTag'
+import { Layers, Image, Shirt, Paintbrush, Monitor, ShoppingBag, Menu, X, Copy } from 'lucide-react'
+import { NavHangingTags } from '@/components/shared/NavHangingTags'
 
 const NAV_ITEMS = [
   { key: 'studioGenesis', path: '/studio-genesis', icon: Layers },
   { key: 'ecomStudio', path: '/ecom-studio', icon: ShoppingBag },
   { key: 'aestheticMirror', path: '/aesthetic-mirror', icon: Image },
+  { key: 'batchStudio', path: '/batch-studio', icon: Copy },
   { key: 'clothingStudio', path: '/clothing-studio', icon: Shirt },
   { key: 'refinementStudio', path: '/refinement-studio', icon: Paintbrush },
   { key: 'pricing', path: '/pricing', icon: Monitor },
@@ -58,7 +59,7 @@ export function DashboardNavbar({ userId, email }: DashboardNavbarProps) {
             </span>
             <span className="text-xs font-medium text-text-tertiary">AI</span>
           </Link>
-          <CreatorProgramHangingTag />
+          <NavHangingTags />
         </div>
 
         {/* Desktop nav */}
@@ -66,6 +67,31 @@ export function DashboardNavbar({ userId, email }: DashboardNavbarProps) {
           {NAV_ITEMS.map(({ key, path }) => {
             const href = `/${locale}${path}`
             const isActive = pathname.startsWith(href)
+            const isPricingGlow = key === 'pricing' && !isActive
+
+            if (isPricingGlow) {
+              return (
+                <div key={key} className="relative rounded-lg p-[1.5px]">
+                  {/* Light-flow border — smooth conic shimmer via CSS Houdini */}
+                  <div
+                    className="pricing-glow-border absolute inset-0 rounded-[inherit] opacity-50"
+                    style={{
+                      background: 'conic-gradient(from var(--glow-angle, 0deg), transparent 40%, rgba(59,130,246,0.5) 50%, rgba(168,85,247,0.4) 55%, transparent 65%)',
+                      animation: 'pricing-light-flow 4s linear infinite',
+                      filter: 'blur(0.5px)',
+                    }}
+                  />
+                  <Link
+                    href={href}
+                    prefetch
+                    className="relative block rounded-[6.5px] bg-background px-3.5 py-2 text-sm whitespace-nowrap font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                  >
+                    {t(key as keyof ReturnType<typeof t>)}
+                  </Link>
+                </div>
+              )
+            }
+
             return (
               <Link
                 key={key}

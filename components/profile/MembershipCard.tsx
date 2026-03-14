@@ -82,22 +82,22 @@ const MEMBERSHIP_THEMES: Record<MembershipThemeKey, MembershipTheme> = {
     shadow: '0 8px 40px rgba(24, 18, 10, 0.22)',
   },
   quarterly: {
-    shell: 'linear-gradient(145deg, rgba(16,21,27,0.99), rgba(22,32,43,0.99) 50%, rgba(43,57,72,0.97) 100%)',
-    border: 'rgba(160, 184, 215, 0.34)',
-    text: 'rgba(236, 242, 248, 0.98)',
-    muted: 'rgba(184, 199, 214, 0.68)',
-    accent: 'rgba(176, 202, 230, 0.98)',
-    accentSoft: 'rgba(176, 202, 230, 0.14)',
-    chip: 'rgba(255,255,255,0.052)',
-    chipBorder: 'rgba(255,255,255,0.1)',
-    chipText: 'rgba(234, 241, 248, 0.9)',
-    foil: 'linear-gradient(90deg, rgba(216,232,248,0.95), rgba(148,176,212,0.92) 40%, rgba(255,232,188,0.45) 100%)',
-    glow: 'rgba(122, 163, 210, 0.22)',
-    edgeGlow: '0 0 28px rgba(122,163,210,0.25), inset 0 0 28px rgba(122,163,210,0.06)',
-    mark: 'linear-gradient(145deg, rgba(240,247,255,0.95), rgba(180,203,230,0.92))',
-    markBorder: 'rgba(255,255,255,0.18)',
-    markText: 'rgba(45, 69, 95, 0.98)',
-    shadow: '0 8px 40px rgba(10, 17, 29, 0.22)',
+    shell: 'linear-gradient(145deg, rgba(18,19,22,0.99), rgba(30,33,40,0.99) 50%, rgba(58,63,75,0.97) 100%)',
+    border: 'rgba(180, 185, 198, 0.38)',
+    text: 'rgba(240, 241, 244, 0.98)',
+    muted: 'rgba(190, 194, 206, 0.68)',
+    accent: 'rgba(200, 205, 220, 0.98)',
+    accentSoft: 'rgba(200, 205, 220, 0.14)',
+    chip: 'rgba(255,255,255,0.055)',
+    chipBorder: 'rgba(255,255,255,0.11)',
+    chipText: 'rgba(238, 240, 245, 0.9)',
+    foil: 'linear-gradient(90deg, rgba(232,235,242,0.95), rgba(165,172,190,0.92) 40%, rgba(255,255,255,0.45) 100%)',
+    glow: 'rgba(160, 168, 190, 0.22)',
+    edgeGlow: '0 0 28px rgba(160,168,190,0.25), inset 0 0 28px rgba(160,168,190,0.06)',
+    mark: 'linear-gradient(145deg, rgba(245,246,250,0.95), rgba(195,200,215,0.92))',
+    markBorder: 'rgba(255,255,255,0.2)',
+    markText: 'rgba(55, 60, 75, 0.98)',
+    shadow: '0 8px 40px rgba(12, 14, 20, 0.22)',
   },
   monthly: {
     shell: 'linear-gradient(145deg, rgba(23,18,16,0.99), rgba(44,30,26,0.99) 52%, rgba(82,58,46,0.97) 100%)',
@@ -136,22 +136,22 @@ const MEMBERSHIP_THEMES: Record<MembershipThemeKey, MembershipTheme> = {
     shadow: '0 8px 40px rgba(24, 17, 12, 0.2)',
   },
   topup_15: {
-    shell: 'linear-gradient(145deg, rgba(18,22,18,0.99), rgba(28,38,29,0.99) 52%, rgba(53,68,46,0.97) 100%)',
-    border: 'rgba(166, 186, 124, 0.34)',
-    text: 'rgba(239, 244, 229, 0.98)',
-    muted: 'rgba(196, 208, 180, 0.68)',
-    accent: 'rgba(189, 206, 131, 0.98)',
-    accentSoft: 'rgba(189, 206, 131, 0.14)',
-    chip: 'rgba(255,255,255,0.05)',
-    chipBorder: 'rgba(255,255,255,0.095)',
-    chipText: 'rgba(238, 244, 229, 0.88)',
-    foil: 'linear-gradient(90deg, rgba(227,237,196,0.94), rgba(146,170,97,0.92) 40%, rgba(248,231,185,0.38) 100%)',
-    glow: 'rgba(140, 170, 96, 0.2)',
-    edgeGlow: '0 0 28px rgba(140,170,96,0.22), inset 0 0 28px rgba(140,170,96,0.06)',
-    mark: 'linear-gradient(145deg, rgba(245,249,232,0.95), rgba(198,214,156,0.92))',
-    markBorder: 'rgba(255,255,255,0.18)',
-    markText: 'rgba(66, 83, 44, 0.98)',
-    shadow: '0 8px 40px rgba(13, 20, 10, 0.2)',
+    shell: 'linear-gradient(145deg, rgba(18,19,22,0.99), rgba(30,33,40,0.99) 52%, rgba(58,63,75,0.97) 100%)',
+    border: 'rgba(180, 185, 198, 0.38)',
+    text: 'rgba(240, 241, 244, 0.98)',
+    muted: 'rgba(190, 194, 206, 0.68)',
+    accent: 'rgba(200, 205, 220, 0.98)',
+    accentSoft: 'rgba(200, 205, 220, 0.14)',
+    chip: 'rgba(255,255,255,0.055)',
+    chipBorder: 'rgba(255,255,255,0.11)',
+    chipText: 'rgba(238, 240, 245, 0.9)',
+    foil: 'linear-gradient(90deg, rgba(232,235,242,0.95), rgba(165,172,190,0.92) 40%, rgba(255,255,255,0.45) 100%)',
+    glow: 'rgba(160, 168, 190, 0.22)',
+    edgeGlow: '0 0 28px rgba(160,168,190,0.25), inset 0 0 28px rgba(160,168,190,0.06)',
+    mark: 'linear-gradient(145deg, rgba(245,246,250,0.95), rgba(195,200,215,0.92))',
+    markBorder: 'rgba(255,255,255,0.2)',
+    markText: 'rgba(55, 60, 75, 0.98)',
+    shadow: '0 8px 40px rgba(12, 14, 20, 0.2)',
   },
   topup_5: {
     shell: 'linear-gradient(145deg, rgba(14,17,23,0.99), rgba(22,28,40,0.99) 52%, rgba(41,52,76,0.97) 100%)',
@@ -308,11 +308,13 @@ export function MembershipCard({
     glowY.set(py * 100)
   }
 
+  const nanoBananaCount = Math.floor(totalCredits / 15)
+
   return (
     <motion.div
       ref={cardRef}
       data-membership-card
-      className="relative overflow-hidden rounded-2xl border"
+      className="relative aspect-[1.586/1] overflow-hidden rounded-[20px] border"
       style={{
         background: theme.shell,
         borderColor: theme.border,
@@ -332,102 +334,104 @@ export function MembershipCard({
       {/* Animated glow follow */}
       <motion.div className="pointer-events-none absolute inset-0" style={{ backgroundImage: cardGlow }} />
       {/* Top foil line */}
-      <div className="absolute inset-x-4 top-3 h-px opacity-80" style={{ background: theme.foil }} />
+      <div className="absolute inset-x-5 top-3.5 h-px opacity-70" style={{ background: theme.foil }} />
       {/* Soft ambient blob */}
-      <div className="absolute -left-6 -top-6 h-24 w-24 rounded-full blur-3xl" style={{ background: theme.accentSoft }} />
-      {/* Specular edge highlight */}
-      <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-50 bg-[linear-gradient(120deg,rgba(255,255,255,0.16),transparent_25%,transparent_75%,rgba(255,255,255,0.06)_100%)]" />
+      <div className="absolute -left-8 -top-8 h-28 w-28 rounded-full blur-3xl" style={{ background: theme.accentSoft }} />
+      <div className="absolute -bottom-6 -right-6 h-20 w-20 rounded-full blur-3xl opacity-60" style={{ background: theme.accentSoft }} />
+      {/* Specular edge highlight — diagonal sweep */}
+      <div className="pointer-events-none absolute inset-0 rounded-[20px] opacity-40 bg-[linear-gradient(125deg,rgba(255,255,255,0.18),transparent_28%,transparent_72%,rgba(255,255,255,0.05)_100%)]" />
 
-      <div className="relative flex flex-col gap-3 px-4 py-3.5 sm:px-5 sm:py-4">
-        {/* Row 1: eyebrow + tier badge */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+      <div className="relative flex h-full flex-col justify-between p-5 sm:p-6">
+        {/* ── Top row: EMV chip + network mark ── */}
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            {/* EMV chip — simplified rectangles */}
             <div
-              className="flex h-6 w-6 items-center justify-center rounded-lg"
-              style={{ background: theme.accentSoft }}
+              className="flex h-[26px] w-[34px] items-center justify-center rounded-[5px] border"
+              style={{ background: theme.chip, borderColor: theme.chipBorder }}
             >
-              {isPaidMember ? (
-                <Crown className="h-3 w-3" style={{ color: theme.accent }} />
-              ) : (
-                <Sparkles className="h-3 w-3" style={{ color: theme.accent }} />
-              )}
+              <div className="grid grid-cols-3 gap-px">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="h-[3px] w-[5px] rounded-[0.5px]" style={{ background: theme.muted }} />
+                ))}
+              </div>
             </div>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: theme.muted }}>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color: theme.muted }}>
               {tierLabel}
             </span>
           </div>
 
-          <span
-            className="rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em]"
-            style={{ borderColor: theme.chipBorder, background: theme.chip, color: theme.chipText }}
-          >
-            {isPaidMember ? 'PRO' : 'FREE'}
+          {/* Network mark — Shopix branding */}
+          <div className="flex items-center gap-2">
+            <span
+              className="rounded-full border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.22em]"
+              style={{ borderColor: theme.chipBorder, background: theme.chip, color: theme.chipText }}
+            >
+              {isPaidMember ? 'PRO' : 'FREE'}
+            </span>
+            <span className="font-[var(--font-display)] text-[11px] font-extrabold tracking-[-0.02em]" style={{ color: theme.muted }}>
+              Shopix
+            </span>
+          </div>
+        </div>
+
+        {/* ── Center: card number dots ── */}
+        <div className="flex items-center gap-4 py-1" style={{ color: theme.muted }}>
+          {[0, 1, 2].map((group) => (
+            <span key={group} className="flex gap-[3px]">
+              {[0, 1, 2, 3].map((dot) => (
+                <span key={dot} className="inline-block h-[3px] w-[3px] rounded-full opacity-30" style={{ background: 'currentColor' }} />
+              ))}
+            </span>
+          ))}
+          <span className="text-[11px] font-medium tabular-nums tracking-[0.12em] opacity-40">
+            {(totalCredits % 10000).toString().padStart(4, '0')}
           </span>
         </div>
 
-        {/* Row 2: plan title + user name */}
+        {/* ── Bottom: cardholder + balance ── */}
         <div className="flex items-end justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="font-[var(--font-display)] text-[1.3rem] font-extrabold leading-none tracking-[-0.03em] sm:text-[1.5rem]">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-[var(--font-display)] text-[1.15rem] font-extrabold leading-none tracking-[-0.03em] sm:text-[1.3rem]">
               {title}
             </h2>
-            <p className="mt-1.5 truncate text-[11px]" style={{ color: theme.muted }}>
+            <p className="mt-1 truncate text-[10px] uppercase tracking-[0.08em]" style={{ color: theme.muted }}>
               {displayName}
             </p>
+            {/* Nano Banana estimate */}
+            {totalCredits > 0 && (
+              <p className="mt-1.5 flex items-center gap-1 text-[10px] tabular-nums" style={{ color: theme.muted }}>
+                <span>🍌</span>
+                <span>
+                  {isZh
+                    ? `约 ${formatNumber(locale, nanoBananaCount)} 张 Nano Banana`
+                    : `~${formatNumber(locale, nanoBananaCount)} Nano Banana images`}
+                </span>
+              </p>
+            )}
           </div>
 
-          {/* Total credits — prominent */}
+          {/* Credit balance */}
           <div className="shrink-0 text-right">
-            <p className="font-[var(--font-display)] text-[1.5rem] font-extrabold leading-none tracking-[-0.04em] sm:text-[1.75rem]" style={{ color: theme.accent }}>
+            <p className="font-[var(--font-display)] text-[1.4rem] font-extrabold leading-none tracking-[-0.04em] sm:text-[1.6rem]" style={{ color: theme.accent }}>
               {formatNumber(locale, totalCredits)}
             </p>
-            <p className="mt-1 text-[10px] tracking-wide" style={{ color: theme.muted }}>
+            <p className="mt-0.5 text-[9px] tracking-[0.06em]" style={{ color: theme.muted }}>
               {t('membershipCard.creditBalance')}
             </p>
+            {/* Mini breakdown */}
+            <div className="mt-1.5 flex gap-2">
+              <span className="text-[8px] tabular-nums opacity-60" style={{ color: theme.chipText }}>
+                {t('subscriptionCredits')} {formatNumber(locale, subscriptionCredits)}
+              </span>
+              <span className="text-[8px] tabular-nums opacity-60" style={{ color: theme.chipText }}>
+                {t('purchasedCredits')} {formatNumber(locale, purchasedCredits)}
+              </span>
+            </div>
           </div>
-        </div>
-
-        {/* Row 3: credit breakdown chips */}
-        <div className="flex gap-2">
-          <CreditChip
-            label={t('subscriptionCredits')}
-            value={formatNumber(locale, subscriptionCredits)}
-            theme={theme}
-          />
-          <CreditChip
-            label={t('purchasedCredits')}
-            value={formatNumber(locale, purchasedCredits)}
-            theme={theme}
-          />
         </div>
       </div>
     </motion.div>
   )
 }
 
-function CreditChip({
-  label,
-  value,
-  theme,
-}: {
-  label: string
-  value: string
-  theme: MembershipTheme
-}) {
-  return (
-    <div
-      className="flex-1 rounded-lg border px-2.5 py-1.5"
-      style={{
-        background: theme.chip,
-        borderColor: theme.chipBorder,
-      }}
-    >
-      <p className="text-[9px] uppercase tracking-[0.15em]" style={{ color: theme.muted }}>
-        {label}
-      </p>
-      <p className="mt-0.5 text-[0.82rem] font-semibold tabular-nums" style={{ color: theme.chipText }}>
-        {value}
-      </p>
-    </div>
-  )
-}

@@ -5,6 +5,7 @@
     "aestheticMirror": "Style Match",
     "clothingStudio": "Clothing",
     "ecomStudio": "Detail Images",
+    "batchStudio": "Batch",
     "refinementStudio": "Retouch",
     "pricing": "Pricing",
     "history": "History",
@@ -789,30 +790,54 @@
   "pricing": {
     "title": "Choose the credit plan that fits you best",
     "subtitle": "Top up anytime with one-time purchases, or subscribe for a lower effective credit cost and uninterrupted creation.",
+    "promo": {
+      "badge": "Limited Offer",
+      "title": "Bonus credits on your first purchase",
+      "subtitle": "Get extra bonus credits when you make your first purchase. Limited time offer — don't miss out!",
+      "days": "Days",
+      "hours": "Hrs",
+      "mins": "Min",
+      "secs": "Sec"
+    },
     "groups": {
-      "oneTime": "One-Time Purchase (Standard Price)",
-      "monthly": "Monthly Subscription (~5% off)",
-      "quarterly": "Quarterly Subscription (~10% off)",
-      "yearly": "Yearly Subscription (~15% off)"
+      "oneTime": "One-Time Top-Up",
+      "oneTimeHint": "Flexible top-up, credits never expire",
+      "subscription": "Subscription Plans",
+      "subscriptionHint": "Auto-renewing, enjoy lower cost per credit"
+    },
+    "planNames": {
+      "topup_5": "Starter",
+      "topup_15": "Standard",
+      "topup_30": "Pro",
+      "monthly": "Monthly",
+      "quarterly": "Quarterly",
+      "yearly": "Yearly"
     },
     "labels": {
       "monthly": "Best for light creators",
       "quarterly": "Better value for steady output",
-      "yearly": "Best deal (Recommended)"
+      "yearly": "Best deal"
     },
     "buttons": {
-      "topup": "Top Up Now",
-      "subscribe": "Subscribe Now"
+      "international": "International",
+      "alipay": "Pay with Alipay",
+      "processing": "Redirecting..."
     },
     "stickers": {
-      "saveMore": "Save More"
+      "saveMore": "Save More",
+      "bestValue": "Best Value"
     },
     "cycles": {
       "month": "/mo",
       "quarter": "/quarter",
       "year": "/year"
     },
-    "creditsValue": "{count} credits",
+    "creditsUnit": "credits",
+    "bonusLabel": "first-purchase bonus",
+    "totalCredits": "Total: {count} credits",
+    "topupPayments": "Alipay / WeChat Pay",
+    "cardOnly": "Subscriptions: card only",
+    "subscriptionPayments": "Card / Alipay",
     "singlePurchase": "One-time credits never expire",
     "subscriptionRule": "Subscription bonus credits follow platform rules",
     "cancelAnytime": "Auto-renews, cancel anytime",
@@ -829,9 +854,9 @@
     },
     "usage": {
       "title": "Generation Cost Reference",
-      "fast": "Fast: 15 credits/image",
-      "balanced": "Balanced: 30 credits/image",
-      "quality": "High Quality: 50 credits/image"
+      "fastLabel": "Fast Mode",
+      "balancedLabel": "Balanced Mode",
+      "qualityLabel": "High Quality Mode"
     },
     "success": "Payment successful! Credits added to your account.",
     "canceled": "Payment canceled.",
@@ -1141,6 +1166,9 @@
         "other": "Other platform"
       }
     }
+  },
+  "topupPromo": {
+    "tagLabel": "Limited-Time Bonus"
   },
   "common": {
     "loading": "Loading...",

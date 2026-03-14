@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
+import { useRef } from 'react'
 import { ArrowRight, Camera, LayoutGrid, Wand2 } from 'lucide-react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion, useMotionValue, useSpring, useReducedMotion } from 'framer-motion'
 import { MARKETING_DARK_CTA_BASE } from './marketing-styles'
 
 function parsePlatforms(value: string): string[] {
@@ -14,32 +15,161 @@ function parsePlatforms(value: string): string[] {
 }
 
 function rotateItems(items: string[], offset: number): string[] {
-  if (items.length === 0) {
-    return items
-  }
-
+  if (items.length === 0) return items
   const safeOffset = ((offset % items.length) + items.length) % items.length
   return [...items.slice(safeOffset), ...items.slice(0, safeOffset)]
 }
 
 const FEATURE_ICONS = [Camera, LayoutGrid, Wand2] as const
-const FEATURE_CARD_STYLES = [
+
+const FEATURE_CARD_THEMES = [
   {
-    card:
-      'border-[#ead9cb]/92 bg-[linear-gradient(180deg,rgba(255,250,244,0.92),rgba(248,239,229,0.82))] shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_18px_40px_-24px_rgba(117,94,70,0.28),0_34px_72px_-42px_rgba(17,24,39,0.22),0_0_0_1px_rgba(255,255,255,0.26)]',
-    iconWrap: 'border-white/80 bg-white/78',
+    // Electric blue — Hero image
+    bg: 'bg-white/[0.45] backdrop-blur-xl',
+    border: 'border-white/30',
+    iconBg: 'bg-gradient-to-br from-blue-500 to-indigo-600',
+    iconColor: 'text-white',
+    glowColor: 'rgba(99,102,241,0.5)',
+    glowSoft: 'rgba(99,102,241,0.06)',
+    hoverBorder: 'group-hover:border-white/50',
+    hoverShadow: 'group-hover:shadow-[0_0_0_1px_rgba(99,102,241,0.1),0_8px_40px_-12px_rgba(99,102,241,0.3),0_24px_60px_-24px_rgba(99,102,241,0.15)]',
+    shine: 'from-white/50 via-white/10 to-transparent',
+    dot: 'bg-blue-500',
+    accentGradient: 'from-blue-500/20 via-indigo-500/10 to-transparent',
   },
   {
-    card:
-      'border-[#dbe5d9]/92 bg-[linear-gradient(180deg,rgba(247,252,246,0.92),rgba(236,244,237,0.82))] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_18px_40px_-24px_rgba(79,111,89,0.24),0_34px_72px_-42px_rgba(17,24,39,0.22),0_0_0_1px_rgba(255,255,255,0.24)]',
-    iconWrap: 'border-white/80 bg-white/76',
+    // Teal — Detail pages
+    bg: 'bg-white/[0.45] backdrop-blur-xl',
+    border: 'border-white/30',
+    iconBg: 'bg-gradient-to-br from-teal-500 to-emerald-600',
+    iconColor: 'text-white',
+    glowColor: 'rgba(20,184,166,0.5)',
+    glowSoft: 'rgba(20,184,166,0.06)',
+    hoverBorder: 'group-hover:border-white/50',
+    hoverShadow: 'group-hover:shadow-[0_0_0_1px_rgba(20,184,166,0.1),0_8px_40px_-12px_rgba(20,184,166,0.3),0_24px_60px_-24px_rgba(20,184,166,0.15)]',
+    shine: 'from-white/50 via-white/10 to-transparent',
+    dot: 'bg-teal-500',
+    accentGradient: 'from-teal-500/20 via-emerald-500/10 to-transparent',
   },
   {
-    card:
-      'border-[#dfd9e8]/92 bg-[linear-gradient(180deg,rgba(250,247,255,0.92),rgba(240,234,248,0.82))] shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_18px_40px_-24px_rgba(92,86,120,0.24),0_34px_72px_-42px_rgba(17,24,39,0.22),0_0_0_1px_rgba(255,255,255,0.24)]',
-    iconWrap: 'border-white/80 bg-white/76',
+    // Purple — Retouching
+    bg: 'bg-white/[0.45] backdrop-blur-xl',
+    border: 'border-white/30',
+    iconBg: 'bg-gradient-to-br from-violet-500 to-purple-600',
+    iconColor: 'text-white',
+    glowColor: 'rgba(139,92,246,0.5)',
+    glowSoft: 'rgba(139,92,246,0.06)',
+    hoverBorder: 'group-hover:border-white/50',
+    hoverShadow: 'group-hover:shadow-[0_0_0_1px_rgba(139,92,246,0.1),0_8px_40px_-12px_rgba(139,92,246,0.3),0_24px_60px_-24px_rgba(139,92,246,0.15)]',
+    shine: 'from-white/50 via-white/10 to-transparent',
+    dot: 'bg-violet-500',
+    accentGradient: 'from-violet-500/20 via-purple-500/10 to-transparent',
   },
 ] as const
+
+const SPRING_CONFIG = { stiffness: 300, damping: 30, mass: 0.8 }
+
+function FeatureCard({
+  icon: Icon,
+  title,
+  desc,
+  theme,
+  index,
+  reduceMotion,
+}: {
+  icon: typeof Camera
+  title: string
+  desc: string
+  theme: (typeof FEATURE_CARD_THEMES)[number]
+  index: number
+  reduceMotion: boolean | null
+}) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const rotateX = useSpring(0, SPRING_CONFIG)
+  const rotateY = useSpring(0, SPRING_CONFIG)
+  const glowX = useMotionValue(50)
+  const glowY = useMotionValue(50)
+
+  function handlePointerMove(e: React.PointerEvent) {
+    if (reduceMotion || !cardRef.current) return
+    const rect = cardRef.current.getBoundingClientRect()
+    const px = (e.clientX - rect.left) / rect.width
+    const py = (e.clientY - rect.top) / rect.height
+    rotateX.set((py - 0.5) * -6)
+    rotateY.set((px - 0.5) * 8)
+    glowX.set(px * 100)
+    glowY.set(py * 100)
+  }
+
+  function handlePointerLeave() {
+    rotateX.set(0)
+    rotateY.set(0)
+    glowX.set(50)
+    glowY.set(50)
+  }
+
+  return (
+    <motion.div
+      ref={cardRef}
+      initial={reduceMotion ? undefined : { opacity: 0, y: 28 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, delay: 0.3 + index * 0.12, ease: [0.22, 1, 0.36, 1] }}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
+      style={{
+        rotateX,
+        rotateY,
+        transformStyle: 'preserve-3d',
+        transformPerspective: 800,
+      }}
+      className={`group relative overflow-hidden rounded-[1.75rem] border p-7 transition-all duration-500 ease-out sm:p-8 ${theme.bg} ${theme.border} ${theme.hoverBorder} ${theme.hoverShadow} shadow-[0_1px_3px_rgba(0,0,0,0.02),0_8px_24px_-8px_rgba(0,0,0,0.06)] hover:-translate-y-2`}
+    >
+      {/* Subtle accent gradient in corner */}
+      <div className={`pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-gradient-to-br ${theme.accentGradient} blur-2xl transition-opacity duration-700 group-hover:opacity-100 opacity-60`} />
+
+      {/* Animated glow that follows mouse */}
+      <motion.div
+        className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+        style={{
+          background: `radial-gradient(350px circle at ${glowX.get()}% ${glowY.get()}%, ${theme.glowSoft}, transparent 50%)`,
+        }}
+      />
+
+      {/* Top edge shine — glass reflection */}
+      <div className={`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r ${theme.shine}`} />
+
+      {/* Corner glow orb */}
+      <div
+        className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full opacity-0 blur-3xl transition-opacity duration-700 group-hover:opacity-40"
+        style={{ background: theme.glowColor }}
+      />
+
+      {/* Bottom edge glow */}
+      <div
+        className="pointer-events-none absolute inset-x-8 bottom-0 h-px opacity-0 transition-opacity duration-500 group-hover:opacity-50"
+        style={{ background: `linear-gradient(90deg, transparent, ${theme.glowColor}, transparent)` }}
+      />
+
+      {/* Icon — bold gradient with glow */}
+      <div className={`relative flex h-11 w-11 items-center justify-center rounded-[14px] ${theme.iconBg} ${theme.iconColor} shadow-lg ring-1 ring-white/20 transition-all duration-500 group-hover:scale-110 group-hover:shadow-xl`}>
+        <Icon className="h-[22px] w-[22px]" strokeWidth={1.8} />
+        {/* Activity dot */}
+        <span className={`absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ${theme.dot} opacity-0 shadow-[0_0_8px_currentColor] transition-all duration-500 group-hover:opacity-100 group-hover:animate-pulse`} />
+      </div>
+
+      {/* Text */}
+      <h3 className="relative mt-5 text-[1.05rem] font-bold tracking-[-0.02em] text-foreground/90 transition-transform duration-300 group-hover:translate-x-0.5">
+        {title}
+      </h3>
+      <p className="relative mt-2 text-[13px] leading-[1.7] text-muted-foreground/80">
+        {desc}
+      </p>
+
+      {/* Glass highlight sweep on hover */}
+      <div className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[linear-gradient(115deg,rgba(255,255,255,0.18),transparent_25%,transparent_75%,rgba(255,255,255,0.08))] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+    </motion.div>
+  )
+}
 
 export function Hero() {
   const t = useTranslations('landing.hero')
@@ -63,7 +193,6 @@ export function Hero() {
     { title: t('feature2Title'), desc: t('feature2Desc') },
     { title: t('feature3Title'), desc: t('feature3Desc') },
   ]
-  const ecomAuthHref = `/${locale}/auth?returnTo=${encodeURIComponent(`/${locale}/ecom-studio`)}`
 
   return (
     <section className="relative flex min-h-[calc(100vh-64px)] items-center overflow-hidden bg-[#faf9f7] pb-20 pt-24 sm:pb-28 sm:pt-32">
@@ -85,44 +214,22 @@ export function Hero() {
             {t('subtitle')}
           </p>
 
-          <Link
-            href={ecomAuthHref}
-            className="mt-10 inline-flex h-12 items-center gap-2 rounded-lg bg-accent px-8 text-sm font-semibold text-accent-foreground transition-all press-scale hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:h-13 sm:px-10 sm:text-base"
-          >
-            {t('cta')}
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-
-          {/* Feature cards — below the fold, supporting content */}
-          <div className="mt-24 grid w-full max-w-[920px] grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3">
-            {features.map((feature, index) => {
-              const Icon = FEATURE_ICONS[index]
-              const tint = FEATURE_CARD_STYLES[index]
-              return (
-                <motion.div
-                  key={index}
-                  initial={reduceMotion ? undefined : { opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.3 + index * 0.1, ease: 'easeOut' }}
-                  className={`group relative overflow-hidden rounded-[1.65rem] border p-6 backdrop-blur-[5px] transition-all duration-300 hover:-translate-y-1.5 hover:border-white/95 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_30px_64px_-26px_rgba(84,97,118,0.3),0_0_0_1px_rgba(255,255,255,0.18)] ${tint.card} sm:p-7`}
-                >
-                  <div className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.42),transparent_48%),linear-gradient(180deg,rgba(255,255,255,0.1),transparent_55%)] opacity-80 transition-opacity duration-300 group-hover:opacity-100" />
-                  <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-white/70 blur-[0.4px]" />
-                  <div
-                    className={`relative flex h-11 w-11 items-center justify-center rounded-[0.95rem] border text-[#283244] shadow-[0_14px_22px_-18px_rgba(16,24,39,0.24)] transition-all duration-300 group-hover:-translate-y-0.5 group-hover:bg-white/92 group-hover:shadow-[0_18px_30px_-18px_rgba(16,24,39,0.3)] ${tint.iconWrap}`}
-                  >
-                    <Icon className="h-5 w-5" strokeWidth={1.9} />
-                  </div>
-                  <h3 className="relative mt-5 text-[17px] font-bold tracking-[-0.02em] text-foreground">
-                    {feature.title}
-                  </h3>
-                  <p className="relative mt-2 text-sm leading-6 text-muted-foreground">{feature.desc}</p>
-                </motion.div>
-              )
-            })}
+          {/* Feature cards */}
+          <div className="mt-20 grid w-full max-w-[980px] grid-cols-1 gap-5 sm:grid-cols-3 sm:gap-6">
+            {features.map((feature, index) => (
+              <FeatureCard
+                key={index}
+                icon={FEATURE_ICONS[index]}
+                title={feature.title}
+                desc={feature.desc}
+                theme={FEATURE_CARD_THEMES[index]}
+                index={index}
+                reduceMotion={reduceMotion}
+              />
+            ))}
           </div>
 
-          <div className="mt-10 w-full max-w-[1060px]">
+          <div className="mt-14 w-full max-w-[1060px]">
             <div className="relative overflow-hidden rounded-[2rem] border border-[#e4dfd5] bg-[#f6f3ed] px-3 py-3 shadow-[0_1px_2px_rgba(16,24,39,0.03),0_22px_48px_-34px_rgba(16,24,39,0.16)] sm:px-5 sm:py-5">
               <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-[#f6f3ed] to-transparent sm:w-20" />
               <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-[#f6f3ed] to-transparent sm:w-20" />
