@@ -1,21 +1,11 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { Plus_Jakarta_Sans, Noto_Sans_SC } from 'next/font/google'
+import '@fontsource/noto-sans-sc/400.css'
+import '@fontsource/noto-sans-sc/500.css'
+import '@fontsource/noto-sans-sc/600.css'
+import '@fontsource/noto-sans-sc/700.css'
+import '@fontsource-variable/plus-jakarta-sans/wght.css'
 import { getSiteUrl } from '@/lib/site'
-
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  weight: ['500', '600', '700', '800'],
-  display: 'swap',
-  variable: '--font-display',
-})
-
-const notoSansSc = Noto_Sans_SC({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  display: 'swap',
-  fallback: ['Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
-})
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
@@ -35,7 +25,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${notoSansSc.className} ${plusJakarta.variable}`}>{children}</body>
+      <body>{children}</body>
     </html>
   )
 }
