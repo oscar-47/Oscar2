@@ -185,12 +185,9 @@ export async function verifyNotification(
   alipayPublicKey: string,
 ): Promise<Record<string, string> | null> {
   const params: Record<string, string> = {};
-  for (const pair of formBody.split("&")) {
-    const idx = pair.indexOf("=");
-    if (idx === -1) continue;
-    const key = decodeURIComponent(pair.slice(0, idx));
-    const val = decodeURIComponent(pair.slice(idx + 1));
-    params[key] = val;
+  const form = new URLSearchParams(formBody);
+  for (const [key, value] of form.entries()) {
+    params[key] = value;
   }
 
   const sign = params.sign;

@@ -2,6 +2,12 @@ import Stripe from "npm:stripe@14.25.0";
 import { options, ok, err } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
+function assertNoError(error: { message?: string } | null, context: string) {
+  if (error) {
+    throw new Error(`${context}: ${error.message ?? "unknown error"}`);
+  }
+}
+
 async function alreadyProcessed(supabase: ReturnType<typeof createServiceClient>, stripeEventId: string) {
   const { data } = await supabase
     .from("transactions")
@@ -56,11 +62,12 @@ async function applyInviteReward(
 
   let rewardTxnId: string | null = null;
   if (rewardCredits > 0) {
-    await supabase.rpc("add_credits", {
+    const { error: addCreditsError } = await supabase.rpc("add_credits", {
       p_user_id: binding.inviter_user_id,
       p_amount: rewardCredits,
       p_type: "purchased",
     });
+    assertNoError(addCreditsError, "invite reward add_credits failed");
 
     const { data: rewardTxn, error: rewardTxnError } = await supabase
       .from("transactions")
@@ -91,7 +98,7 @@ async function applyInviteReward(
     rewardTxnId = rewardTxn?.id ?? null;
   }
 
-  await supabase
+  const { error: bindingUpdateError } = await supabase
     .from("referral_bindings")
     .update({
       rewarded_at: new Date().toISOString(),
@@ -100,6 +107,7 @@ async function applyInviteReward(
     })
     .eq("id", binding.id)
     .is("rewarded_at", null);
+  assertNoError(bindingUpdateError, "referral binding update failed");
 }
 
 Deno.serve(async (req) => {
@@ -150,6 +158,7 @@ Deno.serve(async (req) => {
         if (pkg) {
           // Save stripe_customer_id and stripe_subscription_id on the user profile
           const profileUpdate: Record<string, unknown> = {};
+          let creditedAmount = pkg.credits;
           if (stripeCustomerId) profileUpdate.stripe_customer_id = stripeCustomerId;
           if (mode === "subscription" && obj.subscription) {
             profileUpdate.stripe_subscription_id = String(obj.subscription);
@@ -168,7 +177,13 @@ Deno.serve(async (req) => {
               .single();
 
             const bonus = profile?.has_first_subscription ? 0 : (pkg.first_sub_bonus ?? 0);
-            await supabase.rpc("add_credits", { p_user_id: userId, p_amount: pkg.credits + bonus, p_type: "subscription" });
+            const { error: addCreditsError } = await supabase.rpc("add_credits", {
+              p_user_id: userId,
+              p_amount: pkg.credits + bonus,
+              p_type: "subscription",
+            });
+            assertNoError(addCreditsError, "subscription add_credits failed");
+            creditedAmount = pkg.credits + bonus;
 
             profileUpdate.has_first_subscription = true;
             profileUpdate.subscription_plan = pkg.name;
@@ -181,16 +196,26 @@ Deno.serve(async (req) => {
               .single();
 
             const bonus = profile?.has_first_purchase ? 0 : (pkg.first_sub_bonus ?? 0);
-            await supabase.rpc("add_credits", { p_user_id: userId, p_amount: pkg.credits + bonus, p_type: "purchased" });
+            const { error: addCreditsError } = await supabase.rpc("add_credits", {
+              p_user_id: userId,
+              p_amount: pkg.credits + bonus,
+              p_type: "purchased",
+            });
+            assertNoError(addCreditsError, "one-time add_credits failed");
+            creditedAmount = pkg.credits + bonus;
 
             if (bonus > 0) profileUpdate.has_first_purchase = true;
           }
 
           if (Object.keys(profileUpdate).length > 0) {
-            await supabase.from("profiles").update(profileUpdate).eq("id", userId);
+            const { error: profileUpdateError } = await supabase
+              .from("profiles")
+              .update(profileUpdate)
+              .eq("id", userId);
+            assertNoError(profileUpdateError, "profile update failed");
           }
 
-          await supabase.from("transactions").insert({
+          const { error: transactionError } = await supabase.from("transactions").insert({
             user_id: userId,
             package_id: pkg.id,
             stripe_event_id: event.id,
@@ -199,11 +224,12 @@ Deno.serve(async (req) => {
             amount: Number(obj.amount_total ?? 0) / 100,
             currency: String(obj.currency ?? "usd"),
             payment_method: "stripe",
-            credits: pkg.credits,
+            credits: creditedAmount,
             plan: pkg.name,
             status: "completed",
             metadata: obj,
           });
+          assertNoError(transactionError, "checkout transaction insert failed");
 
           try {
             await applyInviteReward(supabase, {
@@ -242,11 +268,16 @@ Deno.serve(async (req) => {
               .single();
 
             if (pkg) {
-              await supabase.rpc("add_credits", { p_user_id: profile.id, p_amount: pkg.credits, p_type: "subscription" });
+              const { error: addCreditsError } = await supabase.rpc("add_credits", {
+                p_user_id: profile.id,
+                p_amount: pkg.credits,
+                p_type: "subscription",
+              });
+              assertNoError(addCreditsError, "renewal add_credits failed");
             }
           }
 
-          await supabase.from("transactions").insert({
+          const { error: transactionError } = await supabase.from("transactions").insert({
             user_id: profile.id,
             stripe_event_id: event.id,
             stripe_payment_id: String(obj.payment_intent ?? ""),
@@ -258,6 +289,7 @@ Deno.serve(async (req) => {
             status: "completed",
             metadata: obj,
           });
+          assertNoError(transactionError, "invoice transaction insert failed");
         }
       }
     }
@@ -272,17 +304,19 @@ Deno.serve(async (req) => {
           .single();
 
         if (profile?.id) {
-          await supabase
+          const { error: profileUpdateError } = await supabase
             .from("profiles")
             .update({ subscription_status: "canceled" })
             .eq("id", profile.id);
+          assertNoError(profileUpdateError, "subscription cancel profile update failed");
 
-          await supabase.from("transactions").insert({
+          const { error: transactionError } = await supabase.from("transactions").insert({
             user_id: profile.id,
             stripe_event_id: event.id,
             status: "canceled",
             metadata: obj,
           });
+          assertNoError(transactionError, "subscription cancel transaction insert failed");
         }
       }
     }
@@ -303,15 +337,20 @@ Deno.serve(async (req) => {
         if (obj.current_period_end) {
           update.current_period_end = new Date(Number(obj.current_period_end) * 1000).toISOString();
         }
-        await supabase.from("profiles").update(update).eq("stripe_customer_id", customerId);
+        const { error: profileUpdateError } = await supabase
+          .from("profiles")
+          .update(update)
+          .eq("stripe_customer_id", customerId);
+        assertNoError(profileUpdateError, "subscription update profile write failed");
 
         // Insert transaction record for dedup
         const { data: profile } = await supabase.from("profiles").select("id").eq("stripe_customer_id", customerId).single();
         if (profile?.id) {
-          await supabase.from("transactions").insert({
+          const { error: transactionError } = await supabase.from("transactions").insert({
             user_id: profile.id, stripe_event_id: event.id,
             status: "completed", metadata: obj,
           });
+          assertNoError(transactionError, "subscription update transaction insert failed");
         }
       }
     }
@@ -319,16 +358,18 @@ Deno.serve(async (req) => {
     if (event.type === "invoice.payment_failed") {
       const customerId = String(obj.customer ?? "");
       if (customerId) {
-        await supabase.from("profiles")
+        const { error: profileUpdateError } = await supabase.from("profiles")
           .update({ subscription_status: "past_due" })
           .eq("stripe_customer_id", customerId);
+        assertNoError(profileUpdateError, "payment failed profile update failed");
 
         const { data: profile } = await supabase.from("profiles").select("id").eq("stripe_customer_id", customerId).single();
         if (profile?.id) {
-          await supabase.from("transactions").insert({
+          const { error: transactionError } = await supabase.from("transactions").insert({
             user_id: profile.id, stripe_event_id: event.id,
             status: "failed", metadata: obj,
           });
+          assertNoError(transactionError, "payment failed transaction insert failed");
         }
       }
     }
@@ -343,12 +384,13 @@ Deno.serve(async (req) => {
           .single();
 
         if (profile?.id) {
-          await supabase.from("transactions").insert({
+          const { error: transactionError } = await supabase.from("transactions").insert({
             user_id: profile.id,
             stripe_event_id: event.id,
             status: "refunded",
             metadata: obj,
           });
+          assertNoError(transactionError, "refund transaction insert failed");
         }
       }
     }
