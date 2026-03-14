@@ -21,6 +21,8 @@ interface UseCreditsResult {
   /** Whether the user has any paid history or an active subscription */
   isPaidMember: boolean
   hasActiveSubscription: boolean
+  /** Current subscription plan name (monthly/quarterly/yearly) or null */
+  subscriptionPlan: string | null
   isLoading: boolean
   /** Manually refetch credits from DB */
   refetch: () => void
@@ -154,6 +156,7 @@ export function useCredits(userId?: string): UseCreditsResult {
     isPremium,
     isPaidMember,
     hasActiveSubscription,
+    subscriptionPlan: profile?.subscription_plan ?? null,
     isLoading,
     refetch,
   }

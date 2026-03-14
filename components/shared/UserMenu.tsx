@@ -26,12 +26,53 @@ export function UserMenu({ userId, email }: UserMenuProps) {
   const t = useTranslations('nav')
   const locale = useLocale()
   const router = useRouter()
-  const { total, isLoading, isPaidMember } = useCredits(userId)
+  const { total, isLoading, isPaidMember, subscriptionPlan } = useCredits(userId)
   const { count: unreadSupportReplies } = useSupportFeedbackUnreadCount(userId)
   const isAdmin = isAdminUser(email)
   const accountInitial = email.trim().charAt(0).toUpperCase() || 'S'
   const paidLabel = locale === 'zh' ? '付费用户' : 'Paid Member'
   const standardLabel = locale === 'zh' ? '创作账号' : 'Creator Account'
+
+  // Plan-based avatar color tier: blue (monthly), silver (quarterly), gold (yearly/default paid)
+  const avatarTier = subscriptionPlan === 'monthly' ? 'blue'
+    : subscriptionPlan === 'quarterly' ? 'silver'
+    : 'gold'
+  const AVATAR_TIERS = {
+    blue: {
+      trigger: 'border-blue-300/70 bg-[linear-gradient(160deg,rgba(224,242,254,0.98),rgba(96,165,250,0.96)_52%,rgba(37,99,235,0.98))] text-blue-950 shadow-[0_12px_28px_rgba(37,99,235,0.34)] hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(37,99,235,0.38)]',
+      specular: 'absolute inset-[2px] rounded-full bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.8),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.18),transparent)]',
+      ring: 'absolute inset-0 rounded-full ring-1 ring-white/35',
+      badge: 'absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-blue-100/70 bg-[linear-gradient(160deg,#bfdbfe,#3b82f6)] text-blue-950 shadow-[0_6px_14px_rgba(37,99,235,0.3)]',
+      innerAvatar: 'border-blue-200/60 bg-[linear-gradient(160deg,rgba(224,242,254,0.98),rgba(96,165,250,0.96)_52%,rgba(37,99,235,0.98))] text-blue-950',
+      innerBadge: 'absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[linear-gradient(160deg,#bfdbfe,#3b82f6)] text-blue-950',
+      dropdownBg: 'bg-[linear-gradient(145deg,rgba(14,17,23,0.99),rgba(22,38,65,0.98)_55%,rgba(37,68,126,0.92))] text-blue-50',
+      chipClass: 'bg-white/14 text-blue-50 ring-1 ring-white/14',
+      creditClass: 'text-blue-100/80',
+    },
+    silver: {
+      trigger: 'border-slate-300/70 bg-[linear-gradient(160deg,rgba(241,245,249,0.98),rgba(148,163,184,0.96)_52%,rgba(71,85,105,0.98))] text-slate-950 shadow-[0_12px_28px_rgba(71,85,105,0.34)] hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(71,85,105,0.38)]',
+      specular: 'absolute inset-[2px] rounded-full bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.85),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.22),transparent)]',
+      ring: 'absolute inset-0 rounded-full ring-1 ring-white/40',
+      badge: 'absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-slate-200/70 bg-[linear-gradient(160deg,#e2e8f0,#64748b)] text-slate-950 shadow-[0_6px_14px_rgba(71,85,105,0.3)]',
+      innerAvatar: 'border-slate-300/60 bg-[linear-gradient(160deg,rgba(241,245,249,0.98),rgba(148,163,184,0.96)_52%,rgba(71,85,105,0.98))] text-slate-950',
+      innerBadge: 'absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[linear-gradient(160deg,#e2e8f0,#64748b)] text-slate-950',
+      dropdownBg: 'bg-[linear-gradient(145deg,rgba(15,17,20,0.99),rgba(30,37,48,0.98)_55%,rgba(59,72,92,0.92))] text-slate-50',
+      chipClass: 'bg-white/14 text-slate-50 ring-1 ring-white/14',
+      creditClass: 'text-slate-100/80',
+    },
+    gold: {
+      trigger: 'border-amber-300/70 bg-[linear-gradient(160deg,rgba(255,246,222,0.98),rgba(242,201,102,0.96)_52%,rgba(177,120,22,0.98))] text-amber-950 shadow-[0_12px_28px_rgba(167,111,20,0.34)] hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(167,111,20,0.38)]',
+      specular: 'absolute inset-[2px] rounded-full bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.8),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.18),transparent)]',
+      ring: 'absolute inset-0 rounded-full ring-1 ring-white/35',
+      badge: 'absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-amber-100/70 bg-[linear-gradient(160deg,#ffe9a8,#e0a115)] text-amber-950 shadow-[0_6px_14px_rgba(173,113,14,0.3)]',
+      innerAvatar: 'border-amber-200/60 bg-[linear-gradient(160deg,rgba(255,246,222,0.98),rgba(242,201,102,0.96)_52%,rgba(177,120,22,0.98))] text-amber-950',
+      innerBadge: 'absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[linear-gradient(160deg,#ffe9a8,#e0a115)] text-amber-950',
+      dropdownBg: 'bg-[linear-gradient(145deg,rgba(19,18,17,0.99),rgba(41,34,24,0.98)_55%,rgba(107,78,24,0.92))] text-amber-50',
+      chipClass: 'bg-white/14 text-amber-50 ring-1 ring-white/14',
+      creditClass: 'text-amber-100/80',
+    },
+  } as const
+  const av = isPaidMember ? AVATAR_TIERS[avatarTier] : null
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -47,16 +88,16 @@ export function UserMenu({ userId, email }: UserMenuProps) {
           aria-label="User menu"
           className={cn(
             'group relative flex h-11 w-11 items-center justify-center rounded-full border text-sm font-semibold uppercase tracking-[0.22em] outline-none transition-all duration-300',
-            isPaidMember
-              ? 'border-amber-300/70 bg-[linear-gradient(160deg,rgba(255,246,222,0.98),rgba(242,201,102,0.96)_52%,rgba(177,120,22,0.98))] text-amber-950 shadow-[0_12px_28px_rgba(167,111,20,0.34)] hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(167,111,20,0.38)]'
+            av
+              ? av.trigger
               : 'border-border bg-secondary text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
-          {isPaidMember && (
+          {av && (
             <>
-              <span className="absolute inset-[2px] rounded-full bg-[radial-gradient(circle_at_28%_22%,rgba(255,255,255,0.8),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.18),transparent)]" />
-              <span className="absolute inset-0 rounded-full ring-1 ring-white/35" />
-              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-amber-100/70 bg-[linear-gradient(160deg,#ffe9a8,#e0a115)] text-amber-950 shadow-[0_6px_14px_rgba(173,113,14,0.3)]">
+              <span className={av.specular} />
+              <span className={av.ring} />
+              <span className={av.badge}>
                 <Crown className="h-2.5 w-2.5 fill-current" />
               </span>
             </>
@@ -73,22 +114,18 @@ export function UserMenu({ userId, email }: UserMenuProps) {
         <div
           className={cn(
             'rounded-[1.25rem] px-3.5 py-3.5',
-            isPaidMember
-              ? 'bg-[linear-gradient(145deg,rgba(19,18,17,0.99),rgba(41,34,24,0.98)_55%,rgba(107,78,24,0.92))] text-amber-50'
-              : 'bg-secondary/80 text-foreground'
+            av ? av.dropdownBg : 'bg-secondary/80 text-foreground'
           )}
         >
           <div className="flex items-center gap-3">
             <div
               className={cn(
                 'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-semibold uppercase tracking-[0.22em]',
-                isPaidMember
-                  ? 'border-amber-200/60 bg-[linear-gradient(160deg,rgba(255,246,222,0.98),rgba(242,201,102,0.96)_52%,rgba(177,120,22,0.98))] text-amber-950'
-                  : 'border-border bg-background text-foreground'
+                av ? av.innerAvatar : 'border-border bg-background text-foreground'
               )}
             >
-              {isPaidMember && (
-                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[linear-gradient(160deg,#ffe9a8,#e0a115)] text-amber-950">
+              {av && (
+                <span className={av.innerBadge}>
                   <Crown className="h-2.5 w-2.5 fill-current" />
                 </span>
               )}
@@ -100,14 +137,12 @@ export function UserMenu({ userId, email }: UserMenuProps) {
                 <span
                   className={cn(
                     'inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em]',
-                    isPaidMember
-                      ? 'bg-white/14 text-amber-50 ring-1 ring-white/14'
-                      : 'bg-background/70 text-muted-foreground ring-1 ring-border/60'
+                    av ? av.chipClass : 'bg-background/70 text-muted-foreground ring-1 ring-border/60'
                   )}
                 >
                   {isPaidMember ? paidLabel : standardLabel}
                 </span>
-                <span className={cn('text-xs', isPaidMember ? 'text-amber-100/80' : 'text-muted-foreground')}>
+                <span className={cn('text-xs', av ? av.creditClass : 'text-muted-foreground')}>
                   {isLoading ? '—' : `${total}`} {t('credits' as Parameters<typeof t>[0])}
                 </span>
               </div>

@@ -5,6 +5,7 @@
     "aestheticMirror": "风格复刻",
     "clothingStudio": "服装",
     "ecomStudio": "详情图",
+    "batchStudio": "批处理",
     "refinementStudio": "精修",
     "pricing": "套餐",
     "history": "历史记录",
@@ -789,37 +790,61 @@
   "pricing": {
     "title": "选择最适合你的积分方案",
     "subtitle": "单次购买灵活充值；连续订阅享受更低单价，创作不断档",
+    "promo": {
+      "badge": "限时特惠",
+      "title": "首次购买赠送额外积分",
+      "subtitle": "首次购买任意套餐，即可获赠额外积分奖励。活动限时，先到先得！",
+      "days": "天",
+      "hours": "时",
+      "mins": "分",
+      "secs": "秒"
+    },
     "groups": {
-      "oneTime": "单次购买（原价）",
-      "monthly": "月订阅（约95折）",
-      "quarterly": "季订阅（约9折）",
-      "yearly": "年订阅（约8.5折）"
+      "oneTime": "单次充值",
+      "oneTimeHint": "灵活充值，积分永不过期",
+      "subscription": "订阅方案",
+      "subscriptionHint": "按周期自动续费，享更低单价"
+    },
+    "planNames": {
+      "topup_5": "基础包",
+      "topup_15": "标准包",
+      "topup_30": "专业包",
+      "monthly": "月度订阅",
+      "quarterly": "季度订阅",
+      "yearly": "年度订阅"
     },
     "labels": {
       "monthly": "轻度创作首选",
       "quarterly": "稳定创作更划算",
-      "yearly": "最高优惠（推荐）"
+      "yearly": "最高优惠"
     },
     "buttons": {
-      "topup": "立即充值",
-      "subscribe": "立即开通"
+      "international": "国际支付",
+      "alipay": "支付宝支付",
+      "processing": "跳转中..."
     },
     "stickers": {
-      "saveMore": "省更多"
+      "saveMore": "省更多",
+      "bestValue": "超值"
     },
     "cycles": {
       "month": "/ 月",
       "quarter": "/ 季",
       "year": "/ 年"
     },
-    "creditsValue": "{count}积分",
+    "creditsUnit": "积分",
+    "bonusLabel": "首购赠送",
+    "totalCredits": "到手共 {count} 积分",
+    "topupPayments": "支持支付宝 / 微信支付",
+    "cardOnly": "订阅仅支持银行卡",
+    "subscriptionPayments": "银行卡 / 支付宝",
     "singlePurchase": "单次购买积分不过期",
     "subscriptionRule": "订阅赠送积分按平台规则有效",
     "cancelAnytime": "自动续费，可随时取消",
     "paymentSetupPending": "支付配置中",
     "paymentSetupHint": "Stripe 价格尚未配置，暂时无法购买。",
     "faq": {
-      "title": "FAQ",
+      "title": "常见问题",
       "autoRenewQ": "自动续费吗？",
       "autoRenewA": "是，按所选周期自动续费，可随时取消。",
       "cancelQ": "取消后立即失效吗？",
@@ -829,9 +854,9 @@
     },
     "usage": {
       "title": "生成消耗参考",
-      "fast": "极速：15积分/张",
-      "balanced": "均衡：30积分/张",
-      "quality": "高质：50积分/张"
+      "fastLabel": "极速模式",
+      "balancedLabel": "均衡模式",
+      "qualityLabel": "高质模式"
     },
     "success": "支付成功！积分已到账。",
     "canceled": "支付已取消。",
@@ -1141,6 +1166,9 @@
         "other": "其他平台"
       }
     }
+  },
+  "topupPromo": {
+    "tagLabel": "限时积分加赠"
   },
   "common": {
     "loading": "加载中...",

@@ -45,6 +45,9 @@ supabase/.branches
 supabase/.temp
 supabase/functions/.env.local
 
+# Alipay keys — NEVER commit
+.alipay-keys/
+
 # Claude Code
 .claude/
 .codex/

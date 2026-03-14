@@ -103,7 +103,11 @@ function waitForJob(jobId: string, signal: AbortSignal): Promise<GenerationJob> 
   })
 }
 
-export function AestheticMirrorForm() {
+interface AestheticMirrorFormProps {
+  defaultMode?: Mode
+}
+
+export function AestheticMirrorForm({ defaultMode = 'single' }: AestheticMirrorFormProps) {
   const t = useTranslations('studio.aestheticMirror')
   const tc = useTranslations('studio.common')
   const locale = useLocale()
@@ -112,7 +116,7 @@ export function AestheticMirrorForm() {
   const userEmail = useUserEmail()
   useAdminImageModels(userEmail)
 
-  const [mode, setMode] = useState<Mode>('single')
+  const [mode, setMode] = useState<Mode>(defaultMode)
   const [singleRefFile, setSingleRefFile] = useState<File | null>(null)
   const [singleRefPreview, setSingleRefPreview] = useState<string | null>(null)
   const [singleProducts, setSingleProducts] = useState<UImg[]>([])

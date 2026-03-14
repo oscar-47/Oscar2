@@ -114,3 +114,22 @@
   35%  { transform: translate(-24%, -18%) scale(1.2); }
   65%  { transform: translate(10%, 14%) scale(0.88); }
 }
+
+/* Pricing tab light-flow border — smooth gradient shimmer */
+@property --glow-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes pricing-light-flow {
+  from { --glow-angle: 0deg; }
+  to   { --glow-angle: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pricing-glow-border {
+    animation: none !important;
+    opacity: 0.3;
+  }
+}

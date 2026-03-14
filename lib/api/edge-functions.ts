@@ -486,6 +486,16 @@ export async function createOnetimeCheckout(
   })
 }
 
+export async function createAlipayCheckout(
+  packageId: string,
+  returnTo: string,
+): Promise<CheckoutResponse> {
+  return invokeFunction<CheckoutResponse>('create-alipay-checkout', {
+    packageId,
+    returnTo,
+  })
+}
+
 // ── Billing Portal ────────────────────────────────────────────────────────
 
 export async function createPortalSession(returnTo?: string): Promise<{ url: string }> {

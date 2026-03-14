@@ -174,7 +174,16 @@ Deno.serve(async (req) => {
             profileUpdate.subscription_plan = pkg.name;
             profileUpdate.subscription_status = "active";
           } else {
-            await supabase.rpc("add_credits", { p_user_id: userId, p_amount: pkg.credits, p_type: "purchased" });
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("has_first_purchase")
+              .eq("id", userId)
+              .single();
+
+            const bonus = profile?.has_first_purchase ? 0 : (pkg.first_sub_bonus ?? 0);
+            await supabase.rpc("add_credits", { p_user_id: userId, p_amount: pkg.credits + bonus, p_type: "purchased" });
+
+            if (bonus > 0) profileUpdate.has_first_purchase = true;
           }
 
           if (Object.keys(profileUpdate).length > 0) {
