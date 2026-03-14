@@ -42,7 +42,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_signup_bonus integer := public.config_int('signup_bonus_credits', 30);
+  v_signup_bonus integer := public.config_int('signup_bonus_credits', 50);
 begin
   if old.phone_confirmed_at is null and new.phone_confirmed_at is not null then
     update public.profiles

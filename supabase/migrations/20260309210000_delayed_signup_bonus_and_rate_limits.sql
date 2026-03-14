@@ -46,7 +46,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_signup_bonus integer := public.config_int('signup_bonus_credits', 30);
+  v_signup_bonus integer := public.config_int('signup_bonus_credits', 50);
 begin
   -- Only fire when email_confirmed_at changes from NULL to a value.
   -- Idempotency is guaranteed by the trigger WHEN clause (old IS NULL, new IS NOT NULL)
