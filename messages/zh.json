@@ -528,6 +528,8 @@
       "timeMinutesAgo": "{minutes}分钟前",
       "timeHoursAgo": "{hours}小时前",
       "timeDaysAgo": "{days}天前",
+      "generationCancelled": "已取消，生成任务未继续等待",
+      "previewImageLabel": "预览图 {index}",
       "requirementsTitle": "组图要求",
       "requirementsDesc": "描述您的产品信息和期望的图片风格",
       "requirementsPlaceholder": "建议输入：款式名称、面料材质、设计亮点、适合人群、风格调性等\n\n例如：这是一款法式复古连衣裙，采用重磅真丝面料，特色是精致的蕾丝拼接和珍珠扣设计，适合25-35岁都市女性通勤或约会穿",

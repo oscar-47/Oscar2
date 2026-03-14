@@ -8,6 +8,8 @@ import {
   extractGeneratedImageResult,
   getQnChatConfig,
   aspectRatioToSize,
+  getOpenRouterKeyPool,
+  orderOpenRouterKeysForRouting,
 } from "../_shared/qn-image.ts";
 import {
   normalizeRequestedModel,
@@ -4138,6 +4140,115 @@ type ImageRoute = {
   providerHint?: string;
 };
 
+function isOpenRouterPromptOnlyRetryable(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === "AbortError") return true;
+  const message = String(error ?? "");
+  if (message.includes("AbortError") || message.includes("TIMEOUT")) return true;
+  const statusMatch = message.match(/OPENROUTER_MODEL_REFERENCE_API_ERROR\s+(\d+)/);
+  if (!statusMatch) return false;
+  const code = Number(statusMatch[1]);
+  return code === 408 || code === 409 || code === 429 || code >= 500;
+}
+
+async function callOpenRouterModelReferenceImageAPI(params: {
+  model: string;
+  prompt: string;
+  aspectRatio?: string;
+  imageSize?: string;
+  endpoint?: string;
+  apiKey?: string;
+  routingKey?: string;
+  timeoutMs: number;
+}): Promise<Record<string, unknown>> {
+  const endpoint = params.endpoint ?? Deno.env.get("OPENROUTER_API_ENDPOINT") ?? "https://openrouter.ai/api/v1/chat/completions";
+  const keys = orderOpenRouterKeysForRouting(
+    getOpenRouterKeyPool({ apiKeyOverride: params.apiKey }),
+    params.routingKey,
+  );
+  if (keys.length === 0) {
+    throw new Error("Missing image API key");
+  }
+
+  let lastError: unknown = null;
+
+  for (let i = 0; i < keys.length; i += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), params.timeoutMs);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${keys[i]}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: params.model,
+          messages: [{ role: "user", content: [{ type: "text", text: params.prompt }] }],
+          modalities: ["image", "text"],
+          provider: { require_parameters: true },
+          image_config: {
+            ...(params.aspectRatio ? { aspect_ratio: params.aspectRatio } : {}),
+            ...(params.imageSize ? { image_size: params.imageSize } : {}),
+          },
+        }),
+        signal: controller.signal,
+      });
+
+      const rawText = await response.text();
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        parsed = { raw: rawText };
+      }
+
+      if (!response.ok) {
+        throw new Error(`OPENROUTER_MODEL_REFERENCE_API_ERROR ${response.status}: ${JSON.stringify(parsed)}`);
+      }
+
+      const message = (parsed as { choices?: Array<{ message?: Record<string, unknown> }> }).choices?.[0]?.message;
+      const directImageUrl = Array.isArray(message?.images)
+        ? (message.images[0] as { image_url?: { url?: string } } | undefined)?.image_url?.url ?? ""
+        : "";
+      if (directImageUrl) {
+        if (directImageUrl.startsWith("data:")) {
+          return { data: [{ b64_json: directImageUrl.split(",")[1] ?? "" }] };
+        }
+        return { data: [{ url: directImageUrl }] };
+      }
+
+      if (Array.isArray(message?.content)) {
+        for (const part of message.content as Array<Record<string, unknown>>) {
+          const partImageUrl = part.type === "image_url"
+            ? (part.image_url as { url?: string } | undefined)?.url ?? ""
+            : "";
+          if (!partImageUrl) continue;
+          if (partImageUrl.startsWith("data:")) {
+            return { data: [{ b64_json: partImageUrl.split(",")[1] ?? "" }] };
+          }
+          return { data: [{ url: partImageUrl }] };
+        }
+      }
+
+      throw new Error("OPENROUTER_MODEL_REFERENCE_INVALID_RESPONSE: no image found");
+    } catch (error) {
+      lastError = error;
+      if (i < keys.length - 1 && isOpenRouterPromptOnlyRetryable(error)) {
+        console.warn(
+          `OPENROUTER_MODEL_REFERENCE_FAILOVER attempt=${i + 1}/${keys.length} routing_key=${params.routingKey ?? "none"} error=${String(error).substring(0, 160)}`,
+        );
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  throw lastError ?? new Error("OPENROUTER_MODEL_REFERENCE_API_ERROR: key pool exhausted");
+}
+
 const TA_MODEL_MAP: Record<string, string> = {
   "ta-gemini-2.5-flash": "gemini-2.5-flash-image-preview",
   "ta-gemini-3.1-flash": "gemini-3.1-flash-image-preview",
@@ -6151,9 +6262,10 @@ async function processImageGenJob(
   task?: Pick<TaskRow, "id" | "task_type">,
 ): Promise<void> {
   const payload = job.payload ?? {};
+  const adminModelConfigs = await getAdminImageModelConfigs();
   const model = normalizeRequestedModel(String(payload.model ?? "or-gemini-3.1-flash"));
   const workflowMode = typeof payload.workflowMode === "string" ? payload.workflowMode : "product";
-  const provider = resolveImageRoute(model).provider;
+  const provider = resolveImageRoute(model, adminModelConfigs).provider;
   let currentStage: ImageGenStage = "charge_credits";
   let timeoutId: number | undefined;
 
@@ -6177,6 +6289,7 @@ async function processImageGenJob(
       _processImageGenJobInner(
         supabase,
         job,
+        adminModelConfigs,
         taskLease,
         task,
         (stage) => {
@@ -6193,6 +6306,7 @@ async function processImageGenJob(
 async function _processImageGenJobInner(
   supabase: ReturnType<typeof createServiceClient>,
   job: GenerationJobRow,
+  adminModelConfigs: Awaited<ReturnType<typeof getAdminImageModelConfigs>>,
   taskLease?: TaskLease,
   task?: Pick<TaskRow, "id" | "task_type">,
   onStageChange?: (stage: ImageGenStage) => void,
@@ -6200,7 +6314,6 @@ async function _processImageGenJobInner(
   const startedAt = Date.now();
   const pulseLease = taskLease?.pulse ?? (async () => {});
   const payload = job.payload ?? {};
-  const adminModelConfigs = await getAdminImageModelConfigs();
   const model = normalizeRequestedModel(String(payload.model ?? "or-gemini-3.1-flash"));
   const promptProfile = sanitizePromptProfile(payload.promptProfile ?? payload.prompt_profile);
   const imageRoute = resolveImageRoute(model, adminModelConfigs);
@@ -6212,9 +6325,15 @@ async function _processImageGenJobInner(
   }
   const aspectRatio = String(payload.aspectRatio ?? "1:1");
   const cost = Number(job.cost_amount ?? getEffectiveCreditCostForModel(adminModelConfigs, model, imageSize));
+  const workflowMode = typeof payload.workflowMode === "string" ? payload.workflowMode : "product";
+  const metadata = payload.metadata && typeof payload.metadata === "object"
+    ? payload.metadata as Record<string, unknown>
+    : {};
+  const metadataWorkflowMode = sanitizeString(metadata.workflow_mode ?? metadata.workflowMode, "").toLowerCase();
+  const isModelReferenceGeneration = metadataWorkflowMode === "model_reference";
 
-  const source = getSourceImageFromPayload(payload);
-  if (!source) throw new Error("IMAGE_INPUT_SOURCE_MISSING");
+  const source = isModelReferenceGeneration ? null : getSourceImageFromPayload(payload);
+  if (!isModelReferenceGeneration && !source) throw new Error("IMAGE_INPUT_SOURCE_MISSING");
   if (typeof payload.prompt !== "string" || payload.prompt.trim().length === 0) {
     throw new Error("IMAGE_INPUT_PROMPT_MISSING");
   }
@@ -6260,7 +6379,6 @@ async function _processImageGenJobInner(
     // Quick Edit / Text Edit mode: different image assembly + prompt prefix
     const isQuickEdit = Boolean(payload.editMode) && payload.editType === "quick";
     const isTextEdit = Boolean(payload.editMode) && payload.editType === "text";
-    const workflowMode = typeof payload.workflowMode === "string" ? payload.workflowMode : "product";
     const allImagePaths: string[] = [];
 
     setStage("prepare_inputs");
@@ -6279,7 +6397,7 @@ async function _processImageGenJobInner(
       if (allImagePaths.length === 0 && source) {
         allImagePaths.push(source);
       }
-    } else {
+    } else if (!isModelReferenceGeneration) {
       // Standard mode: collect ALL input images (product + model)
       if (workflowMode === "model" && typeof payload.modelImage === "string" && payload.modelImage) {
         allImagePaths.push(payload.modelImage);
@@ -6292,7 +6410,7 @@ async function _processImageGenJobInner(
       if (allImagePaths.length === 0 && typeof payload.productImage === "string" && payload.productImage) {
         allImagePaths.push(payload.productImage);
       }
-      if (allImagePaths.length === 0) {
+      if (allImagePaths.length === 0 && source) {
         allImagePaths.push(source);
       }
     }
@@ -6326,10 +6444,10 @@ async function _processImageGenJobInner(
     }
 
     await pulseLease();
-    const imageUrls = usesUrlBackedInputs
+    const imageUrls = usesUrlBackedInputs && selectedInputs.imagePaths.length > 0
       ? selectedInputs.imagePaths.map((path) => toChatImageUrl(path))
       : undefined;
-    const imageDataUrls = usesUrlBackedInputs
+    const imageDataUrls = usesUrlBackedInputs || selectedInputs.imagePaths.length === 0
       ? undefined
       : await Promise.all(selectedInputs.imagePaths.map(toDataUrl));
     await pulseLease();
@@ -6347,9 +6465,6 @@ async function _processImageGenJobInner(
     setStage("build_prompt");
     const styleConstraintPrompt = normalizeStyleConstraintPrompt(payload.styleConstraint);
     const styleConstraintSource = normalizeStyleConstraintSource(payload.styleConstraint);
-    const metadata = payload.metadata && typeof payload.metadata === "object"
-      ? payload.metadata as Record<string, unknown>
-      : {};
     const negativePrompt = typeof payload.negativePrompt === "string" ? payload.negativePrompt.trim() : "";
     const productIdentity = normalizeProductVisualIdentityMetadata(metadata.product_visual_identity);
     const heroPlanTitle = sanitizeString(metadata.hero_plan_title, "");
@@ -6379,6 +6494,16 @@ async function _processImageGenJobInner(
         hint += "] ";
         finalPrompt = hint + finalPrompt;
       }
+    } else if (isModelReferenceGeneration) {
+      const portraitPrefix = [
+        "Create exactly one realistic human fashion model reference portrait for e-commerce use.",
+        "Use a seamless white studio background, soft diffused lighting, natural skin texture, and realistic body proportions.",
+        "Keep wardrobe simple and neutral unless the prompt explicitly asks for a styling detail.",
+        "Do not include any product, handbag, prop, packaging, jewelry display object, furniture, text, watermark, collage layout, or extra people.",
+        styleConstraintPrompt,
+        buildAvoidInstruction(negativePrompt),
+      ].filter((item) => item && item.trim().length > 0);
+      finalPrompt = `${portraitPrefix.join("\n")}\n${finalPrompt}`;
     } else {
       // Standard mode: e-commerce photography prefix
       const ecomPrefix = "Cinematic commercial product photography with layered scene depth, purposeful lighting, tactile materials, and magazine-quality polish. " +
@@ -6413,22 +6538,33 @@ async function _processImageGenJobInner(
       workflow_mode: workflowMode,
     });
     await pulseLease();
-    const apiResponse = await callQnImageAPI({
-      imageDataUrl: imageDataUrls?.[0],
-      imageDataUrls: imageDataUrls && imageDataUrls.length > 1 ? imageDataUrls : undefined,
-      imageUrls,
-      prompt: finalPrompt,
-      n: 1,
-      model: imageRoute.model,
-      endpointOverride: imageRoute.endpoint,
-      apiKeyOverride: imageRoute.apiKey,
-      size: scaledRequestSize(aspectRatio, imageSize),
-      imageSize,
-      aspectRatio,
-      timeoutMsOverride: imageGenTimeoutMs,
-      providerHint: imageRoute.providerHint,
-      routingKey: job.user_id,
-    });
+    const apiResponse = isModelReferenceGeneration && imageRoute.provider === "openrouter"
+      ? await callOpenRouterModelReferenceImageAPI({
+        model: imageRoute.model ?? model,
+        prompt: finalPrompt,
+        aspectRatio,
+        imageSize,
+        endpoint: imageRoute.endpoint,
+        apiKey: imageRoute.apiKey,
+        routingKey: job.user_id,
+        timeoutMs: imageGenTimeoutMs,
+      })
+      : await callQnImageAPI({
+        imageDataUrl: imageDataUrls?.[0],
+        imageDataUrls: imageDataUrls && imageDataUrls.length > 1 ? imageDataUrls : undefined,
+        imageUrls,
+        prompt: finalPrompt,
+        n: 1,
+        model: imageRoute.model,
+        endpointOverride: imageRoute.endpoint,
+        apiKeyOverride: imageRoute.apiKey,
+        size: scaledRequestSize(aspectRatio, imageSize),
+        imageSize,
+        aspectRatio,
+        timeoutMsOverride: imageGenTimeoutMs,
+        providerHint: imageRoute.providerHint,
+        routingKey: job.user_id,
+      });
     await pulseLease();
     logImageGenEvent("IMAGE_GEN_PROVIDER_RESPONSE", {
       job_id: job.id,
